@@ -1,0 +1,30 @@
+{
+  "name": "cinereel",
+  "version": "0.0.1",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "concurrently \"pnpm run dev:ui\" \"pnpm run dev:server\"",
+    "dev:peer": "concurrently \"pnpm run dev:ui:peer\" \"pnpm run dev:server:peer\"",
+    "build:start": "pnpm run build && pnpm run start",
+    "test": "pnpm run test:server",
+    
+    "dev:ui": "pnpm --filter ui dev",
+    "dev:ui:peer": "pnpm --filter ui dev:peer",
+    "dev:server": "pnpm --filter @cinereel/server dev",
+    "dev:server:peer": "pnpm --filter @cinereel/server dev:peer",
+    "build": "pnpm --filter ui build",
+    "start": "pnpm --filter @cinereel/server start",
+    "test:server": "pnpm --filter @cinereel/server test"
+  },
+  "author": "Sarphura",
+  "license": "AGPL-3.0-only",
+  "packageManager": "pnpm@10.25.0",
+  "devDependencies": {
+    "@types/node": "^25.3.2",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.1",
+    "vitest": "^4.0.18"
+  }
+}

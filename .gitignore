@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+build/
+.vinxi/
+.output/
+.vercel/
+.netlify/
+.wrangler/
+.tanstack/
+.next/
+out/
+*.tsbuildinfo
+
+# IDE / Editor
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Environment and Secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+coverage/
+.nyc_output
+test-results/
+junit.xml
+
+# Project Specific - Test Data and Temp Storage
+apps/server/test/.tmp/
+tmp/
+temp/
+
+# P2P / Hypercore local data (if any in other places)
+.storage/
+storage/
+corestore/
