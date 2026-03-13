@@ -1,0 +1,33 @@
+@import "tailwindcss";
+
+:root {
+  --font-sans: "Inter", "Noto Sans SC", "Noto Sans JP", sans-serif;
+  --font-mono: "Menlo", monospace;
+}
+
+body {
+  background-color: #18181b;
+  color: #e4e4e7;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom scrollbar for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #18181b;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
+}
