@@ -42,6 +42,13 @@ export const IconDownload = (props: React.SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const IconEye = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <path d="M1.5 8C2.6 5.2 5.1 3.5 8 3.5C10.9 3.5 13.4 5.2 14.5 8C13.4 10.8 10.9 12.5 8 12.5C5.1 12.5 2.6 10.8 1.5 8Z" stroke="currentColor" strokeWidth="1.4" />
+    <circle cx="8" cy="8" r="2.2" stroke="currentColor" strokeWidth="1.4" />
+  </svg>
+);
+
 export const IconUpload = (props: React.SVGProps<SVGSVGElement>) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
     <path d="M2 12V14H14V12" stroke="currentColor" strokeWidth="1.5" />
@@ -105,5 +112,35 @@ export const IconSortArrow = (props: React.SVGProps<SVGSVGElement>) => (
 export const IconPlus = (props: React.SVGProps<SVGSVGElement>) => (
   <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
     <path d="M7 2V12M2 7H12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const IconTrash = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <path d="M2.5 3.5H11.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <path d="M5.5 2H8.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <path d="M4 3.5V10.5C4 11.0523 4.44772 11.5 5 11.5H9C9.55228 11.5 10 11.0523 10 10.5V3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M6 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <path d="M8 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+  </svg>
+);
+
+export const IconPencil = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <path d="M2.25 11.75L4.7 11.3L11 5C11.39 4.61 11.39 3.98 11 3.59L10.41 3C10.02 2.61 9.39 2.61 9 3L2.7 9.3L2.25 11.75Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M8.25 3.75L10.25 5.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+  </svg>
+);
+
+export const IconHeartbeatRing = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <circle cx="9" cy="9" r="7.25" stroke="currentColor" strokeWidth="1.5" />
+    <path
+      d="M3.25 9H5.3L6.5 6.6L8.15 11.6L9.65 7.75L10.55 9H14.75"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 );

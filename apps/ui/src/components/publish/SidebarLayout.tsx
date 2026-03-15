@@ -1,31 +1,43 @@
 import React from 'react';
+import { Link, useMatchRoute } from '@tanstack/react-router';
 
 interface SidebarItemProps {
   icon: React.ReactNode;
+  activeIcon?: React.ReactNode;
   label: string;
-  active?: boolean;
   color?: string;
   count?: number;
+  to: string;
+  search?: Record<string, string | undefined>;
 }
 
-export const SidebarItem: React.FC<SidebarItemProps> = ({ icon, label, active, color, count }) => {
+export const SidebarItem: React.FC<SidebarItemProps> = ({ icon, activeIcon, label, color, count, to, search }) => {
+  const matchRoute = useMatchRoute();
+  const isActive = Boolean(matchRoute({
+    to,
+    search,
+    fuzzy: false,
+    includeSearch: false,
+  }));
+
   return (
-    <button 
+    <Link
+      to={to}
+      search={search}
+      activeOptions={{ exact: true }}
       className={`flex items-center gap-3 px-2 py-1.5 w-full rounded-md transition-colors ${
-        active 
-          ? "bg-white/5 text-[#f59e0b]" 
-          : "text-[#9f9fa9] hover:bg-white/5 hover:text-white"
+        isActive ? 'bg-white/5 text-[#f59e0b]' : 'text-[#9f9fa9] hover:bg-white/5 hover:text-white'
       }`}
-      style={active && color ? { color } : {}}
+      style={isActive && color ? { color } : undefined}
     >
       <div className="size-4 flex items-center justify-center shrink-0">
-        {icon}
+        {isActive ? (activeIcon ?? icon) : icon}
       </div>
       <span className="text-[13px] font-medium grow text-left">{label}</span>
       {count !== undefined && (
         <span className="text-[11px] text-[#52525c]">{count}</span>
       )}
-    </button>
+    </Link>
   );
 };
 

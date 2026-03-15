@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -18,47 +18,37 @@ import {
   createColumnHelper,
   flexRender,
   getCoreRowModel,
+  getExpandedRowModel,
+  getSortedRowModel,
   useReactTable,
   type CellContext,
   type ColumnDef,
   type ColumnOrderState,
   type ColumnSizingState,
+  type ExpandedState,
   type Header,
+  type Row,
   type SortingState,
 } from '@tanstack/react-table';
-import { IconChevronDown, IconFile, IconFolder, IconVideo, IconSortArrow } from '../Icons';
+import { IconChevronDown, IconDownload, IconEye, IconFile, IconFolder, IconVideo, IconSortArrow } from '../Icons';
+import type { ResourceTreeNode } from '../../features/drives/types';
 
-export interface ResourceTreeNode {
-  path: string;
-  name: string;
-  type: 'file' | 'directory';
-  size: number;
-  updatedAt: number;
-  children?: ResourceTreeNode[];
-}
-
-type ColumnKey = 'name' | 'updatedAt' | 'size' | 'type';
-
-type TreeRow = ResourceTreeNode & {
-  depth: number;
-  hasChildren: boolean;
-  isExpanded: boolean;
-  parentPath: string | null;
-};
+type ColumnKey = 'name' | 'localDirPath' | 'updatedAt' | 'size' | 'type';
 
 type StoredLayout = {
   columnOrder: ColumnOrderState;
   columnSizing: ColumnSizingState;
 };
 
-type SortDirection = 'asc' | 'desc';
+type ExpandedPathState = Record<string, boolean>;
 
 const STORAGE_KEY = 'cinereel.publish.tableLayout';
 
-const DEFAULT_COLUMN_ORDER: ColumnKey[] = ['name', 'updatedAt', 'size', 'type'];
+const DEFAULT_COLUMN_ORDER: ColumnKey[] = ['name', 'localDirPath', 'updatedAt', 'size', 'type'];
 
 const DEFAULT_COLUMN_SIZING: ColumnSizingState = {
   name: 420,
+  localDirPath: 280,
   updatedAt: 180,
   size: 116,
   type: 96,
@@ -66,9 +56,10 @@ const DEFAULT_COLUMN_SIZING: ColumnSizingState = {
 
 const MIN_COLUMN_SIZES: Record<ColumnKey, number> = {
   name: 180,
-  updatedAt: 148,
-  size: 96,
-  type: 88,
+  localDirPath: 120,
+  updatedAt: 96,
+  size: 64,
+  type: 56,
 };
 
 const DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
@@ -80,7 +71,7 @@ const DATE_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
   hour12: false,
 });
 
-const columnHelper = createColumnHelper<TreeRow>();
+const columnHelper = createColumnHelper<ResourceTreeNode>();
 
 function formatDate(value: number) {
   return DATE_FORMATTER.format(value).replace(/\//g, '-');
@@ -140,118 +131,160 @@ function loadStoredLayout(): StoredLayout {
   }
 }
 
-function buildInitialExpandedPaths(root?: ResourceTreeNode | null) {
-  return new Set(
+function pathSetToExpandedState(paths: Iterable<string>): ExpandedPathState {
+  return Array.from(paths).reduce<ExpandedPathState>((accumulator, path) => {
+    accumulator[path] = true;
+    return accumulator;
+  }, {});
+}
+
+function buildInitialExpandedState(root?: ResourceTreeNode | null): ExpandedPathState {
+  return pathSetToExpandedState(
     (root?.children ?? [])
       .filter((child) => child.type === 'directory')
       .map((child) => child.path),
   );
 }
 
-function flattenTree(
-  nodes: ResourceTreeNode[],
-  expandedPaths: Set<string>,
-  depth = 0,
-  parentPath: string | null = null,
-): TreeRow[] {
+function collectDirectoryPaths(nodes: ResourceTreeNode[]): string[] {
   return nodes.flatMap((node) => {
-    const hasChildren = Boolean(node.children?.length);
-    const isExpanded = hasChildren && expandedPaths.has(node.path);
-    const row: TreeRow = {
-      ...node,
-      depth,
-      hasChildren,
-      isExpanded,
-      parentPath,
-    };
-
-    if (!hasChildren || !isExpanded) {
-      return [row];
+    if (node.type !== 'directory') {
+      return [];
     }
 
-    return [row, ...flattenTree(node.children ?? [], expandedPaths, depth + 1, node.path)];
+    return [node.path, ...collectDirectoryPaths(node.children ?? [])];
   });
 }
 
-function compareTreeNodes(
-  left: ResourceTreeNode,
-  right: ResourceTreeNode,
-  columnKey: ColumnKey,
-  direction: SortDirection,
-) {
-  let result = 0;
-
-  if (columnKey === 'name') {
-    result = left.name.localeCompare(right.name, 'zh-CN');
-  } else if (columnKey === 'updatedAt') {
-    result = left.updatedAt - right.updatedAt;
-  } else if (columnKey === 'size') {
-    result = left.size - right.size;
-  } else {
-    result = left.type.localeCompare(right.type, 'zh-CN');
-  }
-
-  return direction === 'asc' ? result : result * -1;
+function collectDirectoryPathSet(root?: ResourceTreeNode | null) {
+  return new Set(collectDirectoryPaths(root?.children ?? []));
 }
 
-function sortTreeNodes(
-  nodes: ResourceTreeNode[],
-  sorting: SortingState,
-): ResourceTreeNode[] {
-  if (!sorting.length) {
-    return nodes;
-  }
+function collectDirectoriesWithNewChildren(
+  previousNodes: ResourceTreeNode[],
+  nextNodes: ResourceTreeNode[],
+  ancestorPaths: string[] = [],
+): Set<string> {
+  const expandedPaths = new Set<string>();
+  const previousDirectoryMap = new Map(
+    previousNodes
+      .filter((node) => node.type === 'directory')
+      .map((node) => [node.path, node] as const),
+  );
 
-  const [{ id, desc }] = sorting;
-  const columnKey = id as ColumnKey;
-  const direction: SortDirection = desc ? 'desc' : 'asc';
+  nextNodes.forEach((node) => {
+    if (node.type !== 'directory') {
+      return;
+    }
 
-  return nodes
-    .map((node) => ({
-      ...node,
-      children: node.children ? sortTreeNodes(node.children, sorting) : undefined,
-    }))
-    .sort((left, right) => compareTreeNodes(left, right, columnKey, direction));
+    const previousNode = previousDirectoryMap.get(node.path);
+    const previousChildKeys = new Set((previousNode?.children ?? []).map((child) => `${child.type}:${child.path}`));
+    const hasNewDirectChild = (node.children ?? []).some((child) => !previousChildKeys.has(`${child.type}:${child.path}`));
+
+    if (hasNewDirectChild) {
+      ancestorPaths.forEach((path) => expandedPaths.add(path));
+      expandedPaths.add(node.path);
+    }
+
+    const nestedExpandedPaths = collectDirectoriesWithNewChildren(
+      previousNode?.children ?? [],
+      node.children ?? [],
+      [...ancestorPaths, node.path],
+    );
+
+    nestedExpandedPaths.forEach((path) => expandedPaths.add(path));
+  });
+
+  return expandedPaths;
 }
 
 function NameCell({
   row,
   onToggle,
+  onDownload,
+  onPreview,
+  isPreviewable,
+  onContextMenu,
 }: {
-  row: TreeRow;
+  row: Row<ResourceTreeNode>;
   onToggle: (path: string) => void;
+  onDownload?: (node: ResourceTreeNode) => void;
+  onPreview?: (node: ResourceTreeNode) => void;
+  isPreviewable?: boolean;
+  onContextMenu?: (event: React.MouseEvent<HTMLElement>, node: ResourceTreeNode) => void;
 }) {
-  const isVideo = row.name.match(/\.(mkv|mp4|avi|mov|flv|wmv)$/i);
+  const node = row.original;
+  const isVideo = node.name.match(/\.(mkv|mp4|avi|mov|flv|wmv)$/i);
+
   return (
-    <div className="flex items-center min-w-0" style={{ paddingLeft: `${row.depth * 18}px` }}>
-      <button
-        type="button"
-        onClick={row.hasChildren ? (e) => { e.stopPropagation(); onToggle(row.path); } : undefined}
-        className={`mr-1.5 flex size-5 shrink-0 items-center justify-center rounded text-[#52525c] hover:bg-white/5 hover:text-white transition-colors ${!row.hasChildren ? 'invisible' : ''}`}
-      >
-        <IconChevronDown className={`size-3 transition-transform duration-200 ${row.isExpanded ? 'rotate-0' : '-rotate-90'}`} />
-      </button>
-      {row.type === 'directory' ? (
-        <IconFolder className="mr-2.5 size-4 shrink-0 text-[#f5c46b]" />
-      ) : isVideo ? (
-        <IconVideo className="mr-2.5 size-4 shrink-0 text-[#f59e0b]/80" />
-      ) : (
-        <IconFile className="mr-2.5 size-4 shrink-0 text-[#8b8b97]" />
-      )}
-      <span className="truncate text-[#e4e4e7] font-normal leading-none">{row.name}</span>
+    <div className="flex w-full min-w-0 items-center justify-between gap-2" onContextMenu={(event) => onContextMenu?.(event, node)}>
+      <div className="flex min-w-0 flex-1 items-center" style={{ paddingLeft: `${row.depth * 18}px` }}>
+        <button
+          type="button"
+          onClick={row.getCanExpand() ? (event) => {
+            event.stopPropagation();
+            onToggle(node.path);
+          } : undefined}
+          className={`mr-1.5 flex size-5 shrink-0 items-center justify-center rounded text-[#52525c] transition-colors hover:bg-white/5 hover:text-white ${!row.getCanExpand() ? 'invisible' : ''}`}
+        >
+          <IconChevronDown className={`size-3 transition-transform duration-200 ${row.getIsExpanded() ? 'rotate-0' : '-rotate-90'}`} />
+        </button>
+        {node.type === 'directory' ? (
+          <IconFolder className="mr-2.5 size-4 shrink-0 text-[#f5c46b]" />
+        ) : isVideo ? (
+          <IconVideo className="mr-2.5 size-4 shrink-0 text-[#f59e0b]/80" />
+        ) : (
+          <IconFile className="mr-2.5 size-4 shrink-0 text-[#8b8b97]" />
+        )}
+        {node.type === 'file' && onPreview && isPreviewable ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              onPreview(node);
+            }}
+            className="min-w-0 flex-1 truncate text-left font-normal leading-none text-[#e4e4e7] transition-colors hover:text-white"
+            aria-label={`预览文件 ${node.name}`}
+            title={`预览文件 ${node.name}`}
+          >
+            {node.name}
+          </button>
+        ) : (
+          <span className="min-w-0 flex-1 truncate font-normal leading-none text-[#e4e4e7]" title={node.name}>
+            {node.name}
+          </span>
+        )}
+      </div>
+      {onDownload && !node.localDirPath ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDownload(node);
+          }}
+          className="flex size-5 shrink-0 items-center justify-center rounded text-[#52525c] transition-colors hover:bg-white/5 hover:text-white"
+          aria-label={`下载${node.type === 'directory' ? '目录' : '文件'} ${node.name}`}
+          title={`下载${node.type === 'directory' ? '目录' : '文件'}`}
+        >
+          <IconDownload className="size-3.5" />
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function HeaderCell({ header }: { header: Header<TreeRow, unknown> }) {
+function HeaderCell({ header }: { header: Header<ResourceTreeNode, unknown> }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: header.column.id,
   });
+  const resizeHandler = header.getResizeHandler();
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
     width: header.getSize(),
+    minWidth: header.getSize(),
+    maxWidth: header.getSize(),
     zIndex: isDragging ? 1 : 0,
   };
 
@@ -260,28 +293,53 @@ function HeaderCell({ header }: { header: Header<TreeRow, unknown> }) {
       ref={setNodeRef}
       colSpan={header.colSpan}
       style={style}
-      className="relative h-[27px] border-b border-[#27272a] bg-[#1c1c1f] p-0 text-[11px] font-medium text-[#71717b]"
+      className="relative h-[27px] overflow-hidden border-b border-[#27272a] bg-[#1c1c1f] p-0 text-[11px] font-medium text-[#71717b]"
     >
       <div
-        {...attributes}
-        {...listeners}
-        onClick={header.column.getToggleSortingHandler()}
-        className={`flex h-full items-center justify-start px-3 ${isDragging ? 'opacity-60' : ''}`}
-        style={{ cursor: 'grab' }}
+        className={`flex h-full items-center justify-start px-2 ${isDragging ? 'opacity-60' : ''}`}
       >
-        <div className="min-w-0 flex flex-1 items-center justify-start gap-1 text-left">
+        <button
+          type="button"
+          onClick={header.column.getToggleSortingHandler()}
+          className="min-w-0 flex flex-1 items-center justify-start gap-1 px-1 text-left"
+        >
           <span className={header.column.id === 'name' ? 'text-[#f59e0b]' : 'text-[#71717b]'}>
             {flexRender(header.column.columnDef.header, header.getContext())}
           </span>
           {header.column.getIsSorted() ? (
             <IconSortArrow className={`size-[9px] ${header.column.getIsSorted() === 'desc' ? 'rotate-180' : ''} text-[#f59e0b]`} />
           ) : null}
-        </div>
+        </button>
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          onClick={(event) => event.stopPropagation()}
+          className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-[#52525c] transition-colors hover:bg-white/5 hover:text-white"
+          style={{ cursor: 'grab' }}
+          aria-label={`拖动列 ${String(header.column.columnDef.header)}`}
+          title="拖动调整列顺序"
+        >
+          <span className="pointer-events-none flex items-center gap-px">
+            <span className="h-2.5 w-px rounded bg-current/70" />
+            <span className="h-2.5 w-px rounded bg-current/70" />
+          </span>
+        </button>
       </div>
       <div
-        onDoubleClick={() => header.column.resetSize()}
-        onMouseDown={header.getResizeHandler()}
-        onTouchStart={header.getResizeHandler()}
+        onClick={(event) => event.stopPropagation()}
+        onDoubleClick={(event) => {
+          event.stopPropagation();
+          header.column.resetSize();
+        }}
+        onMouseDown={(event) => {
+          event.stopPropagation();
+          resizeHandler(event);
+        }}
+        onTouchStart={(event) => {
+          event.stopPropagation();
+          resizeHandler(event);
+        }}
         className={`absolute right-0 top-0 h-full w-3 cursor-col-resize select-none touch-none ${
           header.column.getIsResizing() ? 'bg-[#f59e0b]/20' : ''
         }`}
@@ -294,15 +352,39 @@ function HeaderCell({ header }: { header: Header<TreeRow, unknown> }) {
 
 function buildColumns(
   onToggle: (path: string) => void,
-): ColumnDef<TreeRow, any>[] {
+  onDownload?: (node: ResourceTreeNode) => void,
+  onPreview?: (node: ResourceTreeNode) => void,
+  isPreviewableNode?: (node: ResourceTreeNode) => boolean,
+  onContextMenuNode?: (event: React.MouseEvent<HTMLElement>, node: ResourceTreeNode) => void,
+): ColumnDef<ResourceTreeNode, any>[] {
   return [
     columnHelper.accessor('name', {
       id: 'name',
       header: '名称',
       size: DEFAULT_COLUMN_SIZING.name,
       minSize: MIN_COLUMN_SIZES.name,
-      cell: (context: CellContext<TreeRow, string>) => (
-        <NameCell row={context.row.original} onToggle={onToggle} />
+      sortingFn: (left, right) => left.original.name.localeCompare(right.original.name, 'zh-CN'),
+      cell: (context: CellContext<ResourceTreeNode, string>) => (
+        <NameCell
+          row={context.row}
+          onToggle={onToggle}
+          onDownload={onDownload}
+          onPreview={onPreview}
+          isPreviewable={isPreviewableNode?.(context.row.original)}
+          onContextMenu={onContextMenuNode}
+        />
+      ),
+    }),
+    columnHelper.accessor((row) => row.localDirPath ?? null, {
+      id: 'localDirPath',
+      header: '文件所在目录',
+      size: DEFAULT_COLUMN_SIZING.localDirPath,
+      minSize: MIN_COLUMN_SIZES.localDirPath,
+      sortingFn: (left, right) => (left.original.localDirPath ?? '').localeCompare((right.original.localDirPath ?? ''), 'zh-CN'),
+      cell: (context: CellContext<ResourceTreeNode, string | null>) => (
+        <span className="block truncate text-[#8b8b97]">
+          {context.getValue() || '--'}
+        </span>
       ),
     }),
     columnHelper.accessor('updatedAt', {
@@ -310,7 +392,7 @@ function buildColumns(
       header: '修改日期',
       size: DEFAULT_COLUMN_SIZING.updatedAt,
       minSize: MIN_COLUMN_SIZES.updatedAt,
-      cell: (context: CellContext<TreeRow, number>) => (
+      cell: (context: CellContext<ResourceTreeNode, number>) => (
         <span className="text-[#8b8b97]">{formatDate(context.getValue())}</span>
       ),
     }),
@@ -319,7 +401,7 @@ function buildColumns(
       header: '大小',
       size: DEFAULT_COLUMN_SIZING.size,
       minSize: MIN_COLUMN_SIZES.size,
-      cell: (context: CellContext<TreeRow, number>) => (
+      cell: (context: CellContext<ResourceTreeNode, number>) => (
         <span className="text-[#8b8b97]">
           {context.row.original.type === 'directory' ? '--' : formatSize(context.getValue())}
         </span>
@@ -330,21 +412,92 @@ function buildColumns(
       header: '种类',
       size: DEFAULT_COLUMN_SIZING.type,
       minSize: MIN_COLUMN_SIZES.type,
-      cell: (context: CellContext<TreeRow, 'file' | 'directory'>) => (
+      sortingFn: (left, right) => left.original.type.localeCompare(right.original.type, 'zh-CN'),
+      cell: (context: CellContext<ResourceTreeNode, 'file' | 'directory'>) => (
         <span className="text-[#71717b]">{context.getValue() === 'directory' ? '文件夹' : '文件'}</span>
       ),
     }),
   ];
 }
 
-export const ResourceTree: React.FC<{ root?: ResourceTreeNode | null }> = ({ root }) => {
-  const [expandedPaths, setExpandedPaths] = useState<Set<string>>(() => buildInitialExpandedPaths(root));
+export const ResourceTree: React.FC<{
+  root?: ResourceTreeNode | null;
+  onDownloadNode?: (node: ResourceTreeNode) => void;
+  onPreviewNode?: (node: ResourceTreeNode) => void;
+  isPreviewableNode?: (node: ResourceTreeNode) => boolean;
+  onContextMenuNode?: (event: React.MouseEvent<HTMLElement>, node: ResourceTreeNode) => void;
+  expandAllTrigger?: number;
+  collapseAllTrigger?: number;
+}> = ({ root, onDownloadNode, onPreviewNode, isPreviewableNode, onContextMenuNode, expandAllTrigger, collapseAllTrigger }) => {
+  const [expanded, setExpanded] = useState<ExpandedPathState>(() => buildInitialExpandedState(root));
   const [layout, setLayout] = useState<StoredLayout>(loadStoredLayout);
   const [sorting, setSorting] = useState<SortingState>([]);
+  const hasInitializedExpandedRef = useRef(false);
+  const previousRootRef = useRef<ResourceTreeNode | null | undefined>(root);
+  const lastExpandAllTriggerRef = useRef(expandAllTrigger);
+  const lastCollapseAllTriggerRef = useRef(collapseAllTrigger);
 
   useEffect(() => {
-    setExpandedPaths(buildInitialExpandedPaths(root));
+    if (!root) {
+      previousRootRef.current = root;
+      return;
+    }
+
+    const previousRoot = previousRootRef.current;
+    setExpanded((current) => {
+      if (!hasInitializedExpandedRef.current) {
+        hasInitializedExpandedRef.current = true;
+        return buildInitialExpandedState(root);
+      }
+
+      const validDirectoryPaths = collectDirectoryPathSet(root);
+      const currentExpandedPaths = new Set(
+        Object.entries(current)
+          .filter(([, isOpen]) => Boolean(isOpen))
+          .map(([path]) => path),
+      );
+      const nextExpandedPaths = new Set([...currentExpandedPaths].filter((path) => validDirectoryPaths.has(path)));
+
+      if (previousRoot) {
+        const directoriesWithNewChildren = collectDirectoriesWithNewChildren(
+          previousRoot.children ?? [],
+          root.children ?? [],
+        );
+
+        directoriesWithNewChildren.forEach((path) => {
+          if (validDirectoryPaths.has(path)) {
+            nextExpandedPaths.add(path);
+          }
+        });
+      }
+
+      return pathSetToExpandedState(nextExpandedPaths);
+    });
+
+    previousRootRef.current = root;
   }, [root]);
+
+  useEffect(() => {
+    if (!root) {
+      return;
+    }
+
+    if (expandAllTrigger === undefined || Object.is(lastExpandAllTriggerRef.current, expandAllTrigger)) {
+      return;
+    }
+
+    lastExpandAllTriggerRef.current = expandAllTrigger;
+    setExpanded(pathSetToExpandedState(collectDirectoryPaths(root.children ?? [])));
+  }, [expandAllTrigger, root]);
+
+  useEffect(() => {
+    if (collapseAllTrigger === undefined || Object.is(lastCollapseAllTriggerRef.current, collapseAllTrigger)) {
+      return;
+    }
+
+    lastCollapseAllTriggerRef.current = collapseAllTrigger;
+    setExpanded({});
+  }, [collapseAllTrigger]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -354,35 +507,39 @@ export const ResourceTree: React.FC<{ root?: ResourceTreeNode | null }> = ({ roo
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(layout));
   }, [layout]);
 
-  const sortedNodes = useMemo(() => sortTreeNodes(root?.children ?? [], sorting), [root, sorting]);
-
-  const rows = useMemo(() => flattenTree(sortedNodes, expandedPaths), [expandedPaths, sortedNodes]);
-
   const toggleRow = (path: string) => {
-    setExpandedPaths((current) => {
-      const next = new Set(current);
+    setExpanded((current) => {
+      const next = { ...current };
 
-      if (next.has(path)) {
-        next.delete(path);
+      if (next[path]) {
+        delete next[path];
       } else {
-        next.add(path);
+        next[path] = true;
       }
 
       return next;
     });
   };
 
-  const columns = useMemo(() => buildColumns(toggleRow), []);
+  const columns = useMemo(
+    () => buildColumns(toggleRow, onDownloadNode, onPreviewNode, isPreviewableNode, onContextMenuNode),
+    [isPreviewableNode, onContextMenuNode, onDownloadNode, onPreviewNode],
+  );
 
   const table = useReactTable({
-    data: rows,
+    data: root?.children ?? [],
     columns,
     getCoreRowModel: getCoreRowModel(),
+    getExpandedRowModel: getExpandedRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getSubRows: (row) => row.children ?? [],
+    getRowCanExpand: (row) => Boolean(row.original.children?.length),
     getRowId: (row) => row.path,
     columnResizeMode: 'onChange',
     state: {
       columnOrder: layout.columnOrder,
       columnSizing: layout.columnSizing,
+      expanded,
       sorting,
     },
     onColumnOrderChange: (updater) => {
@@ -396,6 +553,12 @@ export const ResourceTree: React.FC<{ root?: ResourceTreeNode | null }> = ({ roo
         ...current,
         columnSizing: typeof updater === 'function' ? updater(current.columnSizing) : updater,
       }));
+    },
+    onExpandedChange: (updater) => {
+      setExpanded((current) => {
+        const next = typeof updater === 'function' ? updater(current as ExpandedState) : updater;
+        return next === true ? pathSetToExpandedState(collectDirectoryPaths(root?.children ?? [])) : next;
+      });
     },
     onSortingChange: setSorting,
     defaultColumn: {
@@ -437,7 +600,19 @@ export const ResourceTree: React.FC<{ root?: ResourceTreeNode | null }> = ({ roo
   return (
     <div className="h-full overflow-auto bg-[#18181b]">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <table className="min-w-full table-fixed border-separate border-spacing-0">
+        <table className="table-fixed border-separate border-spacing-0" style={{ width: table.getTotalSize() }}>
+          <colgroup>
+            {visibleLeafColumns.map((column) => (
+              <col
+                key={column.id}
+                style={{
+                  width: column.getSize(),
+                  minWidth: column.getSize(),
+                  maxWidth: column.getSize(),
+                }}
+              />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-10 bg-[#1c1c1f]">
             {table.getHeaderGroups().map((headerGroup) => (
               <SortableContext
@@ -460,32 +635,50 @@ export const ResourceTree: React.FC<{ root?: ResourceTreeNode | null }> = ({ roo
           <tbody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <tr 
-                  key={row.id} 
-                  onClick={row.original.hasChildren ? () => toggleRow(row.original.path) : undefined}
-                  className="group hover:bg-white/[0.03] transition-colors cursor-default"
-                >
-                  {row.getVisibleCells().map((cell) => {
-                    const columnId = cell.column.id as ColumnKey;
-                    const alignment = columnId === 'size'
-                      ? 'justify-end text-right'
-                      : columnId === 'updatedAt' || columnId === 'type'
-                        ? 'justify-center text-center'
-                        : '';
+                (() => {
+                  const canPreview = row.original.type === 'file' && Boolean(onPreviewNode && isPreviewableNode?.(row.original));
+                  const handleRowClick = row.getCanExpand()
+                    ? () => toggleRow(row.original.path)
+                    : canPreview
+                      ? () => onPreviewNode?.(row.original)
+                      : undefined;
 
-                    return (
-                      <td
-                        key={cell.id}
-                        style={{ width: cell.column.getSize() }}
-                        className="h-[38px] px-0 py-0 text-[12px] border-b border-transparent"
-                      >
-                        <div className={`flex h-[38px] items-center px-3 ${alignment} text-[#a1a1aa]`}>
-                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
+                  return (
+                    <tr
+                      key={row.id}
+                      onClick={handleRowClick}
+                      onContextMenu={(event) => onContextMenuNode?.(event, row.original)}
+                      className={`group transition-colors hover:bg-white/[0.03] ${
+                        handleRowClick ? 'cursor-pointer' : 'cursor-default'
+                      }`}
+                    >
+                      {row.getVisibleCells().map((cell) => {
+                        const columnId = cell.column.id as ColumnKey;
+                        const alignment = columnId === 'size'
+                          ? 'justify-end text-right'
+                          : columnId === 'updatedAt' || columnId === 'type'
+                            ? 'justify-center text-center'
+                            : '';
+
+                        return (
+                          <td
+                            key={cell.id}
+                            style={{
+                              width: cell.column.getSize(),
+                              minWidth: cell.column.getSize(),
+                              maxWidth: cell.column.getSize(),
+                            }}
+                            className="h-[38px] overflow-hidden border-b border-transparent px-0 py-0 text-[12px]"
+                          >
+                            <div className={`flex h-[38px] min-w-0 items-center px-3 text-[#a1a1aa] ${alignment}`}>
+                              {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })()
               ))
             ) : (
               <tr>
