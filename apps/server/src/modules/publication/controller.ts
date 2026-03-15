@@ -4,7 +4,6 @@ import {
   deletePublishedResource,
   getPublishedResourceTree,
   listPublishedResources,
-  renamePublishedResource,
 } from './service'
 
 export async function registerPublicationController(
@@ -18,34 +17,6 @@ export async function registerPublicationController(
       success: true,
       data,
       total: data.length,
-    }
-  })
-
-  app.patch('/api/publications/:id', async (request, reply) => {
-    const params = request.params as { id: string }
-    const body = request.body as { displayName?: string } | null
-
-    if (!body?.displayName?.trim()) {
-      return reply.code(400).send({ error: '请提供新的发布对象名称。' })
-    }
-
-    try {
-      const data = await renamePublishedResource(
-        hyper.drive,
-        params.id,
-        body.displayName,
-      )
-
-      return {
-        success: true,
-        data,
-      }
-    } catch (error) {
-      request.log.error(error)
-
-      return reply.code(400).send({
-        error: error instanceof Error ? error.message : '发布对象改名失败。',
-      })
     }
   })
 

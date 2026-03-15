@@ -1,41 +1,120 @@
-import fs from 'node:fs/promises'
-import path from 'node:path'
 import type { HyperModuleConfig } from '../../infra/hyper/types'
+import { withConfigDatabase } from '../../infra/config-store'
+import { readDriveDescriptor } from '../profile/schema'
+import { getPeerDrive } from '../remote/service'
 
 export interface SubscriptionRecord {
   driveKey: string
+  name?: string
+  remark?: string
   createdAt: number
 }
-
-const SUBSCRIPTIONS_FILE = 'subscriptions.json'
 
 export async function listSubscriptions(
   hyper: HyperModuleConfig,
 ): Promise<SubscriptionRecord[]> {
-  const records = await readSubscriptions(hyper)
-  return records.sort((left, right) => right.createdAt - left.createdAt)
+  return withConfigDatabase(hyper.storeDir, (db) => (
+    db.prepare(`
+      SELECT drive_key, name, remark, created_at
+      FROM subscriptions
+      ORDER BY created_at DESC
+    `).all().map((record) => ({
+      driveKey: String((record as Record<string, unknown>).drive_key),
+      createdAt: Number((record as Record<string, unknown>).created_at),
+      name: normalizeName(typeof (record as Record<string, unknown>).name === 'string'
+        ? String((record as Record<string, unknown>).name)
+        : undefined),
+      remark: normalizeName(typeof (record as Record<string, unknown>).remark === 'string'
+        ? String((record as Record<string, unknown>).remark)
+        : undefined),
+    }))
+  ))
 }
 
 export async function addSubscription(
   hyper: HyperModuleConfig,
   driveKey: string,
+  name?: string,
 ): Promise<SubscriptionRecord> {
   const normalizedKey = normalizeDriveKey(driveKey)
-  const records = await readSubscriptions(hyper)
-  const existing = records.find((record) => record.driveKey === normalizedKey)
+  const normalizedName = normalizeName(name)
+  const descriptorName = await readDescriptorName(hyper, normalizedKey)
+  const nextName = descriptorName ?? normalizedName
 
-  if (existing) {
-    return existing
-  }
+  return withConfigDatabase(hyper.storeDir, (db) => {
+    const existing = db.prepare(`
+      SELECT drive_key, name, remark, created_at
+      FROM subscriptions
+      WHERE drive_key = ?
+    `).get(normalizedKey) as Record<string, unknown> | undefined
 
-  const record: SubscriptionRecord = {
-    driveKey: normalizedKey,
-    createdAt: Date.now(),
-  }
+    if (existing) {
+      if (nextName && existing.name !== nextName) {
+        db.prepare(`
+          UPDATE subscriptions
+          SET name = ?
+          WHERE drive_key = ?
+        `).run(nextName, normalizedKey)
+      }
 
-  records.unshift(record)
-  await writeSubscriptions(hyper, records)
-  return record
+      return {
+        driveKey: normalizedKey,
+        name: nextName ?? normalizeName(typeof existing.name === 'string' ? String(existing.name) : undefined),
+        remark: normalizeName(typeof existing.remark === 'string' ? String(existing.remark) : undefined),
+        createdAt: Number(existing.created_at),
+      }
+    }
+
+    const record: SubscriptionRecord = {
+      driveKey: normalizedKey,
+      name: nextName,
+      createdAt: Date.now(),
+    }
+
+    db.prepare(`
+      INSERT INTO subscriptions (drive_key, name, remark, created_at)
+      VALUES (?, ?, NULL, ?)
+    `).run(record.driveKey, record.name ?? null, record.createdAt)
+
+    return record
+  })
+}
+
+export async function updateSubscriptionRemark(
+  hyper: HyperModuleConfig,
+  driveKey: string,
+  remark?: string,
+): Promise<SubscriptionRecord> {
+  const normalizedKey = normalizeDriveKey(driveKey)
+  const normalizedRemark = normalizeName(remark)
+  return withConfigDatabase(hyper.storeDir, (db) => {
+    const existing = db.prepare(`
+      SELECT drive_key, name, remark, created_at
+      FROM subscriptions
+      WHERE drive_key = ?
+    `).get(normalizedKey) as Record<string, unknown> | undefined
+
+    if (!existing) {
+      throw new Error('订阅不存在。')
+    }
+
+    const currentRemark = normalizeName(typeof existing.remark === 'string' ? String(existing.remark) : undefined)
+
+    if (currentRemark !== normalizedRemark) {
+      db.prepare(`
+        UPDATE subscriptions
+        SET remark = ?
+        WHERE drive_key = ?
+      `).run(normalizedRemark ?? null, normalizedKey)
+    }
+
+      return {
+        driveKey: normalizedKey,
+        name: normalizeName(typeof existing.name === 'string' ? String(existing.name) : undefined),
+        remark: normalizedRemark,
+        createdAt: Number(existing.created_at),
+      }
+  })
 }
 
 export async function removeSubscription(
@@ -43,47 +122,29 @@ export async function removeSubscription(
   driveKey: string,
 ): Promise<SubscriptionRecord> {
   const normalizedKey = normalizeDriveKey(driveKey)
-  const records = await readSubscriptions(hyper)
-  const index = records.findIndex((record) => record.driveKey === normalizedKey)
+  return withConfigDatabase(hyper.storeDir, (db) => {
+    const existing = db.prepare(`
+      SELECT drive_key, name, remark, created_at
+      FROM subscriptions
+      WHERE drive_key = ?
+    `).get(normalizedKey) as Record<string, unknown> | undefined
 
-  if (index === -1) {
-    throw new Error('订阅不存在。')
-  }
-
-  const [removed] = records.splice(index, 1)
-  await writeSubscriptions(hyper, records)
-  return removed
-}
-
-async function readSubscriptions(hyper: HyperModuleConfig) {
-  const filePath = getSubscriptionsPath(hyper)
-
-  try {
-    const content = await fs.readFile(filePath, 'utf8')
-    const data = JSON.parse(content) as SubscriptionRecord[]
-    return Array.isArray(data)
-      ? data.filter((record) => typeof record?.driveKey === 'string' && typeof record?.createdAt === 'number')
-      : []
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
-      return []
+    if (!existing) {
+      throw new Error('订阅不存在。')
     }
 
-    throw error
-  }
-}
+    db.prepare(`
+      DELETE FROM subscriptions
+      WHERE drive_key = ?
+    `).run(normalizedKey)
 
-async function writeSubscriptions(
-  hyper: HyperModuleConfig,
-  records: SubscriptionRecord[],
-) {
-  const filePath = getSubscriptionsPath(hyper)
-  await fs.mkdir(path.dirname(filePath), { recursive: true })
-  await fs.writeFile(filePath, JSON.stringify(records, null, 2), 'utf8')
-}
-
-function getSubscriptionsPath(hyper: HyperModuleConfig) {
-  return path.join(hyper.storeDir, SUBSCRIPTIONS_FILE)
+    return {
+      driveKey: normalizedKey,
+      name: normalizeName(typeof existing.name === 'string' ? String(existing.name) : undefined),
+      remark: normalizeName(typeof existing.remark === 'string' ? String(existing.remark) : undefined),
+      createdAt: Number(existing.created_at),
+    }
+  })
 }
 
 function normalizeDriveKey(driveKey: string) {
@@ -94,4 +155,23 @@ function normalizeDriveKey(driveKey: string) {
   }
 
   return normalized
+}
+
+function normalizeName(value?: string) {
+  const normalized = value?.trim()
+  return normalized ? normalized : undefined
+}
+
+async function readDescriptorName(
+  hyper: HyperModuleConfig,
+  driveKey: string,
+) {
+  try {
+    const drive = await getPeerDrive(hyper, driveKey)
+    await drive.update({ wait: false }).catch(() => {})
+    const descriptor = await readDriveDescriptor(drive)
+    return normalizeName(descriptor?.name)
+  } catch {
+    return undefined
+  }
 }

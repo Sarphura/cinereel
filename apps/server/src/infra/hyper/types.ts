@@ -12,6 +12,8 @@ export interface HyperModuleConfig {
   driveKey: string
   storeDir: string
   createPeerDrive: (key: Buffer) => Hyperdrive
+  ensureDriveDiscovery: (topic: Buffer) => Promise<void>
+  getDriveDiscoveryCount: (topic: Buffer) => Promise<number>
   close: () => Promise<void>
 }
 
@@ -49,10 +51,29 @@ export interface MountResult {
   publication: PublishedResourceRecord
 }
 
+export interface MountJob {
+  id: string
+  driveKey: string
+  targetPath: string
+  mountedPath: string | null
+  kind: 'file' | 'directory' | null
+  totalFiles: number
+  processedFiles: number
+  totalBytes: number
+  processedBytes: number
+  currentFilePath: string | null
+  progress: number
+  status: 'queued' | 'mounting' | 'completed' | 'failed'
+  error: string | null
+  result: MountResult | null
+  createdAt: number
+  updatedAt: number
+}
+
 export interface PublishedResourceRecord {
   id: string
-  displayName: string
   sourceName: string
+  sourcePath?: string
   rootPath: string
   kind: 'file' | 'directory'
   createdAt: number
@@ -67,16 +88,33 @@ export interface PublicationTreeNode {
   type: 'file' | 'directory'
   size: number
   updatedAt: number
+  localDirPath?: string | null
   children?: PublicationTreeNode[]
 }
 
 export interface DriveSummaryRecord {
   driveKey: string
-  label: string
+  name: string
+  remark?: string
   createdAt: number
   updatedAt: number
   fileCount: number
   totalSize: number
   publicationCount: number
+  peerCount: number
   isLocal: boolean
+}
+
+export interface ProfileSummaryRecord {
+  driveKey: string
+  name: string
+  bio: string
+  avatarPath: string | null
+  updatedAt: number
+  collections: Array<{
+    driveKey: string
+    name: string
+    addedAt: number
+    updatedAt: number
+  }>
 }

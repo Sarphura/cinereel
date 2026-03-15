@@ -21,7 +21,6 @@ export function buildPublicationRecord(input: {
   mountedPath: string
   kind: 'file' | 'directory'
   sourcePath: string
-  displayName?: string
   fileCount: number
   totalSize: number
 }) {
@@ -31,8 +30,8 @@ export function buildPublicationRecord(input: {
 
   return {
     id: encodePublicationId(normalizedRootPath),
-    displayName: input.displayName?.trim() || sourceName,
     sourceName,
+    sourcePath: input.sourcePath,
     rootPath: normalizedRootPath,
     kind: input.kind,
     createdAt: now,
@@ -72,7 +71,7 @@ export async function getPublishedResourceTree(
 
   const rootNode: PublicationTreeNode = {
     path: publication.rootPath,
-    name: publication.displayName,
+    name: publication.sourceName,
     type: publication.kind,
     size: publication.totalSize,
     updatedAt: rootUpdatedAt,
@@ -134,30 +133,6 @@ export async function upsertPublishedResource(
   return manifest.publications.find((record) => record.id === nextRecord.id) ?? nextRecord
 }
 
-export async function renamePublishedResource(
-  drive: Hyperdrive,
-  publicationId: string,
-  displayName: string,
-) {
-  const manifest = await readManifest(drive)
-  const publication = manifest.publications.find((record) => record.id === publicationId)
-
-  if (!publication) {
-    throw new Error('找不到要改名的发布对象。')
-  }
-
-  const nextName = displayName.trim()
-
-  if (!nextName) {
-    throw new Error('发布对象名称不能为空。')
-  }
-
-  publication.displayName = nextName
-  publication.updatedAt = Date.now()
-  await writeManifest(drive, manifest)
-  return publication
-}
-
 export async function deletePublishedResource(
   drive: Hyperdrive,
   publicationId: string,
@@ -176,22 +151,37 @@ export async function deletePublishedResource(
 }
 
 async function readManifest(drive: Hyperdrive): Promise<PublicationsManifest> {
-  const manifestEntry = await drive.entry(PUBLICATIONS_MANIFEST_PATH, { wait: false })
+  const emptyManifest = createEmptyManifest()
+  let manifestEntry: Awaited<ReturnType<Hyperdrive['entry']>>
 
-  if (!manifestEntry?.value.blob) {
-    return {
-      version: 1,
-      publications: [],
+  try {
+    manifestEntry = await drive.entry(PUBLICATIONS_MANIFEST_PATH, { wait: false })
+  } catch (error) {
+    if (isManifestUnavailableError(error)) {
+      return emptyManifest
     }
+
+    throw error
   }
 
-  const buffer = await drive.get(PUBLICATIONS_MANIFEST_PATH)
+  if (!manifestEntry?.value.blob) {
+    return emptyManifest
+  }
+
+  let buffer: Awaited<ReturnType<Hyperdrive['get']>>
+
+  try {
+    buffer = await drive.get(PUBLICATIONS_MANIFEST_PATH, { wait: false })
+  } catch (error) {
+    if (isManifestUnavailableError(error)) {
+      return emptyManifest
+    }
+
+    throw error
+  }
 
   if (!buffer) {
-    return {
-      version: 1,
-      publications: [],
-    }
+    return emptyManifest
   }
 
   try {
@@ -203,10 +193,7 @@ async function readManifest(drive: Hyperdrive): Promise<PublicationsManifest> {
         : [],
     }
   } catch {
-    return {
-      version: 1,
-      publications: [],
-    }
+    return emptyManifest
   }
 }
 
@@ -240,8 +227,8 @@ function isPublishedResourceRecord(value: unknown): value is PublishedResourceRe
 
   const candidate = value as Record<string, unknown>
   return typeof candidate.id === 'string'
-    && typeof candidate.displayName === 'string'
     && typeof candidate.sourceName === 'string'
+    && (candidate.sourcePath === undefined || typeof candidate.sourcePath === 'string')
     && typeof candidate.rootPath === 'string'
     && (candidate.kind === 'file' || candidate.kind === 'directory')
     && typeof candidate.createdAt === 'number'
@@ -257,6 +244,20 @@ function normalizeDrivePath(value: string) {
 
 function encodePublicationId(rootPath: string) {
   return Buffer.from(rootPath).toString('base64url')
+}
+
+function createEmptyManifest(): PublicationsManifest {
+  return {
+    version: 1,
+    publications: [],
+  }
+}
+
+function isManifestUnavailableError(error: unknown) {
+  return !!error
+    && typeof error === 'object'
+    && 'code' in error
+    && error.code === 'BLOCK_NOT_AVAILABLE'
 }
 
 function sortPublicationTree(node: PublicationTreeNode) {

@@ -104,7 +104,7 @@ export async function getPeerDrive(
   const keyBuffer = b4a.from(normalizedKey, 'hex')
   const drive = hyper.createPeerDrive(keyBuffer)
   await drive.ready()
-  hyper.swarm.join(drive.discoveryKey, { server: false, client: true })
+  await hyper.ensureDriveDiscovery(drive.discoveryKey)
   sessionMap.set(normalizedKey, { drive })
   return drive
 }

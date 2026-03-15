@@ -21,9 +21,11 @@ export async function createHyperModule(
 
   const driveKey = b4a.toString(drive.key, 'hex')
   const swarm = new Hyperswarm()
+  const driveDiscoverySessions = new Map<string, { flushed: () => Promise<boolean> }>()
 
   swarm.on('connection', (conn, info) => {
     const peerKey = b4a.toString(info.publicKey, 'hex').slice(0, 8)
+
     log.info({ peer: peerKey }, 'Hypercore peer connected')
 
     const replication = store.replicate(conn)
@@ -40,7 +42,19 @@ export async function createHyperModule(
     })
   })
 
-  swarm.join(drive.discoveryKey, { server: true, client: false })
+  const ensureDriveDiscovery = async (topic: Buffer) => {
+    const topicKey = b4a.toString(topic, 'hex')
+    let session = driveDiscoverySessions.get(topicKey)
+
+    if (!session) {
+      session = swarm.join(topic, { server: true, client: true })
+      driveDiscoverySessions.set(topicKey, session)
+    }
+
+    await session.flushed()
+  }
+
+  await ensureDriveDiscovery(drive.discoveryKey)
   await swarm.flush()
 
   log.info({ storeDir: STORE_DIR, driveKey }, 'Cinereel hyper module ready')
@@ -54,6 +68,12 @@ export async function createHyperModule(
     storeDir: STORE_DIR,
     createPeerDrive(key: Buffer) {
       return new Hyperdrive(store, key)
+    },
+    ensureDriveDiscovery,
+    async getDriveDiscoveryCount(topic: Buffer) {
+      await ensureDriveDiscovery(topic)
+      const discovery = swarm.status(topic) as { _discovered?: Set<string> } | null
+      return (discovery?._discovered?.size ?? 0) + 1
     },
     async close() {
       await swarm.destroy()

@@ -48,11 +48,29 @@ export async function getStreamPayload(
     ? 'video/x-matroska'
     : filepath.endsWith('.webm')
       ? 'video/webm'
-      : filepath.endsWith('.mp3')
-        ? 'audio/mpeg'
-        : filepath.endsWith('.flac')
-          ? 'audio/flac'
-          : 'video/mp4'
+      : filepath.endsWith('.mp4') || filepath.endsWith('.m4v') || filepath.endsWith('.mov') || filepath.endsWith('.avi')
+        ? 'video/mp4'
+        : filepath.endsWith('.mp3')
+          ? 'audio/mpeg'
+          : filepath.endsWith('.flac')
+            ? 'audio/flac'
+            : filepath.endsWith('.wav')
+              ? 'audio/wav'
+              : filepath.endsWith('.ogg')
+                ? 'audio/ogg'
+                : filepath.endsWith('.m4a')
+                  ? 'audio/mp4'
+                  : filepath.endsWith('.png')
+                    ? 'image/png'
+                    : filepath.endsWith('.jpg') || filepath.endsWith('.jpeg')
+                      ? 'image/jpeg'
+                      : filepath.endsWith('.webp')
+                        ? 'image/webp'
+                        : filepath.endsWith('.gif')
+                          ? 'image/gif'
+                          : filepath.endsWith('.svg')
+                            ? 'image/svg+xml'
+                            : 'application/octet-stream'
 
   if (!rangeHeader) {
     return {
