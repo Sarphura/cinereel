@@ -47,6 +47,7 @@ junit.xml
 
 # Project Specific - Test Data and Temp Storage
 apps/server/test/.tmp/
+apps/server/cache/
 tmp/
 temp/
 
