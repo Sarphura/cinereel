@@ -1,57 +1,21 @@
 import { execFile } from 'node:child_process'
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import { promisify } from 'node:util'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createControllerTestKit } from '../../../test/controller-test-kit'
 
-type AppBundle = Awaited<ReturnType<typeof import('../../app')['createApp']>>
-
-const activeBundles: AppBundle[] = []
-const activeDirs: string[] = []
+const { cleanup, createAppBundle, createTempDir } = createControllerTestKit()
 const execFileAsync = promisify(execFile)
 
-afterEach(async () => {
-  while (activeBundles.length) {
-    const bundle = activeBundles.pop()
-
-    if (!bundle) {
-      continue
-    }
-
-    await bundle.hyper.close()
-    await bundle.app.close()
-  }
-
-  while (activeDirs.length) {
-    const dir = activeDirs.pop()
-
-    if (!dir) {
-      continue
-    }
-
-    await fs.rm(dir, { recursive: true, force: true })
-  }
-
-  delete process.env.CORESTORE_DIR
-  delete process.env.PORT
-  vi.resetModules()
-})
+afterEach(cleanup)
 
 describe('preview controller', () => {
   it('serves mounted local files for preview without requiring a download record', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-preview-local-store-'))
-    const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-preview-local-source-'))
-    activeDirs.push(storeDir, sourceDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
+    const { bundle } = await createAppBundle('cinereel-preview-local-store-')
+    const sourceDir = await createTempDir('cinereel-preview-local-source-')
 
     await fs.writeFile(path.join(sourceDir, 'cover.jpg'), 'local-jpeg')
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
 
     const createResponse = await bundle.app.inject({
       method: 'POST',
@@ -87,16 +51,8 @@ describe('preview controller', () => {
   }, 20_000)
 
   it('serves downloaded image and media files for preview', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-preview-store-'))
-    const targetDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-preview-target-'))
-    activeDirs.push(storeDir, targetDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-preview-store-')
+    const targetDir = await createTempDir('cinereel-preview-target-')
 
     await bundle.hyper.drive.put('/posters/cover.jpg', Buffer.from('jpeg-data'))
     await bundle.hyper.drive.put('/movies/trailer.mp4', Buffer.from('video-data'))
@@ -191,15 +147,7 @@ describe('preview controller', () => {
   }, 20_000)
 
   it('rejects preview for files that have not been downloaded', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-preview-missing-store-'))
-    activeDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-preview-missing-store-')
 
     await bundle.hyper.drive.put('/docs/readme.pdf', Buffer.from('pdf-data'))
 
@@ -215,13 +163,9 @@ describe('preview controller', () => {
   }, 20_000)
 
   it('transcodes mkv previews into a browser-playable mp4 stream', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-preview-mkv-store-'))
-    const targetDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-preview-mkv-target-'))
-    const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-preview-mkv-source-'))
-    activeDirs.push(storeDir, targetDir, sourceDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
+    const { bundle } = await createAppBundle('cinereel-preview-mkv-store-')
+    const targetDir = await createTempDir('cinereel-preview-mkv-target-')
+    const sourceDir = await createTempDir('cinereel-preview-mkv-source-')
 
     const mkvPath = path.join(sourceDir, 'sample.mkv')
     await execFileAsync('ffmpeg', [
@@ -235,10 +179,6 @@ describe('preview controller', () => {
       '-c:a', 'aac',
       mkvPath,
     ])
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
 
     const mkvBuffer = await fs.readFile(mkvPath)
     await bundle.hyper.drive.put('/movies/sample.mkv', mkvBuffer)

@@ -7,8 +7,8 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "PORT=3000 CORESTORE_DIR=./test/.tmp/.main-store vite-node src/index.ts --watch",
-    "dev:peer": "PORT=3001 CORESTORE_DIR=./test/.tmp/.peer-store vite-node src/index.ts --watch",
+    "dev": "PORT=3000 CORESTORE_DIR=./test/.tmp/.main-store CINEREEL_CACHE_DIR=./test/.tmp/.cache vite-node src/index.ts --watch",
+    "dev:peer": "PORT=3001 CORESTORE_DIR=./test/.tmp/.peer-store CINEREEL_CACHE_DIR=./test/.tmp/.peer-cache vite-node src/index.ts --watch",
     "test": "vitest run",
     "build": "vite build",
     "start": "node dist/index.js"
@@ -24,7 +24,8 @@
     "hyperdrive": "^13.3.0",
     "hyperswarm": "^4.17.0",
     "localdrive": "^2.2.0",
-    "mirror-drive": "^1.13.0"
+    "mirror-drive": "^1.13.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

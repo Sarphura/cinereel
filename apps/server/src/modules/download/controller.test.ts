@@ -1,52 +1,16 @@
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createControllerTestKit } from '../../../test/controller-test-kit'
 
-type AppBundle = Awaited<ReturnType<typeof import('../../app')['createApp']>>
+const { cleanup, createAppBundle, createTempDir } = createControllerTestKit()
 
-const activeBundles: AppBundle[] = []
-const activeDirs: string[] = []
-
-afterEach(async () => {
-  while (activeBundles.length) {
-    const bundle = activeBundles.pop()
-
-    if (!bundle) {
-      continue
-    }
-
-    await bundle.hyper.close()
-    await bundle.app.close()
-  }
-
-  while (activeDirs.length) {
-    const dir = activeDirs.pop()
-
-    if (!dir) {
-      continue
-    }
-
-    await fs.rm(dir, { recursive: true, force: true })
-  }
-
-  delete process.env.CORESTORE_DIR
-  delete process.env.PORT
-  vi.resetModules()
-})
+afterEach(cleanup)
 
 describe('download controller', () => {
   it('downloads a subscribed collection into the chosen directory', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-store-'))
-    const targetDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-target-'))
-    activeDirs.push(storeDir, targetDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-download-store-')
+    const targetDir = await createTempDir('cinereel-download-target-')
 
     await bundle.hyper.drive.put('/movies/feature.mp4', Buffer.from('movie-data'))
     await bundle.hyper.drive.put('/posters/cover.jpg', Buffer.from('cover-data'))
@@ -123,7 +87,7 @@ describe('download controller', () => {
 
     const subscribeResponse = await bundle.app.inject({
       method: 'POST',
-      url: '/api/subscriptions',
+      url: '/api/subscribed-drives',
       payload: {
         driveKey: bundle.hyper.driveKey,
         name: '本地镜像',
@@ -151,7 +115,7 @@ describe('download controller', () => {
       }
     }).data.children?.find((node) => node.path === '/movies')).toMatchObject({
       path: '/movies',
-      localDirPath: path.join(basePath, 'movies'),
+      localDirPath: basePath,
       children: [
         expect.objectContaining({
           path: '/movies/feature.mp4',
@@ -162,16 +126,8 @@ describe('download controller', () => {
   }, 20_000)
 
   it('downloads only the remaining files when a directory already contains individually downloaded files', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-incremental-store-'))
-    const targetDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-incremental-target-'))
-    activeDirs.push(storeDir, targetDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-download-incremental-store-')
+    const targetDir = await createTempDir('cinereel-download-incremental-target-')
 
     await bundle.hyper.drive.put('/movies/feature.mp4', Buffer.from('movie-data'))
     await bundle.hyper.drive.put('/movies/trailer.mp4', Buffer.from('trailer-data'))
@@ -246,7 +202,7 @@ describe('download controller', () => {
 
     const subscribeResponse = await bundle.app.inject({
       method: 'POST',
-      url: '/api/subscriptions',
+      url: '/api/subscribed-drives',
       payload: {
         driveKey: bundle.hyper.driveKey,
         name: '增量下载测试',
@@ -286,16 +242,8 @@ describe('download controller', () => {
   }, 20_000)
 
   it('marks a directory as downloaded once all nested files have been downloaded individually', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-dir-infer-store-'))
-    const targetDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-dir-infer-target-'))
-    activeDirs.push(storeDir, targetDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-download-dir-infer-store-')
+    const targetDir = await createTempDir('cinereel-download-dir-infer-target-')
 
     await bundle.hyper.drive.put('/movies/feature.mp4', Buffer.from('movie-data'))
     await bundle.hyper.drive.put('/movies/trailer.mp4', Buffer.from('trailer-data'))
@@ -343,7 +291,7 @@ describe('download controller', () => {
 
     const subscribeResponse = await bundle.app.inject({
       method: 'POST',
-      url: '/api/subscriptions',
+      url: '/api/subscribed-drives',
       payload: {
         driveKey: bundle.hyper.driveKey,
         name: '目录推导测试',
@@ -369,23 +317,15 @@ describe('download controller', () => {
       expect.arrayContaining([
         expect.objectContaining({
           path: '/movies',
-          localDirPath: path.join(targetDir, 'movies'),
+          localDirPath: targetDir,
         }),
       ]),
     )
   }, 20_000)
 
   it('falls back to undownloaded state after a downloaded local file is removed', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-missing-store-'))
-    const targetDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-missing-target-'))
-    activeDirs.push(storeDir, targetDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-download-missing-store-')
+    const targetDir = await createTempDir('cinereel-download-missing-target-')
 
     await bundle.hyper.drive.put('/movies/feature.mp4', Buffer.from('movie-data'))
 
@@ -430,7 +370,7 @@ describe('download controller', () => {
 
     const subscribeResponse = await bundle.app.inject({
       method: 'POST',
-      url: '/api/subscriptions',
+      url: '/api/subscribed-drives',
       payload: {
         driveKey: bundle.hyper.driveKey,
         name: '丢失文件测试',
@@ -466,16 +406,8 @@ describe('download controller', () => {
   }, 20_000)
 
   it('removes local downloaded files and resets tree state through the download delete api', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-remove-store-'))
-    const targetDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-download-remove-target-'))
-    activeDirs.push(storeDir, targetDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-download-remove-store-')
+    const targetDir = await createTempDir('cinereel-download-remove-target-')
 
     await bundle.hyper.drive.put('/movies/feature.mp4', Buffer.from('movie-data'))
 
@@ -532,7 +464,7 @@ describe('download controller', () => {
 
     const subscribeResponse = await bundle.app.inject({
       method: 'POST',
-      url: '/api/subscriptions',
+      url: '/api/subscribed-drives',
       payload: {
         driveKey: bundle.hyper.driveKey,
         name: '移除下载测试',

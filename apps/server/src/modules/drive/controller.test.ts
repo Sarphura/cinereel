@@ -1,16 +1,16 @@
 import fs from 'node:fs/promises'
-import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import Hyperdrive from 'hyperdrive'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import * as publicationService from '../publication/service'
 import { getConfigDatabasePath } from '../../infra/config-store'
+import { MEDIA_INDEX_PATH, SCAN_STATUS_PATH } from '../scan/store'
+import { createControllerTestKit } from '../../../test/controller-test-kit'
 
 type AppBundle = Awaited<ReturnType<typeof import('../../app')['createApp']>>
 
-const activeBundles: AppBundle[] = []
-const activeStoreDirs: string[] = []
+const { cleanup, createAppBundle, createTempDir } = createControllerTestKit()
 
 async function waitForMountJob(
   bundle: AppBundle,
@@ -40,40 +40,40 @@ async function waitForMountJob(
   throw new Error('挂载任务超时。')
 }
 
-afterEach(async () => {
-  while (activeBundles.length) {
-    const bundle = activeBundles.pop()
+async function waitForScanJob(
+  bundle: AppBundle,
+  jobId: string,
+) {
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    const statusResponse = await bundle.app.inject({
+      method: 'GET',
+      url: `/api/scans/${jobId}`,
+    })
 
-    if (!bundle) {
-      continue
+    expect(statusResponse.statusCode).toBe(200)
+    const job = (statusResponse.json() as {
+      data: {
+        status: 'queued' | 'scanning' | 'completed' | 'failed'
+        error: string | null
+        failedFiles: Array<{ path: string; error: string }>
+      }
+    }).data
+
+    if (job.status === 'completed' || job.status === 'failed') {
+      return job
     }
 
-    await bundle.hyper.close()
-    await bundle.app.close()
+    await new Promise((resolve) => setTimeout(resolve, 100))
   }
 
-  while (activeStoreDirs.length) {
-    const storeDir = activeStoreDirs.pop()
+  throw new Error('扫描任务超时。')
+}
 
-    if (!storeDir) {
-      continue
-    }
-
-    await fs.rm(storeDir, { recursive: true, force: true })
-  }
-
-  delete process.env.CORESTORE_DIR
-  delete process.env.PORT
-  vi.resetModules()
-})
+afterEach(cleanup)
 
 describe('drive controller', () => {
   it('keeps drives listing available when a subscribed manifest block is unavailable', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-list-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
+    const { bundle } = await createAppBundle('cinereel-drive-list-')
 
     const unavailableError = Object.assign(new Error('BLOCK_NOT_AVAILABLE: Block is not available'), {
       code: 'BLOCK_NOT_AVAILABLE',
@@ -82,16 +82,20 @@ describe('drive controller', () => {
       .spyOn(publicationService, 'listPublishedResources')
       .mockRejectedValueOnce(unavailableError)
 
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
-
-    const driveKey = 'b'.repeat(64)
+    const driveKey = bundle.hyper.driveKey
+    await bundle.hyper.drive.put('/.cinereel/descriptor.json', Buffer.from(JSON.stringify({
+      schemaVersion: 1,
+      kind: 'collection',
+      name: '远端订阅',
+      type: 'movie',
+      ownerProfileDriveKey: 'f'.repeat(64),
+      updatedAt: Date.now(),
+    }, null, 2)))
 
     const subscribeResponse = await bundle.app.inject({
       method: 'POST',
-      url: '/api/subscriptions',
-      payload: { driveKey, name: '远端订阅' },
+      url: '/api/subscribed-drives',
+      payload: { driveKey },
     })
 
     expect(subscribeResponse.statusCode).toBe(200)
@@ -116,6 +120,7 @@ describe('drive controller', () => {
       {
         driveKey,
         name: '远端订阅',
+        type: 'movie',
         isLocal: false,
         publicationCount: 0,
         peerCount: 1,
@@ -130,15 +135,7 @@ describe('drive controller', () => {
   }, 30_000)
 
   it('deletes a local drive and rejects tree access afterwards', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-delete-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-drive-delete-')
 
     const createResponse = await bundle.app.inject({
       method: 'POST',
@@ -188,39 +185,31 @@ describe('drive controller', () => {
   }, 20_000)
 
   it('creates a collection descriptor inside the drive and syncs it into the profile index', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-descriptor-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle, storeDir } = await createAppBundle('cinereel-drive-descriptor-')
 
     const name = '我的共享媒体库'
     const createResponse = await bundle.app.inject({
       method: 'POST',
       url: '/api/drives',
-      payload: { name },
+      payload: { name, type: 'movie' },
     })
 
     expect(createResponse.statusCode).toBe(200)
     const driveKey = (createResponse.json() as { data: { driveKey: string } }).data.driveKey
 
     const db = new Database(getConfigDatabasePath(storeDir), { readonly: true })
-    const localDrives = (db.prepare(`
+    const ownedDrives = (db.prepare(`
       SELECT drive_key, namespace
       FROM owned_drives
     `).all() as Array<{ drive_key: string; namespace: string }>).map((record) => ({
       driveKey: record.drive_key,
       namespace: record.namespace,
     }))
-    const localDrive = localDrives.find((record) => record.driveKey === driveKey)
-    expect(localDrive).toBeDefined()
+    const ownedDrive = ownedDrives.find((record) => record.driveKey === driveKey)
+    expect(ownedDrive).toBeDefined()
     db.close()
 
-    const driveStore = bundle.hyper.store.namespace(localDrive!.namespace)
+    const driveStore = bundle.hyper.store.namespace(ownedDrive!.namespace)
     const drive = new Hyperdrive(driveStore)
     await drive.ready()
 
@@ -229,6 +218,7 @@ describe('drive controller', () => {
     expect(JSON.parse(descriptorBuffer!.toString())).toMatchObject({
       schemaVersion: 1,
       kind: 'collection',
+      type: 'movie',
       name,
       ownerProfileDriveKey: bundle.hyper.driveKey,
       updatedAt: expect.any(Number),
@@ -271,15 +261,7 @@ describe('drive controller', () => {
   }, 20_000)
 
   it('reads a drive descriptor through the debug endpoint', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-descriptor-endpoint-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-drive-descriptor-endpoint-')
 
     const createResponse = await bundle.app.inject({
       method: 'POST',
@@ -300,6 +282,7 @@ describe('drive controller', () => {
       data: {
         schemaVersion: 1
         kind: 'collection'
+        type: 'movie' | 'series' | 'music' | 'generic'
         name: string
         ownerProfileDriveKey: string
         updatedAt: number
@@ -307,6 +290,7 @@ describe('drive controller', () => {
     }).data).toMatchObject({
       schemaVersion: 1,
       kind: 'collection',
+      type: 'generic',
       name: '调试描述测试',
       ownerProfileDriveKey: bundle.hyper.driveKey,
       updatedAt: expect.any(Number),
@@ -314,15 +298,7 @@ describe('drive controller', () => {
   }, 20_000)
 
   it('reads profile.json and collections.json through drive-scoped profile endpoints', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-profile-endpoints-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-drive-profile-endpoints-')
 
     const updateProfileResponse = await bundle.app.inject({
       method: 'PATCH',
@@ -386,15 +362,7 @@ describe('drive controller', () => {
   }, 20_000)
 
   it('renames a local drive and syncs the descriptor file', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-rename-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle, storeDir } = await createAppBundle('cinereel-drive-rename-')
 
     const createResponse = await bundle.app.inject({
       method: 'POST',
@@ -415,7 +383,7 @@ describe('drive controller', () => {
     expect((renameResponse.json() as { data: { name: string } }).data.name).toBe('新的共享名称')
 
     const db = new Database(getConfigDatabasePath(storeDir), { readonly: true })
-    const localDrives = (db.prepare(`
+    const ownedDrives = (db.prepare(`
       SELECT drive_key, namespace, name
       FROM owned_drives
     `).all() as Array<{ drive_key: string; namespace: string; name: string }>).map((record) => ({
@@ -423,11 +391,11 @@ describe('drive controller', () => {
       namespace: record.namespace,
       name: record.name,
     }))
-    const localDrive = localDrives.find((record) => record.driveKey === driveKey)
-    expect(localDrive?.name).toBe('新的共享名称')
+    const ownedDrive = ownedDrives.find((record) => record.driveKey === driveKey)
+    expect(ownedDrive?.name).toBe('新的共享名称')
     db.close()
 
-    const driveStore = bundle.hyper.store.namespace(localDrive!.namespace)
+    const driveStore = bundle.hyper.store.namespace(ownedDrive!.namespace)
     const drive = new Hyperdrive(driveStore)
     await drive.ready()
 
@@ -435,6 +403,7 @@ describe('drive controller', () => {
     expect(JSON.parse(descriptorBuffer!.toString())).toMatchObject({
       schemaVersion: 1,
       kind: 'collection',
+      type: 'generic',
       name: '新的共享名称',
       ownerProfileDriveKey: bundle.hyper.driveKey,
       updatedAt: expect.any(Number),
@@ -459,16 +428,481 @@ describe('drive controller', () => {
     })
   }, 20_000)
 
-  it('updates an owned drive remark without changing the displayed drive name', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-remark-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
+  it('creates a scan job for movie drives after mount and writes media index', async () => {
+    const { bundle, storeDir } = await createAppBundle('cinereel-drive-scan-success-')
+    const sourceDir = await createTempDir('cinereel-drive-scan-source-')
 
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    await fs.writeFile(path.join(sourceDir, 'movie.mp4'), 'video-data')
+    const ffprobeModule = await import('../scan/ffprobe')
+    vi.spyOn(ffprobeModule, 'probeMediaFile').mockResolvedValue({
+      path: `/${path.basename(sourceDir)}/movie.mp4`,
+      fileName: 'movie.mp4',
+      container: 'mov,mp4,m4a,3gp,3g2,mj2',
+      size: 10,
+      durationSeconds: 120,
+      bitRate: 4096,
+      video: [],
+      audio: [],
+      subtitles: [],
+      scannedAt: Date.now(),
+    })
+
+    const createResponse = await bundle.app.inject({
+      method: 'POST',
+      url: '/api/drives',
+      payload: { name: '电影库', type: 'movie' },
+    })
+    const driveKey = (createResponse.json() as { data: { driveKey: string } }).data.driveKey
+
+    const mountResponse = await bundle.app.inject({
+      method: 'POST',
+      url: '/api/mount',
+      payload: {
+        driveKey,
+        targetPath: sourceDir,
+      },
+    })
+
+    const mountJob = await waitForMountJob(bundle, (mountResponse.json() as { data: { id: string } }).data.id)
+    expect(mountJob).toMatchObject({
+      status: 'completed',
+      error: null,
+    })
+
+    const scansResponse = await bundle.app.inject({
+      method: 'GET',
+      url: '/api/scans',
+    })
+    expect(scansResponse.statusCode).toBe(200)
+    const scanId = (scansResponse.json() as { data: Array<{ id: string }> }).data[0]?.id
+    expect(scanId).toBeTruthy()
+
+    const scanJob = await waitForScanJob(bundle, scanId!)
+    expect(scanJob).toMatchObject({
+      status: 'completed',
+      error: null,
+      failedFiles: [],
+    })
+
+    const descriptorResponse = await bundle.app.inject({
+      method: 'GET',
+      url: '/api/drives',
+    })
+    expect(descriptorResponse.statusCode).toBe(200)
+    expect((descriptorResponse.json() as {
+      data: Array<{ driveKey: string; type: string }>
+    }).data.find((record) => record.driveKey === driveKey)).toMatchObject({
+      driveKey,
+      type: 'movie',
+    })
+
+    const db = new Database(getConfigDatabasePath(storeDir), { readonly: true })
+    const ownedDrive = (db.prepare(`
+      SELECT namespace
+      FROM owned_drives
+      WHERE drive_key = ?
+    `).get(driveKey) as { namespace: string })
+    db.close()
+
+    const driveStore = bundle.hyper.store.namespace(ownedDrive.namespace)
+    const drive = new Hyperdrive(driveStore)
+    await drive.ready()
+
+    const mediaIndexBuffer = await drive.get(MEDIA_INDEX_PATH)
+    const scanStatusBuffer = await drive.get(SCAN_STATUS_PATH)
+
+    expect(JSON.parse(mediaIndexBuffer!.toString())).toMatchObject({
+      items: {
+        [`/${path.basename(sourceDir)}/movie.mp4`]: {
+          durationSeconds: 120,
+        },
+      },
+    })
+    expect(JSON.parse(scanStatusBuffer!.toString())).toMatchObject({
+      roots: [
+        expect.objectContaining({
+          rootPath: `/${path.basename(sourceDir)}`,
+          status: 'completed',
+          failedFiles: [],
+        }),
+      ],
+    })
+
+    await drive.close()
+    await driveStore.close()
+  }, 20_000)
+
+  it('reads ffprobe media index for a specified drive and supports path filtering', async () => {
+    const { bundle } = await createAppBundle('cinereel-drive-media-index-endpoint-')
+    const sourceDir = await createTempDir('cinereel-drive-media-index-source-')
+    const nestedDir = path.join(sourceDir, 'extras')
+    const cacheDir = await createTempDir('cinereel-drive-media-index-cache-')
+
+    await fs.mkdir(nestedDir)
+    await fs.writeFile(path.join(sourceDir, 'movie.mp4'), 'video-data')
+    await fs.writeFile(path.join(nestedDir, 'trailer.mkv'), 'video-data')
+    process.env.CINEREEL_CACHE_DIR = cacheDir
+
+    const ffprobeModule = await import('../scan/ffprobe')
+    vi.spyOn(ffprobeModule, 'probeMediaFile').mockImplementation(async (_localPath, resourcePath) => ({
+      path: resourcePath,
+      fileName: path.basename(resourcePath),
+      container: 'matroska,webm',
+      size: 10,
+      durationSeconds: resourcePath.endsWith('movie.mp4') ? 120 : 30,
+      bitRate: 4096,
+      video: [],
+      audio: [],
+      subtitles: [],
+      scannedAt: Date.now(),
+    }))
+
+    try {
+      const createResponse = await bundle.app.inject({
+        method: 'POST',
+        url: '/api/drives',
+        payload: { name: '电影库', type: 'movie' },
+      })
+      expect(createResponse.statusCode).toBe(200)
+      const driveKey = (createResponse.json() as { data: { driveKey: string } }).data.driveKey
+
+      const cacheMovieDir = path.join(cacheDir, 'movies', path.basename(sourceDir))
+      await fs.mkdir(cacheMovieDir, { recursive: true })
+      await fs.writeFile(path.join(cacheMovieDir, 'poster.jpg'), 'poster-data')
+      await fs.writeFile(path.join(cacheMovieDir, 'movie.nfo'), `<?xml version="1.0" encoding="UTF-8"?>
+<movie>
+  <title>Movie Title</title>
+  <originaltitle>Original Movie Title</originaltitle>
+  <plot>Movie plot.</plot>
+  <year>2024</year>
+  <premiered>2024-01-01</premiered>
+  <rating>8.3</rating>
+</movie>`)
+
+      const mountResponse = await bundle.app.inject({
+        method: 'POST',
+        url: '/api/mount',
+        payload: {
+          driveKey,
+          targetPath: sourceDir,
+        },
+      })
+
+      const mountJob = await waitForMountJob(bundle, (mountResponse.json() as { data: { id: string } }).data.id)
+      expect(mountJob).toMatchObject({
+        status: 'completed',
+        error: null,
+      })
+
+      const scansResponse = await bundle.app.inject({
+        method: 'GET',
+        url: '/api/scans',
+      })
+      const scanId = (scansResponse.json() as { data: Array<{ id: string }> }).data[0]?.id
+      expect(scanId).toBeTruthy()
+
+      const scanJob = await waitForScanJob(bundle, scanId!)
+      expect(scanJob.status).toBe('completed')
+
+      const allMediaIndexResponse = await bundle.app.inject({
+        method: 'GET',
+        url: `/api/drives/${driveKey}/media-index`,
+      })
+
+      expect(allMediaIndexResponse.statusCode).toBe(200)
+      expect((allMediaIndexResponse.json() as {
+        data: {
+          driveKey: string
+          path: string | null
+          total: number
+          items: Array<{
+            path: string
+            durationSeconds: number
+            metadata?: {
+              title?: string | null
+              year?: number | null
+              posterPath?: string | null
+              nfoPath?: string | null
+            } | null
+          }>
+        }
+      }).data).toMatchObject({
+        driveKey,
+        path: null,
+        total: 2,
+        items: [
+          {
+            path: `/${path.basename(sourceDir)}/extras/trailer.mkv`,
+            durationSeconds: 30,
+            metadata: {
+              title: 'Movie Title',
+              year: 2024,
+              posterPath: `/${path.basename(sourceDir)}/poster.jpg`,
+              nfoPath: `/${path.basename(sourceDir)}/movie.nfo`,
+            },
+          },
+          {
+            path: `/${path.basename(sourceDir)}/movie.mp4`,
+            durationSeconds: 120,
+            metadata: {
+              title: 'Movie Title',
+              year: 2024,
+              posterPath: `/${path.basename(sourceDir)}/poster.jpg`,
+              nfoPath: `/${path.basename(sourceDir)}/movie.nfo`,
+            },
+          },
+        ],
+      })
+
+      const filteredMediaIndexResponse = await bundle.app.inject({
+        method: 'GET',
+        url: `/api/drives/${driveKey}/media-index`,
+        query: {
+          path: `/${path.basename(sourceDir)}/extras`,
+        },
+      })
+
+      expect(filteredMediaIndexResponse.statusCode).toBe(200)
+      expect((filteredMediaIndexResponse.json() as {
+        data: {
+          path: string | null
+          total: number
+          items: Array<{
+            path: string
+            durationSeconds: number
+            metadata?: {
+              title?: string | null
+            } | null
+          }>
+        }
+      }).data).toMatchObject({
+        path: `/${path.basename(sourceDir)}/extras`,
+        total: 1,
+        items: [
+          {
+            path: `/${path.basename(sourceDir)}/extras/trailer.mkv`,
+            durationSeconds: 30,
+            metadata: {
+              title: 'Movie Title',
+            },
+          },
+        ],
+      })
+    } finally {
+      delete process.env.CINEREEL_CACHE_DIR
+    }
+  }, 20_000)
+
+  it('returns an empty ffprobe media index when the drive has not generated scan data yet', async () => {
+    const { bundle } = await createAppBundle('cinereel-drive-media-index-empty-')
+
+    const createResponse = await bundle.app.inject({
+      method: 'POST',
+      url: '/api/drives',
+      payload: { name: '空电影库', type: 'movie' },
+    })
+    expect(createResponse.statusCode).toBe(200)
+    const driveKey = (createResponse.json() as { data: { driveKey: string } }).data.driveKey
+
+    const response = await bundle.app.inject({
+      method: 'GET',
+      url: `/api/drives/${driveKey}/media-index`,
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect((response.json() as {
+      data: {
+        driveKey: string
+        path: string | null
+        total: number
+        items: unknown[]
+      }
+    }).data).toEqual({
+      driveKey,
+      version: 1,
+      path: null,
+      total: 0,
+      items: [],
+    })
+  }, 20_000)
+
+  it('falls back to an empty media index for subscribed movie drives when remote data is unavailable', async () => {
+    const { bundle } = await createAppBundle('cinereel-drive-media-index-remote-fallback-')
+
+    const driveKey = bundle.hyper.driveKey
+    await bundle.hyper.drive.put('/.cinereel/descriptor.json', Buffer.from(JSON.stringify({
+      schemaVersion: 1,
+      kind: 'collection',
+      name: '远端电影库',
+      type: 'movie',
+      ownerProfileDriveKey: 'f'.repeat(64),
+      updatedAt: Date.now(),
+    }, null, 2)))
+
+    const subscribeResponse = await bundle.app.inject({
+      method: 'POST',
+      url: '/api/subscribed-drives',
+      payload: { driveKey },
+    })
+
+    expect(subscribeResponse.statusCode).toBe(200)
+
+    await bundle.hyper.drive.del(MEDIA_INDEX_PATH)
+
+    const response = await bundle.app.inject({
+      method: 'GET',
+      url: `/api/drives/${driveKey}/media-index`,
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect((response.json() as {
+      data: {
+        driveKey: string
+        version: number
+        path: string | null
+        total: number
+        items: unknown[]
+      }
+    }).data).toEqual({
+      driveKey,
+      version: 1,
+      path: null,
+      total: 0,
+      items: [],
+    })
+  }, 20_000)
+
+  it('rolls back mounted files when movie scan fails', async () => {
+    const { bundle } = await createAppBundle('cinereel-drive-scan-fail-')
+    const sourceDir = await createTempDir('cinereel-drive-scan-fail-source-')
+
+    await fs.writeFile(path.join(sourceDir, 'broken.mp4'), 'video-data')
+    const ffprobeModule = await import('../scan/ffprobe')
+    vi.spyOn(ffprobeModule, 'probeMediaFile').mockRejectedValue(new Error('ffprobe missing'))
+
+    const createResponse = await bundle.app.inject({
+      method: 'POST',
+      url: '/api/drives',
+      payload: { name: '失败电影库', type: 'movie' },
+    })
+    const driveKey = (createResponse.json() as { data: { driveKey: string } }).data.driveKey
+
+    const mountResponse = await bundle.app.inject({
+      method: 'POST',
+      url: '/api/mount',
+      payload: {
+        driveKey,
+        targetPath: sourceDir,
+      },
+    })
+
+    await waitForMountJob(bundle, (mountResponse.json() as { data: { id: string } }).data.id)
+    const scanId = ((await bundle.app.inject({
+      method: 'GET',
+      url: '/api/scans',
+    })).json() as { data: Array<{ id: string }> }).data[0]?.id
+    const scanJob = await waitForScanJob(bundle, scanId!)
+
+    expect(scanJob.status).toBe('failed')
+    expect(scanJob.failedFiles[0]).toMatchObject({
+      path: `/${path.basename(sourceDir)}/broken.mp4`,
+      error: 'ffprobe missing',
+    })
+
+    const treeResponse = await bundle.app.inject({
+      method: 'GET',
+      url: `/api/drives/${driveKey}/tree`,
+    })
+    expect(treeResponse.statusCode).toBe(200)
+    expect((treeResponse.json() as { data: { children?: unknown[] } }).data.children ?? []).toEqual([])
+  }, 20_000)
+
+  it('mounts local directories by metadata without copying large files into the drive', async () => {
+    const { bundle, storeDir } = await createAppBundle('cinereel-drive-large-mount-')
+    const sourceDir = await createTempDir('cinereel-drive-large-source-')
+    const hugeVideoName = 'huge-video.mkv'
+    const hugeVideoSize = 27 * 1024 * 1024 * 1024
+
+    await fs.writeFile(path.join(sourceDir, hugeVideoName), '')
+    await fs.truncate(path.join(sourceDir, hugeVideoName), hugeVideoSize)
+
+    const createResponse = await bundle.app.inject({
+      method: 'POST',
+      url: '/api/drives',
+      payload: { name: '大文件目录' },
+    })
+    expect(createResponse.statusCode).toBe(200)
+    const driveKey = (createResponse.json() as { data: { driveKey: string } }).data.driveKey
+
+    const mountResponse = await bundle.app.inject({
+      method: 'POST',
+      url: '/api/mount',
+      payload: {
+        driveKey,
+        targetPath: sourceDir,
+      },
+    })
+
+    expect(mountResponse.statusCode).toBe(200)
+    expect(await waitForMountJob(
+      bundle,
+      (mountResponse.json() as { data: { id: string } }).data.id,
+    )).toMatchObject({
+      status: 'completed',
+      error: null,
+      totalFiles: 1,
+      totalBytes: hugeVideoSize,
+    })
+
+    const treeResponse = await bundle.app.inject({
+      method: 'GET',
+      url: `/api/drives/${driveKey}/tree`,
+    })
+    expect(treeResponse.statusCode).toBe(200)
+    expect((treeResponse.json() as {
+      data: {
+        children?: Array<{
+          path: string
+          localDirPath?: string | null
+          children?: Array<{
+            path: string
+            size: number
+            localDirPath?: string | null
+          }>
+        }>
+      }
+    }).data.children?.[0]).toEqual(expect.objectContaining({
+      path: `/${path.basename(sourceDir)}`,
+      localDirPath: path.dirname(sourceDir),
+      children: [
+        expect.objectContaining({
+          path: `/${path.basename(sourceDir)}/${hugeVideoName}`,
+          size: hugeVideoSize,
+          localDirPath: sourceDir,
+        }),
+      ],
+    }))
+
+    const db = new Database(getConfigDatabasePath(storeDir), { readonly: true })
+    const ownedDrive = (db.prepare(`
+      SELECT namespace
+      FROM owned_drives
+      WHERE drive_key = ?
+    `).get(driveKey) as { namespace: string })
+    db.close()
+
+    const driveStore = bundle.hyper.store.namespace(ownedDrive.namespace)
+    const drive = new Hyperdrive(driveStore)
+    await drive.ready()
+
+    expect(await drive.entry(`/${path.basename(sourceDir)}/${hugeVideoName}`, { wait: false })).toBeNull()
+
+    await drive.close()
+    await driveStore.close()
+  }, 20_000)
+
+  it('updates an owned drive remark without changing the displayed drive name', async () => {
+    const { bundle } = await createAppBundle('cinereel-drive-remark-')
 
     const createResponse = await bundle.app.inject({
       method: 'POST',
@@ -509,20 +943,11 @@ describe('drive controller', () => {
     })
   }, 20_000)
 
-  it('serves the last published snapshot until the drive is mounted again', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-refresh-'))
-    const sourceDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-source-'))
-    activeStoreDirs.push(storeDir)
-    activeStoreDirs.push(sourceDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
+  it('refreshes mounted local directories into the resource tree when source files change', async () => {
+    const { bundle } = await createAppBundle('cinereel-drive-refresh-')
+    const sourceDir = await createTempDir('cinereel-drive-source-')
 
     await fs.writeFile(path.join(sourceDir, 'first.mp4'), 'video-1')
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
 
     const createResponse = await bundle.app.inject({
       method: 'POST',
@@ -553,13 +978,13 @@ describe('drive controller', () => {
 
     await fs.writeFile(path.join(sourceDir, 'second.mp4'), 'video-2')
 
-    const staleTreeResponse = await bundle.app.inject({
+    const liveTreeResponse = await bundle.app.inject({
       method: 'GET',
       url: `/api/drives/${driveKey}/tree`,
     })
 
-    expect(staleTreeResponse.statusCode).toBe(200)
-    const staleTree = (staleTreeResponse.json() as {
+    expect(liveTreeResponse.statusCode).toBe(200)
+    const liveTree = (liveTreeResponse.json() as {
       data: {
         children?: Array<{
           path: string
@@ -568,43 +993,30 @@ describe('drive controller', () => {
       }
     }).data
 
-    expect(staleTree.children).toHaveLength(1)
-    expect(staleTree.children?.[0]).toEqual(expect.objectContaining({
+    expect(liveTree.children).toHaveLength(1)
+    expect(liveTree.children?.[0]).toEqual(expect.objectContaining({
       path: `/${path.basename(sourceDir)}`,
-      localDirPath: sourceDir,
-      children: [
+      localDirPath: path.dirname(sourceDir),
+      children: expect.arrayContaining([
         expect.objectContaining({
           path: `/${path.basename(sourceDir)}/first.mp4`,
-          localDirPath: path.join(sourceDir, 'first.mp4'),
+          localDirPath: sourceDir,
         }),
-      ],
+        expect.objectContaining({
+          path: `/${path.basename(sourceDir)}/second.mp4`,
+          localDirPath: sourceDir,
+        }),
+      ]),
     }))
 
-    const remountResponse = await bundle.app.inject({
+    const refreshResponse = await bundle.app.inject({
       method: 'POST',
-      url: '/api/mount',
-      payload: {
-        driveKey,
-        targetPath: sourceDir,
-      },
+      url: `/api/drives/${driveKey}/refresh`,
     })
 
-    expect(remountResponse.statusCode).toBe(200)
-    expect(await waitForMountJob(
-      bundle,
-      (remountResponse.json() as { data: { id: string } }).data.id,
-    )).toMatchObject({
-      status: 'completed',
-      error: null,
-    })
+    expect(refreshResponse.statusCode).toBe(200)
 
-    const refreshedTreeResponse = await bundle.app.inject({
-      method: 'GET',
-      url: `/api/drives/${driveKey}/tree`,
-    })
-
-    expect(refreshedTreeResponse.statusCode).toBe(200)
-    const refreshedTree = (refreshedTreeResponse.json() as {
+    const refreshedTree = (refreshResponse.json() as {
       data: {
         children?: Array<{
           path: string
@@ -615,30 +1027,48 @@ describe('drive controller', () => {
 
     expect(refreshedTree.children?.[0]).toEqual(expect.objectContaining({
       path: `/${path.basename(sourceDir)}`,
-      localDirPath: sourceDir,
+      localDirPath: path.dirname(sourceDir),
       children: expect.arrayContaining([
         expect.objectContaining({
           path: `/${path.basename(sourceDir)}/first.mp4`,
-          localDirPath: path.join(sourceDir, 'first.mp4'),
+          localDirPath: sourceDir,
         }),
         expect.objectContaining({
           path: `/${path.basename(sourceDir)}/second.mp4`,
-          localDirPath: path.join(sourceDir, 'second.mp4'),
+          localDirPath: sourceDir,
         }),
       ]),
+    }))
+
+    await fs.rm(path.join(sourceDir, 'first.mp4'))
+
+    const prunedTreeResponse = await bundle.app.inject({
+      method: 'POST',
+      url: `/api/drives/${driveKey}/refresh`,
+    })
+
+    expect(prunedTreeResponse.statusCode).toBe(200)
+    const prunedTree = (prunedTreeResponse.json() as {
+      data: {
+        children?: Array<{
+          path: string
+          children?: Array<{ path: string }>
+        }>
+      }
+    }).data
+
+    expect(prunedTree.children?.[0]).toEqual(expect.objectContaining({
+      path: `/${path.basename(sourceDir)}`,
+      children: [
+        expect.objectContaining({
+          path: `/${path.basename(sourceDir)}/second.mp4`,
+        }),
+      ],
     }))
   }, 20_000)
 
   it('treats repeated delete on the same drive as success', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-drive-delete-repeat-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-drive-delete-repeat-')
 
     const createResponse = await bundle.app.inject({
       method: 'POST',

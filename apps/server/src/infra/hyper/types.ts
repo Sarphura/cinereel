@@ -3,12 +3,17 @@ import Hyperdrive from 'hyperdrive'
 import Hyperswarm from 'hyperswarm'
 import { FastifyInstance } from 'fastify'
 import type { FastifyBaseLogger } from 'fastify'
+import type { CollectionDriveContentType } from '../../modules/drive/schema'
+
+export interface HyperModuleOptions {
+  network?: boolean
+}
 
 export interface HyperModuleConfig {
   log: FastifyBaseLogger
   store: Corestore
   drive: Hyperdrive
-  swarm: Hyperswarm
+  swarm: Hyperswarm | null
   driveKey: string
   storeDir: string
   createPeerDrive: (key: Buffer) => Hyperdrive
@@ -70,6 +75,29 @@ export interface MountJob {
   updatedAt: number
 }
 
+export interface ScanFailedFileRecord {
+  path: string
+  fileName: string
+  error: string
+  failedAt: number
+}
+
+export interface ScanJob {
+  id: string
+  driveKey: string
+  rootPath: string
+  publicationId: string
+  totalFiles: number
+  processedFiles: number
+  currentFilePath: string | null
+  progress: number
+  status: 'queued' | 'scanning' | 'completed' | 'failed'
+  error: string | null
+  failedFiles: ScanFailedFileRecord[]
+  createdAt: number
+  updatedAt: number
+}
+
 export interface PublishedResourceRecord {
   id: string
   sourceName: string
@@ -89,12 +117,15 @@ export interface PublicationTreeNode {
   size: number
   updatedAt: number
   localDirPath?: string | null
+  scanStatus?: 'ok' | 'failed' | 'pending' | null
+  scanError?: string | null
   children?: PublicationTreeNode[]
 }
 
 export interface DriveSummaryRecord {
   driveKey: string
   name: string
+  type: CollectionDriveContentType
   remark?: string
   createdAt: number
   updatedAt: number

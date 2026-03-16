@@ -1,18 +1,18 @@
 import type { FastifyInstance } from 'fastify'
 import type { HyperModuleConfig } from '../../infra/hyper/types'
 import {
-  addSubscription,
-  listSubscriptions,
-  removeSubscription,
-  updateSubscriptionRemark,
+  addSubscribedDrive,
+  listSubscribedDrives,
+  removeSubscribedDrive,
+  updateSubscribedDriveRemark,
 } from './service'
 
-export async function registerSubscriptionController(
+export async function registerSubscribedDriveController(
   app: FastifyInstance,
   hyper: HyperModuleConfig,
 ) {
-  app.get('/api/subscriptions', async () => {
-    const data = await listSubscriptions(hyper)
+  app.get('/api/subscribed-drives', async () => {
+    const data = await listSubscribedDrives(hyper)
 
     return {
       success: true,
@@ -21,8 +21,12 @@ export async function registerSubscriptionController(
     }
   })
 
-  app.post('/api/subscriptions', async (request, reply) => {
-    const body = request.body as { driveKey?: string; key?: string; name?: string } | null
+  app.post('/api/subscribed-drives', async (request, reply) => {
+    const body = request.body as {
+      driveKey?: string
+      key?: string
+      name?: string
+    } | null
     const driveKey = body?.driveKey ?? body?.key
 
     if (!driveKey) {
@@ -30,7 +34,7 @@ export async function registerSubscriptionController(
     }
 
     try {
-      const record = await addSubscription(hyper, driveKey, body?.name)
+      const record = await addSubscribedDrive(hyper, driveKey, body?.name)
 
       return {
         success: true,
@@ -45,7 +49,7 @@ export async function registerSubscriptionController(
     }
   })
 
-  app.patch('/api/subscriptions/:driveKey', async (request, reply) => {
+  app.patch('/api/subscribed-drives/:driveKey', async (request, reply) => {
     const { driveKey } = request.params as { driveKey?: string }
     const body = request.body as { remark?: string } | null
 
@@ -54,7 +58,7 @@ export async function registerSubscriptionController(
     }
 
     try {
-      const record = await updateSubscriptionRemark(hyper, driveKey, body?.remark)
+      const record = await updateSubscribedDriveRemark(hyper, driveKey, body?.remark)
 
       return {
         success: true,
@@ -69,7 +73,7 @@ export async function registerSubscriptionController(
     }
   })
 
-  app.delete('/api/subscriptions/:driveKey', async (request, reply) => {
+  app.delete('/api/subscribed-drives/:driveKey', async (request, reply) => {
     const { driveKey } = request.params as { driveKey?: string }
 
     if (!driveKey) {
@@ -77,7 +81,7 @@ export async function registerSubscriptionController(
     }
 
     try {
-      const record = await removeSubscription(hyper, driveKey)
+      const record = await removeSubscribedDrive(hyper, driveKey)
 
       return {
         success: true,

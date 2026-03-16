@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import fs from 'node:fs/promises'
 import path from 'node:path'
 import b4a from 'b4a'
 import Hyperdrive from 'hyperdrive'
@@ -9,9 +10,13 @@ import type {
 } from '../../infra/hyper/types'
 import { withConfigDatabase } from '../../infra/config-store'
 import {
+  type CollectionDriveContentType,
+} from './schema'
+import {
+  readCollectionDriveDescriptor,
   readDriveDescriptor,
   writeDriveDescriptor,
-} from '../profile/schema'
+} from './descriptor'
 import {
   ensureProfileIdentity,
   removeProfileCollection,
@@ -19,10 +24,19 @@ import {
 } from '../profile/service'
 import { getPeerDrive } from '../remote/service'
 import { listPublishedResources } from '../publication/service'
-import { listSubscriptions, removeSubscription } from '../subscription/service'
-import { getDownloadedResourceDirectoryMap } from '../download/service'
+import { listSubscribedDrives, removeSubscribedDrive } from '../subscribed-drive/service'
+import { getDownloadedResourceDirectoryMap, getSubscribedDriveBaseCacheDir } from '../download/service'
+import {
+  getFailedFileMap,
+  matchesRootPath,
+  readMediaIndex,
+  readScanStatusDocument,
+  type MediaIndexEntry,
+  type MediaMetadataRecord,
+} from '../scan/store'
+import { syncPublishedResourcesFromLocal } from '../mount/service'
 
-interface LocalDriveRecord {
+interface OwnedDriveRecord {
   driveKey: string
   namespace: string
   name: string
@@ -31,14 +45,15 @@ interface LocalDriveRecord {
 }
 
 const REMOTE_DRIVE_SUMMARY_TIMEOUT_MS = 1500
+const REMOTE_MEDIA_INDEX_TIMEOUT_MS = 1500
 export async function listDrives(
   hyper: HyperModuleConfig,
 ): Promise<DriveSummaryRecord[]> {
-  const localDrives = await listLocalDriveRecords(hyper)
-  const subscriptions = await listSubscriptions(hyper)
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const subscribedDrives = await listSubscribedDrives(hyper)
   const localRecords = await Promise.all(
-    localDrives.map(async (record) => {
-      const { drive, close } = await openLocalDriveForRead(hyper, record)
+    ownedDrives.map(async (record) => {
+      const { drive, close } = await openOwnedDriveForRead(hyper, record)
 
       try {
         return await buildDriveSummary({
@@ -57,13 +72,14 @@ export async function listDrives(
   )
 
   const remoteRecords = await Promise.all(
-    subscriptions.map(async (subscription) => {
-      const fallbackRecord: DriveSummaryRecord = {
-        driveKey: subscription.driveKey,
-        name: subscription.name?.trim() || `Drive ${subscription.driveKey.slice(0, 8)}`,
-        remark: subscription.remark,
-        createdAt: subscription.createdAt,
-        updatedAt: subscription.createdAt,
+    subscribedDrives.map(async (subscribedDrive) => {
+      const baseFallbackRecord: DriveSummaryRecord = {
+        driveKey: subscribedDrive.driveKey,
+        name: subscribedDrive.name?.trim() || `Drive ${subscribedDrive.driveKey.slice(0, 8)}`,
+        type: subscribedDrive.type,
+        remark: subscribedDrive.remark,
+        createdAt: subscribedDrive.createdAt,
+        updatedAt: subscribedDrive.createdAt,
         fileCount: 0,
         totalSize: 0,
         publicationCount: 0,
@@ -72,17 +88,22 @@ export async function listDrives(
       }
 
       try {
-        const drive = await getPeerDrive(hyper, subscription.driveKey)
+        const drive = await getPeerDrive(hyper, subscribedDrive.driveKey)
         await drive.update({ wait: false }).catch(() => {})
+        const fallbackRecord: DriveSummaryRecord = {
+          ...baseFallbackRecord,
+          peerCount: await hyper.getDriveDiscoveryCount(drive.discoveryKey),
+        }
 
         return await withTimeout(
           buildDriveSummary({
             hyper,
             drive,
-            driveKey: subscription.driveKey,
-            createdAt: subscription.createdAt,
+            driveKey: subscribedDrive.driveKey,
+            createdAt: subscribedDrive.createdAt,
             name: fallbackRecord.name,
-            remark: subscription.remark,
+            fallbackType: subscribedDrive.type,
+            remark: subscribedDrive.remark,
             isLocal: false,
           }),
           REMOTE_DRIVE_SUMMARY_TIMEOUT_MS,
@@ -91,13 +112,13 @@ export async function listDrives(
       } catch (error) {
         hyper.log.warn(
           {
-            driveKey: subscription.driveKey,
+            driveKey: subscribedDrive.driveKey,
             error: error instanceof Error ? error.message : String(error),
           },
-          'Remote drive summary unavailable, falling back to cached subscription metadata',
+          'Remote drive summary unavailable, falling back to cached subscribed drive metadata',
         )
 
-        return fallbackRecord
+        return baseFallbackRecord
       }
     }),
   )
@@ -111,13 +132,12 @@ export async function listDrives(
   })
 }
 
-export async function createDrive(
+async function createOwnedDrive(
   hyper: HyperModuleConfig,
   name?: string,
-): Promise<DriveSummaryRecord> {
-  await ensureProfileIdentity(hyper)
-  const localDrives = await listLocalDriveRecords(hyper)
-  const nextName = name?.trim() || `我的 Drive ${localDrives.length + 1}`
+) {
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const nextName = name?.trim() || `我的 Drive ${ownedDrives.length + 1}`
   const namespace = buildDriveNamespace()
   const driveStore = hyper.store.namespace(namespace)
   const drive = new Hyperdrive(driveStore)
@@ -126,7 +146,7 @@ export async function createDrive(
 
   const driveKey = b4a.toString(drive.key, 'hex')
   const now = Date.now()
-  const record: LocalDriveRecord = {
+  const record: OwnedDriveRecord = {
     driveKey,
     namespace,
     name: nextName,
@@ -139,9 +159,29 @@ export async function createDrive(
       VALUES (?, ?, ?, NULL, ?)
     `).run(record.driveKey, record.namespace, record.name, record.createdAt)
   })
+
+  return {
+    drive,
+    driveStore,
+    record,
+    close: async () => {
+      await drive.close()
+      await driveStore.close()
+    },
+  }
+}
+
+export async function createCollectionDrive(
+  hyper: HyperModuleConfig,
+  name?: string,
+  type: CollectionDriveContentType = 'generic',
+): Promise<DriveSummaryRecord> {
+  await ensureProfileIdentity(hyper)
+  const { drive, record, close } = await createOwnedDrive(hyper, name)
   await writeDriveDescriptor(drive, {
     kind: 'collection',
     name: record.name,
+    type,
     ownerProfileDriveKey: hyper.driveKey,
   })
   await upsertProfileCollection(hyper, {
@@ -153,6 +193,7 @@ export async function createDrive(
 
   const result = {
     driveKey: record.driveKey,
+    type,
     createdAt: record.createdAt,
     name: record.name,
     updatedAt: record.createdAt,
@@ -163,8 +204,7 @@ export async function createDrive(
     isLocal: true,
   }
 
-  await drive.close()
-  await driveStore.close()
+  await close()
 
   return result
 }
@@ -181,14 +221,14 @@ export async function renameDrive(
     throw new Error('Drive 名称不能为空。')
   }
 
-  const localDrives = await listLocalDriveRecords(hyper)
-  const localDriveRecord = localDrives.find((record) => record.driveKey === normalizedKey)
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === normalizedKey)
 
-  if (!localDriveRecord) {
+  if (!ownedDriveRecord) {
     throw new Error('只能改名本地 Drive。')
   }
 
-  localDriveRecord.name = nextName
+  ownedDriveRecord.name = nextName
   withConfigDatabase(hyper.storeDir, (db) => {
     db.prepare(`
       UPDATE owned_drives
@@ -197,27 +237,34 @@ export async function renameDrive(
     `).run(nextName, normalizedKey)
   })
 
-  const { drive, close } = await openLocalDriveForRead(hyper, localDriveRecord)
+  const { drive, close } = await openOwnedDriveForRead(hyper, ownedDriveRecord)
 
   try {
+    const descriptor = await readCollectionDriveDescriptor(drive)
+
+    if (!descriptor) {
+      throw new Error('当前 Drive 不是 collection drive。')
+    }
+
     await writeDriveDescriptor(drive, {
       kind: 'collection',
       name: nextName,
+      type: descriptor.type,
       ownerProfileDriveKey: hyper.driveKey,
     })
     await upsertProfileCollection(hyper, {
-      driveKey: localDriveRecord.driveKey,
+      driveKey: ownedDriveRecord.driveKey,
       name: nextName,
-      addedAt: localDriveRecord.createdAt,
+      addedAt: ownedDriveRecord.createdAt,
       updatedAt: Date.now(),
     })
 
     return await buildDriveSummary({
       hyper,
       drive,
-      driveKey: localDriveRecord.driveKey,
-      createdAt: localDriveRecord.createdAt,
-      name: localDriveRecord.name,
+      driveKey: ownedDriveRecord.driveKey,
+      createdAt: ownedDriveRecord.createdAt,
+      name: ownedDriveRecord.name,
       isLocal: true,
     })
   } finally {
@@ -232,24 +279,24 @@ export async function updateOwnedDriveRemark(
 ): Promise<DriveSummaryRecord> {
   const normalizedKey = driveKey.toLowerCase()
   const nextRemark = normalizeOptionalText(remark)
-  const localDrives = await listLocalDriveRecords(hyper)
-  const localDriveRecord = localDrives.find((record) => record.driveKey === normalizedKey)
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === normalizedKey)
 
-  if (!localDriveRecord) {
+  if (!ownedDriveRecord) {
     throw new Error('只能修改本地 Drive 备注。')
   }
 
-  if (localDriveRecord.remark === nextRemark) {
-    const { drive, close } = await openLocalDriveForRead(hyper, localDriveRecord)
+  if (ownedDriveRecord.remark === nextRemark) {
+    const { drive, close } = await openOwnedDriveForRead(hyper, ownedDriveRecord)
 
     try {
       return await buildDriveSummary({
         hyper,
         drive,
-        driveKey: localDriveRecord.driveKey,
-        createdAt: localDriveRecord.createdAt,
-        name: localDriveRecord.name,
-        remark: localDriveRecord.remark,
+        driveKey: ownedDriveRecord.driveKey,
+        createdAt: ownedDriveRecord.createdAt,
+        name: ownedDriveRecord.name,
+        remark: ownedDriveRecord.remark,
         isLocal: true,
       })
     } finally {
@@ -257,7 +304,7 @@ export async function updateOwnedDriveRemark(
     }
   }
 
-  localDriveRecord.remark = nextRemark
+  ownedDriveRecord.remark = nextRemark
   withConfigDatabase(hyper.storeDir, (db) => {
     db.prepare(`
       UPDATE owned_drives
@@ -266,16 +313,16 @@ export async function updateOwnedDriveRemark(
     `).run(nextRemark ?? null, normalizedKey)
   })
 
-  const { drive, close } = await openLocalDriveForRead(hyper, localDriveRecord)
+  const { drive, close } = await openOwnedDriveForRead(hyper, ownedDriveRecord)
 
   try {
     return await buildDriveSummary({
       hyper,
       drive,
-      driveKey: localDriveRecord.driveKey,
-      createdAt: localDriveRecord.createdAt,
-      name: localDriveRecord.name,
-      remark: localDriveRecord.remark,
+      driveKey: ownedDriveRecord.driveKey,
+      createdAt: ownedDriveRecord.createdAt,
+      name: ownedDriveRecord.name,
+      remark: ownedDriveRecord.remark,
       isLocal: true,
     })
   } finally {
@@ -292,14 +339,14 @@ export async function openWritableDrive(
   }
 
   const normalizedKey = driveKey.toLowerCase()
-  const localDrives = await listLocalDriveRecords(hyper)
-  const localDriveRecord = localDrives.find((record) => record.driveKey === normalizedKey)
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === normalizedKey)
 
-  if (!localDriveRecord) {
+  if (!ownedDriveRecord) {
     throw new Error('只能向本地 Drive 发布内容。')
   }
 
-  const driveStore = hyper.store.namespace(localDriveRecord.namespace)
+  const driveStore = hyper.store.namespace(ownedDriveRecord.namespace)
   const drive = new Hyperdrive(driveStore)
   await drive.ready()
   await hyper.ensureDriveDiscovery(drive.discoveryKey)
@@ -317,39 +364,42 @@ export async function getDriveTree(
   hyper: HyperModuleConfig,
   driveKey: string,
 ): Promise<PublicationTreeNode> {
-  const localDrives = await listLocalDriveRecords(hyper)
-  const localDriveRecord = localDrives.find((record) => record.driveKey === driveKey.toLowerCase())
-  const subscriptions = await listSubscriptions(hyper)
-  const isSubscribedRemote = subscriptions.some((record) => record.driveKey === driveKey.toLowerCase())
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === driveKey.toLowerCase())
+  const subscribedDrives = await listSubscribedDrives(hyper)
+  const isSubscribedRemote = subscribedDrives.some((record) => record.driveKey === driveKey.toLowerCase())
 
-  if (!localDriveRecord && !isSubscribedRemote) {
+  if (!ownedDriveRecord && !isSubscribedRemote) {
     throw new Error('找不到对应的 Drive。')
   }
 
   const { drive, close } = await openReadableDrive(hyper, driveKey)
-  const localDirectoryMap = await getDownloadedResourceDirectoryMap(hyper, driveKey)
+  const localPathMap = await getDownloadedResourceDirectoryMap(hyper, driveKey)
   const descriptor = await readDriveDescriptor(drive)
   const rootNode: PublicationTreeNode = {
     path: '/',
     name: descriptor?.name
-      ?? localDriveRecord?.name
-      ?? subscriptions.find((record) => record.driveKey === driveKey.toLowerCase())?.name
+      ?? ownedDriveRecord?.name
+      ?? subscribedDrives.find((record) => record.driveKey === driveKey.toLowerCase())?.name
       ?? `Drive ${driveKey.slice(0, 8)}`,
     type: 'directory',
     size: 0,
     updatedAt: Date.now(),
     children: [],
   }
+  const scanStatus = await readScanStatusDocument(drive)
+  const failedFileMap = getFailedFileMap(scanStatus.roots)
 
   const nodes = new Map<string, PublicationTreeNode>([['/', rootNode]])
   let latestUpdatedAt = 0
+  let publicationSourceMap = new Map<string, string>()
 
   try {
-    if (localDriveRecord) {
-      const publicationSourceMap = await getLocalPublicationSourcePathMap(drive)
+    if (ownedDriveRecord) {
+      publicationSourceMap = await getOwnedPublicationSourcePathMap(drive)
 
       for (const [resourcePath, sourcePath] of publicationSourceMap) {
-        localDirectoryMap.set(resourcePath, sourcePath)
+        localPathMap.set(resourcePath, sourcePath)
       }
     }
 
@@ -371,7 +421,11 @@ export async function getDriveTree(
         type: entry.value.blob ? 'file' : 'directory',
         size: entry.value.blob?.byteLength ?? 0,
         updatedAt: entry.mtime ?? rootNode.updatedAt,
-        localDirPath: localDirectoryMap.get(normalizedPath) ?? null,
+        localDirPath: localPathMap.get(normalizedPath)
+          ? path.dirname(localPathMap.get(normalizedPath)!)
+          : null,
+        scanStatus: failedFileMap.has(normalizedPath) ? 'failed' : null,
+        scanError: failedFileMap.get(normalizedPath)?.error ?? null,
         children: entry.value.blob ? undefined : [],
       }
 
@@ -391,8 +445,22 @@ export async function getDriveTree(
     await close()
   }
 
+  if (ownedDriveRecord && publicationSourceMap.size > 0) {
+    for (const [resourcePath, sourcePath] of publicationSourceMap) {
+      const mergedUpdatedAt = await mergeLocalPublicationTree(
+        nodes,
+        resourcePath,
+        sourcePath,
+        failedFileMap,
+        rootNode.updatedAt,
+      )
+      latestUpdatedAt = Math.max(latestUpdatedAt, mergedUpdatedAt)
+    }
+  }
+
   for (const node of nodes.values()) {
-    node.localDirPath = localDirectoryMap.get(node.path) ?? node.localDirPath ?? null
+    const localPath = localPathMap.get(node.path)
+    node.localDirPath = localPath ? path.dirname(localPath) : node.localDirPath ?? null
   }
 
   for (const node of nodes.values()) {
@@ -402,9 +470,12 @@ export async function getDriveTree(
 
     const parentPath = path.posix.dirname(node.path) || '/'
     const parentNode = nodes.get(parentPath)
+    const parentLocalPath = localPathMap.get(parentPath)
 
-    if (parentNode?.localDirPath) {
-      node.localDirPath = path.join(parentNode.localDirPath, node.name)
+    if (parentNode?.localDirPath && parentLocalPath) {
+      const localPath = path.join(parentLocalPath, node.name)
+      localPathMap.set(node.path, localPath)
+      node.localDirPath = path.dirname(localPath)
     }
   }
 
@@ -415,17 +486,40 @@ export async function getDriveTree(
   return rootNode
 }
 
+export async function refreshDriveFromSource(
+  hyper: HyperModuleConfig,
+  driveKey: string,
+): Promise<PublicationTreeNode> {
+  const normalizedKey = driveKey.toLowerCase()
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === normalizedKey)
+
+  if (!ownedDriveRecord) {
+    throw new Error('只能刷新本地 Drive。')
+  }
+
+  const { drive, close } = await openWritableDrive(hyper, normalizedKey)
+
+  try {
+    await syncPublishedResourcesFromLocal(drive)
+  } finally {
+    await close()
+  }
+
+  return getDriveTree(hyper, normalizedKey)
+}
+
 export async function getDriveDescriptor(
   hyper: HyperModuleConfig,
   driveKey: string,
 ) {
   const normalizedKey = driveKey.toLowerCase()
-  const localDrives = await listLocalDriveRecords(hyper)
-  const localDriveRecord = localDrives.find((record) => record.driveKey === normalizedKey)
-  const subscriptions = await listSubscriptions(hyper)
-  const isSubscribedRemote = subscriptions.some((record) => record.driveKey === normalizedKey)
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === normalizedKey)
+  const subscribedDrives = await listSubscribedDrives(hyper)
+  const isSubscribedRemote = subscribedDrives.some((record) => record.driveKey === normalizedKey)
 
-  if (!localDriveRecord && !isSubscribedRemote && normalizedKey !== hyper.driveKey.toLowerCase()) {
+  if (!ownedDriveRecord && !isSubscribedRemote && normalizedKey !== hyper.driveKey.toLowerCase()) {
     throw new Error('找不到对应的 Drive。')
   }
 
@@ -444,21 +538,250 @@ export async function getDriveDescriptor(
   }
 }
 
-export async function getLocalPublishedResourceTargetPath(
+export async function getDriveMediaIndex(
+  hyper: HyperModuleConfig,
+  driveKey: string,
+  resourcePath?: string,
+) {
+  const normalizedKey = driveKey.toLowerCase()
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === normalizedKey)
+  const subscribedDrives = await listSubscribedDrives(hyper)
+  const subscribedDriveRecord = subscribedDrives.find((record) => record.driveKey === normalizedKey)
+  const isSubscribedRemote = Boolean(subscribedDriveRecord)
+
+  if (!ownedDriveRecord && !isSubscribedRemote && normalizedKey !== hyper.driveKey.toLowerCase()) {
+    throw new Error('找不到对应的 Drive。')
+  }
+
+  const normalizedResourcePath = resourcePath?.trim()
+    ? normalizeNodePath(resourcePath)
+    : null
+  const { drive, close } = await openReadableDrive(hyper, driveKey)
+  const fallbackType = subscribedDriveRecord?.type ?? 'generic'
+  const fallbackResponse = {
+    version: 1,
+    driveKey: normalizedKey,
+    path: normalizedResourcePath,
+    total: 0,
+    items: [],
+  }
+
+  try {
+    const loadMediaIndex = async () => {
+      const descriptor = isSubscribedRemote ? null : await readDriveDescriptor(drive)
+      const driveType = descriptor?.kind === 'collection' ? descriptor.type : fallbackType
+      const document = await readMediaIndex(drive)
+      const items = await enrichMediaIndexItemsWithCacheMetadata(
+        Object.values(document.items)
+          .filter((entry) => matchesMediaIndexFilter(entry, normalizedResourcePath))
+          .sort((left, right) => left.path.localeCompare(right.path, 'zh-CN')),
+        driveType,
+      )
+
+      return {
+        version: document.version,
+        driveKey: normalizedKey,
+        path: normalizedResourcePath,
+        total: items.length,
+        items,
+      }
+    }
+
+    if (isSubscribedRemote) {
+      return await withTimeout(
+        loadMediaIndex().catch((error) => {
+          hyper.log.warn({
+            driveKey: normalizedKey,
+            error: error instanceof Error ? error.message : String(error),
+          }, 'Remote drive media index unavailable, falling back to empty payload')
+          return fallbackResponse
+        }),
+        REMOTE_MEDIA_INDEX_TIMEOUT_MS,
+        fallbackResponse,
+      )
+    }
+
+    return await loadMediaIndex()
+  } finally {
+    await close()
+  }
+}
+
+async function enrichMediaIndexItemsWithCacheMetadata(
+  items: MediaIndexEntry[],
+  driveType: CollectionDriveContentType,
+) {
+  if ((driveType !== 'movie' && driveType !== 'series') || items.length === 0) {
+    return items
+  }
+
+  const cacheRoot = path.join(
+    getSubscribedDriveBaseCacheDir(),
+    driveType === 'movie' ? 'movies' : 'series',
+  )
+  const metadataCache = new Map<string, MediaMetadataRecord | null>()
+
+  return Promise.all(items.map(async (item) => ({
+    ...item,
+    metadata: await resolveMediaMetadataForPath(item.path, cacheRoot, metadataCache),
+  })))
+}
+
+async function resolveMediaMetadataForPath(
+  mediaPath: string,
+  cacheRoot: string,
+  metadataCache: Map<string, MediaMetadataRecord | null>,
+) {
+  const candidateDirs = collectCandidateResourceDirectories(mediaPath)
+
+  for (const candidateDir of candidateDirs) {
+    if (metadataCache.has(candidateDir)) {
+      const cached = metadataCache.get(candidateDir)
+      if (cached) {
+        return cached
+      }
+      continue
+    }
+
+    const metadata = await readCacheMetadataForDirectory(candidateDir, cacheRoot)
+    metadataCache.set(candidateDir, metadata)
+
+    if (metadata) {
+      return metadata
+    }
+  }
+
+  return null
+}
+
+function collectCandidateResourceDirectories(mediaPath: string) {
+  const candidates: string[] = []
+  let currentPath = path.posix.dirname(mediaPath)
+
+  while (currentPath && currentPath !== '.') {
+    candidates.push(currentPath)
+
+    if (currentPath === '/') {
+      break
+    }
+
+    const nextPath = path.posix.dirname(currentPath) || '/'
+    if (nextPath === currentPath) {
+      break
+    }
+    currentPath = nextPath
+  }
+
+  return candidates
+}
+
+async function readCacheMetadataForDirectory(
+  resourceDir: string,
+  cacheRoot: string,
+): Promise<MediaMetadataRecord | null> {
+  const localDir = path.join(cacheRoot, ...resourceDir.split('/').filter(Boolean))
+
+  try {
+    const entries = await fs.readdir(localDir, { withFileTypes: true })
+    const fileNames = entries
+      .filter((entry) => entry.isFile())
+      .map((entry) => entry.name)
+
+    const posterName = fileNames.find((name) => name.toLowerCase() === 'poster.jpg') ?? null
+    const fanartName = fileNames.find((name) => name.toLowerCase() === 'fanart.jpg') ?? null
+    const nfoName = fileNames.find((name) => name.toLowerCase().endsWith('.nfo')) ?? null
+
+    if (!posterName && !fanartName && !nfoName) {
+      return null
+    }
+
+    const nfoMetadata = nfoName
+      ? await readNfoMetadata(path.join(localDir, nfoName))
+      : null
+
+    return {
+      ...nfoMetadata,
+      posterPath: posterName ? `${resourceDir.replace(/\/+$/, '')}/${posterName}` : null,
+      fanartPath: fanartName ? `${resourceDir.replace(/\/+$/, '')}/${fanartName}` : null,
+      nfoPath: nfoName ? `${resourceDir.replace(/\/+$/, '')}/${nfoName}` : null,
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  }
+}
+
+async function readNfoMetadata(nfoPath: string): Promise<MediaMetadataRecord | null> {
+  try {
+    const raw = await fs.readFile(nfoPath, 'utf8')
+
+    return {
+      title: readNfoTag(raw, 'title'),
+      originalTitle: readNfoTag(raw, 'originaltitle'),
+      plot: readNfoTag(raw, 'plot'),
+      premiered: readNfoTag(raw, 'premiered'),
+      year: readNfoNumber(raw, 'year'),
+      rating: readNfoNumber(raw, 'rating'),
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return null
+    }
+
+    throw error
+  }
+}
+
+function readNfoTag(xml: string, tagName: string) {
+  const matched = new RegExp(`<${tagName}>([\\s\\S]*?)</${tagName}>`, 'i').exec(xml)
+
+  if (!matched?.[1]) {
+    return null
+  }
+
+  const value = matched[1]
+    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .trim()
+
+  return value || null
+}
+
+function readNfoNumber(xml: string, tagName: string) {
+  const value = readNfoTag(xml, tagName)
+
+  if (!value) {
+    return null
+  }
+
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+export async function getOwnedPublishedResourceTargetPath(
   hyper: HyperModuleConfig,
   driveKey: string,
   resourcePath: string,
 ) {
   const normalizedKey = driveKey.trim().toLowerCase()
   const normalizedResourcePath = normalizeNodePath(resourcePath)
-  const localDrives = await listLocalDriveRecords(hyper)
-  const localDriveRecord = localDrives.find((record) => record.driveKey === normalizedKey)
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === normalizedKey)
 
-  if (!localDriveRecord) {
+  if (!ownedDriveRecord) {
     return null
   }
 
-  const { drive, close } = await openLocalDriveForRead(hyper, localDriveRecord)
+  const { drive, close } = await openOwnedDriveForRead(hyper, ownedDriveRecord)
 
   try {
     const publications = await listPublishedResources(drive)
@@ -509,11 +832,11 @@ export async function deleteDrive(
   driveKey: string,
 ) {
   const normalizedKey = driveKey.toLowerCase()
-  const localDrives = await listLocalDriveRecords(hyper)
-  const localIndex = localDrives.findIndex((record) => record.driveKey === normalizedKey)
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const localIndex = ownedDrives.findIndex((record) => record.driveKey === normalizedKey)
 
   if (localIndex !== -1) {
-    const [removedDrive] = localDrives.splice(localIndex, 1)
+    const [removedDrive] = ownedDrives.splice(localIndex, 1)
     withConfigDatabase(hyper.storeDir, (db) => {
       db.prepare(`
         DELETE FROM owned_drives
@@ -522,7 +845,7 @@ export async function deleteDrive(
     })
 
     try {
-      const { drive, close } = await openLocalDriveForRead(hyper, removedDrive)
+      const { drive, close } = await openOwnedDriveForRead(hyper, removedDrive)
 
       try {
         await clearDrive(drive)
@@ -548,11 +871,11 @@ export async function deleteDrive(
     }
   }
 
-  const subscriptions = await listSubscriptions(hyper)
-  const subscribed = subscriptions.some((record) => record.driveKey === normalizedKey)
+  const subscribedDrives = await listSubscribedDrives(hyper)
+  const subscribed = subscribedDrives.some((record) => record.driveKey === normalizedKey)
 
   if (subscribed) {
-    return removeSubscription(hyper, normalizedKey)
+    return removeSubscribedDrive(hyper, normalizedKey)
   }
 
   return {
@@ -567,6 +890,7 @@ async function buildDriveSummary(input: {
   driveKey: string
   createdAt: number
   name: string
+  fallbackType?: CollectionDriveContentType
   remark?: string
   isLocal: boolean
 }): Promise<DriveSummaryRecord> {
@@ -583,6 +907,7 @@ async function buildDriveSummary(input: {
   return {
     driveKey: input.driveKey.toLowerCase(),
     name: descriptor?.name || input.name,
+    type: descriptor?.kind === 'collection' ? descriptor.type : (input.fallbackType ?? 'generic'),
     remark: input.remark,
     createdAt: input.createdAt,
     updatedAt,
@@ -599,11 +924,11 @@ export async function openReadableDrive(
   driveKey: string,
 ) {
   const normalizedKey = driveKey.toLowerCase()
-  const localDrives = await listLocalDriveRecords(hyper)
-  const localDriveRecord = localDrives.find((record) => record.driveKey === normalizedKey)
+  const ownedDrives = await listOwnedDriveRecords(hyper)
+  const ownedDriveRecord = ownedDrives.find((record) => record.driveKey === normalizedKey)
 
-  if (localDriveRecord) {
-    return openLocalDriveForRead(hyper, localDriveRecord)
+  if (ownedDriveRecord) {
+    return openOwnedDriveForRead(hyper, ownedDriveRecord)
   }
 
   const drive = await getPeerDrive(hyper, driveKey)
@@ -614,9 +939,9 @@ export async function openReadableDrive(
   }
 }
 
-async function openLocalDriveForRead(
+async function openOwnedDriveForRead(
   hyper: HyperModuleConfig,
-  driveRecord: LocalDriveRecord,
+  driveRecord: OwnedDriveRecord,
 ) {
   const driveStore = hyper.store.namespace(driveRecord.namespace)
   const drive = new Hyperdrive(driveStore)
@@ -631,7 +956,7 @@ async function openLocalDriveForRead(
   }
 }
 
-async function getLocalPublicationSourcePathMap(drive: Hyperdrive) {
+async function getOwnedPublicationSourcePathMap(drive: Hyperdrive) {
   const publications = await listPublishedResources(drive)
   const mapping = new Map<string, string>()
 
@@ -651,6 +976,17 @@ async function getLocalPublicationSourcePathMap(drive: Hyperdrive) {
 function normalizeNodePath(input: string) {
   const normalized = path.posix.normalize(input.startsWith('/') ? input : `/${input}`)
   return normalized === '.' ? '/' : normalized
+}
+
+function matchesMediaIndexFilter(
+  entry: MediaIndexEntry,
+  resourcePath: string | null,
+) {
+  if (!resourcePath) {
+    return true
+  }
+
+  return matchesRootPath(entry.path, resourcePath)
 }
 
 function isInternalPath(entryPath: string) {
@@ -691,6 +1027,167 @@ function ensureDirectoryAncestors(
       parentNode.children.push(directoryNode)
     }
   }
+}
+
+async function mergeLocalPublicationTree(
+  nodes: Map<string, PublicationTreeNode>,
+  rootPath: string,
+  sourcePath: string,
+  failedFileMap: Map<string, { error: string }>,
+  defaultUpdatedAt: number,
+) {
+  const normalizedRootPath = normalizeNodePath(rootPath)
+  const trimmedSourcePath = sourcePath.trim()
+
+  if (!trimmedSourcePath) {
+    return 0
+  }
+
+  let stats: Awaited<ReturnType<typeof fs.stat>>
+
+  try {
+    stats = await fs.stat(trimmedSourcePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return 0
+    }
+
+    throw error
+  }
+
+  let latestUpdatedAt = upsertTreeNode(
+    nodes,
+    normalizedRootPath,
+    stats.isDirectory() ? 'directory' : 'file',
+    stats.isFile() ? stats.size : 0,
+    stats.mtimeMs || defaultUpdatedAt,
+    path.dirname(trimmedSourcePath),
+    failedFileMap,
+  ).updatedAt
+
+  if (!stats.isDirectory()) {
+    return latestUpdatedAt
+  }
+
+  latestUpdatedAt = Math.max(
+    latestUpdatedAt,
+    await mergeLocalDirectoryEntries(
+      nodes,
+      normalizedRootPath,
+      trimmedSourcePath,
+      failedFileMap,
+      defaultUpdatedAt,
+    ),
+  )
+
+  return latestUpdatedAt
+}
+
+async function mergeLocalDirectoryEntries(
+  nodes: Map<string, PublicationTreeNode>,
+  resourceDirPath: string,
+  localDirPath: string,
+  failedFileMap: Map<string, { error: string }>,
+  defaultUpdatedAt: number,
+): Promise<number> {
+  let latestUpdatedAt = 0
+  const entries = await fs.readdir(localDirPath, { withFileTypes: true })
+
+  for (const entry of entries) {
+    if (entry.name.startsWith('.')) {
+      continue
+    }
+
+    const childLocalPath = path.join(localDirPath, entry.name)
+    const childResourcePath = path.posix.join(resourceDirPath, entry.name)
+
+    if (entry.isDirectory()) {
+      const stats = await fs.stat(childLocalPath)
+      const childNode = upsertTreeNode(
+        nodes,
+        childResourcePath,
+        'directory',
+        0,
+        stats.mtimeMs || defaultUpdatedAt,
+        localDirPath,
+        failedFileMap,
+      )
+
+      latestUpdatedAt = Math.max(latestUpdatedAt, childNode.updatedAt)
+      latestUpdatedAt = Math.max(
+        latestUpdatedAt,
+        await mergeLocalDirectoryEntries(
+          nodes,
+          childResourcePath,
+          childLocalPath,
+          failedFileMap,
+          defaultUpdatedAt,
+        ),
+      )
+      continue
+    }
+
+    if (!entry.isFile()) {
+      continue
+    }
+
+    const stats = await fs.stat(childLocalPath)
+    const childNode = upsertTreeNode(
+      nodes,
+      childResourcePath,
+      'file',
+      stats.size,
+      stats.mtimeMs || defaultUpdatedAt,
+      localDirPath,
+      failedFileMap,
+    )
+    latestUpdatedAt = Math.max(latestUpdatedAt, childNode.updatedAt)
+  }
+
+  return latestUpdatedAt
+}
+
+function upsertTreeNode(
+  nodes: Map<string, PublicationTreeNode>,
+  nodePath: string,
+  type: 'file' | 'directory',
+  size: number,
+  updatedAt: number,
+  localDirPath: string | null,
+  failedFileMap: Map<string, { error: string }>,
+) {
+  const normalizedPath = normalizeNodePath(nodePath)
+  ensureDirectoryAncestors(nodes, normalizedPath, updatedAt)
+
+  const existing = nodes.get(normalizedPath)
+  const nextNode: PublicationTreeNode = {
+    path: normalizedPath,
+    name: path.posix.basename(normalizedPath),
+    type,
+    size,
+    updatedAt,
+    localDirPath,
+    scanStatus: failedFileMap.has(normalizedPath) ? 'failed' : null,
+    scanError: failedFileMap.get(normalizedPath)?.error ?? null,
+    children: type === 'directory' ? existing?.children ?? [] : undefined,
+  }
+
+  nodes.set(normalizedPath, existing ? {
+    ...existing,
+    ...nextNode,
+    children: type === 'directory' ? nextNode.children ?? [] : undefined,
+  } : nextNode)
+
+  const parentPath = path.posix.dirname(normalizedPath) || '/'
+  const parentNode = nodes.get(parentPath)
+  const currentNode = nodes.get(normalizedPath)!
+
+  if (parentNode && !parentNode.children?.some((child) => child.path === normalizedPath)) {
+    parentNode.children ??= []
+    parentNode.children.push(currentNode)
+  }
+
+  return currentNode
 }
 
 function sortTree(node: PublicationTreeNode) {
@@ -745,7 +1242,7 @@ function inferDownloadedDirectoryPaths(node: PublicationTreeNode): string | null
 
   const firstFileChildPath = fileChildren[0]?.localDirPath
   if (firstFileChildPath) {
-    node.localDirPath = firstFileChildPath
+    node.localDirPath = path.dirname(firstFileChildPath)
     return node.localDirPath
   }
 
@@ -767,9 +1264,9 @@ async function clearDrive(drive: Hyperdrive) {
   }
 }
 
-async function listLocalDriveRecords(
+async function listOwnedDriveRecords(
   hyper: HyperModuleConfig,
-): Promise<LocalDriveRecord[]> {
+): Promise<OwnedDriveRecord[]> {
   return withConfigDatabase(hyper.storeDir, (db) => {
     db.prepare(`
       DELETE FROM owned_drives
@@ -793,7 +1290,7 @@ async function listLocalDriveRecords(
 }
 
 function buildDriveNamespace() {
-  return `local-drive-${crypto.randomUUID()}`
+  return `owned-drive-${crypto.randomUUID()}`
 }
 
 function normalizeOptionalText(value?: string) {

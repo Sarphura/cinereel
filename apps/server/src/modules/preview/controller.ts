@@ -4,7 +4,7 @@ import path from 'node:path'
 import type { FastifyInstance } from 'fastify'
 import type { HyperModuleConfig } from '../../infra/hyper/types'
 import { getDownloadedResourceTargetPath } from '../download/service'
-import { getLocalPublishedResourceTargetPath } from '../drive/service'
+import { getOwnedPublishedResourceTargetPath } from '../drive/service'
 import {
   buildRangePayload,
   buildTranscodeStreamPayload,
@@ -30,7 +30,7 @@ export async function registerPreviewController(
       }
 
       try {
-        const targetPath = await getLocalPublishedResourceTargetPath(hyper, driveKey, resourcePath)
+        const targetPath = await getOwnedPublishedResourceTargetPath(hyper, driveKey, resourcePath)
           ?? await getDownloadedResourceTargetPath(hyper, driveKey, resourcePath)
 
         if (!targetPath) {

@@ -1,11 +1,11 @@
 import fs from 'node:fs/promises'
 import path from 'node:path'
 import type Hyperdrive from 'hyperdrive'
-import Localdrive from 'localdrive'
-import MirrorDrive from 'mirror-drive'
 import type { HyperModuleConfig, MountJob, MountResult } from '../../infra/hyper/types'
+import { readDriveDescriptor } from '../drive/descriptor'
 import { buildPublicationRecord, listPublishedResources, upsertPublishedResource } from '../publication/service'
 import { openWritableDrive } from '../drive/service'
+import { createScanJob } from '../scan/service'
 
 interface MountProgressSnapshot {
   totalFiles: number
@@ -94,67 +94,22 @@ async function syncLocalPathToDrive(
   targetPath: string,
   options?: {
     onProgress?: (snapshot: MountProgressSnapshot) => void
+    prune?: boolean
   },
 ): Promise<MountResult> {
   const scan = await scanLocalPath(targetPath)
   const { resolvedTargetPath, kind, totalFiles, totalBytes } = scan
-  const rootDir = path.dirname(resolvedTargetPath)
   const rootName = path.basename(resolvedTargetPath)
   const prefix = `/${rootName}`
-  const localdrive = new Localdrive(rootDir)
-  const mirror = new MirrorDrive(localdrive, drive, {
-    prefix,
-    prune: false,
-    batch: true,
-    ignore: shouldIgnoreEntry,
-  })
-
-  const operations: MountResult['operations'] = []
-  let processedFiles = 0
-  let processedBytes = 0
 
   options?.onProgress?.({
     totalFiles,
-    processedFiles,
+    processedFiles: 0,
     totalBytes,
-    processedBytes,
+    processedBytes: 0,
     currentFilePath: null,
     progress: totalFiles > 0 ? 0 : 1,
   })
-
-  for await (const operation of mirror) {
-    operations.push({
-      type: operation.op,
-      key: operation.key,
-      bytesAdded: operation.bytesAdded,
-      bytesRemoved: operation.bytesRemoved,
-    })
-
-    if (operation.key !== prefix) {
-      processedFiles += 1
-    }
-
-    if (operation.bytesAdded > 0) {
-      processedBytes = Math.min(processedBytes + operation.bytesAdded, totalBytes)
-    }
-
-    const normalizedProcessedFiles = totalFiles > 0
-      ? Math.min(processedFiles, totalFiles)
-      : 0
-    const progressByFiles = totalFiles > 0 ? normalizedProcessedFiles / totalFiles : 1
-    const progressByBytes = totalBytes > 0 ? processedBytes / totalBytes : progressByFiles
-
-    options?.onProgress?.({
-      totalFiles,
-      processedFiles: normalizedProcessedFiles,
-      totalBytes,
-      processedBytes,
-      currentFilePath: operation.key,
-      progress: clampProgress(Math.max(progressByFiles, progressByBytes)),
-    })
-  }
-
-  const publicationStats = await collectMountedStats(drive, prefix)
 
   const publication = await upsertPublishedResource(
     drive,
@@ -162,8 +117,8 @@ async function syncLocalPathToDrive(
       mountedPath: prefix,
       kind,
       sourcePath: resolvedTargetPath,
-      fileCount: publicationStats.fileCount,
-      totalSize: publicationStats.totalSize,
+      fileCount: totalFiles,
+      totalSize: totalBytes,
     }),
   )
 
@@ -180,38 +135,15 @@ async function syncLocalPathToDrive(
     sourcePath: resolvedTargetPath,
     mountedPath: prefix,
     kind,
-    filesDiscovered: mirror.count.files,
-    filesAdded: mirror.count.add,
-    filesChanged: mirror.count.change,
-    filesRemoved: mirror.count.remove,
-    bytesAdded: mirror.bytesAdded,
-    bytesRemoved: mirror.bytesRemoved,
-    operations,
+    filesDiscovered: totalFiles,
+    filesAdded: totalFiles,
+    filesChanged: 0,
+    filesRemoved: 0,
+    bytesAdded: 0,
+    bytesRemoved: 0,
+    operations: [],
     publication,
   }
-}
-
-async function collectMountedStats(drive: Hyperdrive, prefix: string) {
-  let fileCount = 0
-  let totalSize = 0
-
-  for await (const entry of drive.list(prefix)) {
-    if (!entry.value.blob) {
-      continue
-    }
-
-    fileCount += 1
-    totalSize += entry.value.blob.byteLength
-  }
-
-  return {
-    fileCount,
-    totalSize,
-  }
-}
-
-function shouldIgnoreEntry(entryPath: string) {
-  return path.posix.basename(entryPath).startsWith('.')
 }
 
 async function runMountJob(hyper: HyperModuleConfig, jobId: string) {
@@ -255,6 +187,21 @@ async function runMountJob(hyper: HyperModuleConfig, jobId: string) {
         status: 'completed',
         result,
       })
+
+      const descriptor = await readDriveDescriptor(drive)
+
+      if (
+        descriptor?.kind === 'collection'
+        && (descriptor.type === 'movie' || descriptor.type === 'series')
+      ) {
+        await createScanJob(hyper, {
+          driveKey,
+          rootPath: result.mountedPath,
+          publicationId: result.publication.id,
+          sourcePath: result.sourcePath,
+          sourceKind: result.kind,
+        })
+      }
     } finally {
       await close()
     }
@@ -340,12 +287,4 @@ async function collectLocalEntries(directoryPath: string) {
     totalFiles,
     totalBytes,
   }
-}
-
-function clampProgress(progress: number) {
-  if (!Number.isFinite(progress)) {
-    return 0
-  }
-
-  return Math.min(1, Math.max(0, progress))
 }

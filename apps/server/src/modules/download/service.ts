@@ -24,6 +24,9 @@ interface DownloadedResourceRecord {
   updatedAt: number
 }
 
+const SIDECAR_FILE_NAMES = new Set(['poster.jpg', 'fanart.jpg'])
+const SIDECARE_CACHE_DIR_ENV = 'CINEREEL_CACHE_DIR'
+
 export interface DownloadJob {
   id: string
   driveKey: string
@@ -46,6 +49,63 @@ export interface DownloadJob {
 
 const downloadJobs = new Map<string, DownloadJob>()
 const DOWNLOADED_RESOURCES_FILE = 'downloaded-resources.json'
+
+export async function syncSubscribedDriveCache(
+  hyper: HyperModuleConfig,
+  driveKey: string,
+  type: 'movie' | 'series',
+) {
+  const drive = await getPeerDrive(hyper, driveKey)
+  await drive.update({ wait: false }).catch(() => {})
+
+  const cacheRoot = getSubscribedDriveCacheRoot(type)
+  await fsp.mkdir(cacheRoot, { recursive: true })
+
+  for await (const entry of drive.list('/')) {
+    if (isInternalPath(entry.key)) {
+      continue
+    }
+
+    const relativePath = normalizeRelativeResourcePath(entry.key)
+    const targetPath = path.join(cacheRoot, ...relativePath.split('/'))
+
+    if (!entry.value.blob) {
+      await fsp.mkdir(targetPath, { recursive: true })
+      await upsertDownloadedResourceRecord(hyper, {
+        driveKey,
+        resourcePath: normalizeNodePath(entry.key),
+        targetPath,
+        kind: 'directory',
+      })
+      continue
+    }
+
+    if (!isSidecarFile(entry.key)) {
+      continue
+    }
+
+    const size = entry.value.blob.byteLength
+    const cacheEntry = {
+      sourcePath: normalizeNodePath(entry.key),
+      targetPath,
+      size,
+    }
+
+    await fsp.mkdir(path.dirname(targetPath), { recursive: true })
+
+    if (!(await shouldSkipDirectoryEntry(cacheEntry))) {
+      await pipeline(drive.createReadStream(cacheEntry.sourcePath), fs.createWriteStream(targetPath))
+    }
+
+    await upsertDownloadedDirectoryAncestors(hyper, driveKey, cacheEntry.sourcePath, targetPath)
+    await upsertDownloadedResourceRecord(hyper, {
+      driveKey,
+      resourcePath: cacheEntry.sourcePath,
+      targetPath,
+      kind: 'file',
+    })
+  }
+}
 
 export async function createDownloadJob(
   hyper: HyperModuleConfig,
@@ -137,11 +197,21 @@ export async function getDownloadedResourceDirectoryMap(
 
     mapping.set(
       record.resourcePath,
-      record.kind === 'directory' ? record.targetPath : path.dirname(record.targetPath),
+      record.targetPath,
     )
   }
 
   return mapping
+}
+
+export async function listDownloadedResourceRecordsForDrive(
+  hyper: HyperModuleConfig,
+  driveKey: string,
+) {
+  const normalizedKey = driveKey.trim().toLowerCase()
+  const records = await readDownloadedResourceRecords(hyper, { pruneMissingTargets: true })
+
+  return records.filter((record) => record.driveKey === normalizedKey)
 }
 
 export async function getDownloadedResourceTargetPath(
@@ -400,6 +470,27 @@ async function upsertDownloadedResourceRecord(
   await writeDownloadedResourceRecords(hyper, records)
 }
 
+async function upsertDownloadedDirectoryAncestors(
+  hyper: HyperModuleConfig,
+  driveKey: string,
+  resourcePath: string,
+  targetPath: string,
+) {
+  const segments = normalizeNodePath(resourcePath).split('/').filter(Boolean)
+
+  for (let index = 0; index < segments.length - 1; index += 1) {
+    const ancestorResourcePath = `/${segments.slice(0, index + 1).join('/')}`
+    const ancestorTargetPath = path.join(path.dirname(targetPath), ...segments.slice(index + 1, -1).map(() => '..'))
+
+    await upsertDownloadedResourceRecord(hyper, {
+      driveKey,
+      resourcePath: ancestorResourcePath,
+      targetPath: path.resolve(ancestorTargetPath),
+      kind: 'directory',
+    })
+  }
+}
+
 async function writeDownloadedResourceRecords(
   hyper: HyperModuleConfig,
   records: DownloadedResourceRecord[],
@@ -411,6 +502,17 @@ async function writeDownloadedResourceRecords(
 
 function getDownloadedResourcesPath(hyper: HyperModuleConfig) {
   return path.join(hyper.storeDir, DOWNLOADED_RESOURCES_FILE)
+}
+
+export function getSubscribedDriveBaseCacheDir() {
+  return process.env[SIDECARE_CACHE_DIR_ENV]?.trim()
+    ? path.resolve(process.env[SIDECARE_CACHE_DIR_ENV]!.trim())
+    : path.resolve(process.cwd(), 'cache')
+}
+
+function getSubscribedDriveCacheRoot(type: 'movie' | 'series') {
+  const baseDir = getSubscribedDriveBaseCacheDir()
+  return path.join(baseDir, type === 'movie' ? 'movies' : 'series')
 }
 
 async function resolveDownloadEntries(input: {
@@ -575,6 +677,10 @@ function normalizeRelativeResourcePath(resourcePath: string) {
   return normalized
 }
 
+function normalizeNodePath(resourcePath: string) {
+  return path.posix.normalize(resourcePath.startsWith('/') ? resourcePath : `/${resourcePath}`)
+}
+
 function sanitizeTargetName(targetName?: string) {
   const normalized = targetName?.trim()
 
@@ -587,6 +693,11 @@ function sanitizeTargetName(targetName?: string) {
 
 function isInternalPath(entryPath: string) {
   return entryPath === '/.cinereel' || entryPath.startsWith('/.cinereel/')
+}
+
+function isSidecarFile(entryPath: string) {
+  const baseName = path.posix.basename(entryPath).toLowerCase()
+  return SIDECAR_FILE_NAMES.has(baseName) || baseName.endsWith('.nfo')
 }
 
 function isAncestorResourcePath(candidatePath: string, resourcePath: string) {

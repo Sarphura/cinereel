@@ -1,19 +1,19 @@
 import path from 'node:path'
 import type { HyperModuleConfig, ProfileSummaryRecord } from '../../infra/hyper/types'
 import { openReadableDrive } from '../drive/service'
+import { DESCRIPTOR_PATH } from '../drive/schema'
+import { readProfileDriveDescriptor, writeDriveDescriptor } from '../drive/descriptor'
+import {
+  readProfileCollectionsDocument,
+  readProfileDocument,
+  writeProfileCollectionsDocument,
+  writeProfileDocument,
+} from './documents'
 import {
   type ProfileCollectionRecord,
   type ProfileDocument,
-  DESCRIPTOR_PATH,
   PROFILE_COLLECTIONS_PATH,
   PROFILE_PATH,
-  normalizeOptionalText,
-  readDriveDescriptor,
-  readProfileCollectionsDocument,
-  readProfileDocument,
-  writeDriveDescriptor,
-  writeProfileCollectionsDocument,
-  writeProfileDocument,
 } from './schema'
 
 const DEFAULT_PROFILE_NAME = '我的主页'
@@ -21,7 +21,7 @@ const DEFAULT_PROFILE_NAME = '我的主页'
 export async function ensureProfileIdentity(
   hyper: HyperModuleConfig,
 ) {
-  const descriptor = await readDriveDescriptor(hyper.drive)
+  const descriptor = await readProfileDriveDescriptor(hyper.drive)
 
   if (!descriptor || descriptor.kind !== 'profile') {
     await writeDriveDescriptor(hyper.drive, {
@@ -54,11 +54,11 @@ export async function getCurrentProfile(
 ): Promise<ProfileSummaryRecord> {
   await ensureProfileIdentity(hyper)
 
-  const descriptor = await readDriveDescriptor(hyper.drive)
+  const descriptor = await readProfileDriveDescriptor(hyper.drive)
   const profile = await readProfileDocument(hyper.drive)
   const collections = await readProfileCollectionsDocument(hyper.drive)
 
-  if (!descriptor || descriptor.kind !== 'profile') {
+  if (!descriptor) {
     throw new Error('当前账号 profile 初始化失败。')
   }
 
@@ -76,10 +76,10 @@ export async function getCurrentProfileDocument(
   hyper: HyperModuleConfig,
 ) {
   await ensureProfileIdentity(hyper)
-  const descriptor = await readDriveDescriptor(hyper.drive)
+  const descriptor = await readProfileDriveDescriptor(hyper.drive)
   const profile = await readProfileDocument(hyper.drive)
 
-  if (!descriptor || descriptor.kind !== 'profile') {
+  if (!descriptor) {
     throw new Error('当前账号 profile 初始化失败。')
   }
 
@@ -108,10 +108,10 @@ export async function getProfileDocumentByDriveKey(
   const { drive, close } = await openReadableDrive(hyper, driveKey)
 
   try {
-    const descriptor = await readDriveDescriptor(drive)
+    const descriptor = await readProfileDriveDescriptor(drive)
     const profile = await readProfileDocument(drive)
 
-    if (!descriptor || descriptor.kind !== 'profile') {
+    if (!descriptor) {
       throw new Error('当前 Drive 不是 profile drive。')
     }
 
@@ -132,9 +132,9 @@ export async function getProfileCollectionsByDriveKey(
   const { drive, close } = await openReadableDrive(hyper, driveKey)
 
   try {
-    const descriptor = await readDriveDescriptor(drive)
+    const descriptor = await readProfileDriveDescriptor(drive)
 
-    if (!descriptor || descriptor.kind !== 'profile') {
+    if (!descriptor) {
       throw new Error('当前 Drive 不是 profile drive。')
     }
 
@@ -158,14 +158,14 @@ export async function updateCurrentProfile(
 ): Promise<ProfileSummaryRecord> {
   await ensureProfileIdentity(hyper)
 
-  const descriptor = await readDriveDescriptor(hyper.drive)
+  const descriptor = await readProfileDriveDescriptor(hyper.drive)
   const currentProfile = (await readProfileDocument(hyper.drive)) ?? {
     name: descriptor?.name ?? DEFAULT_PROFILE_NAME,
     bio: '',
     avatarPath: null,
   }
 
-  if (!descriptor || descriptor.kind !== 'profile') {
+  if (!descriptor) {
     throw new Error('当前账号 profile 初始化失败。')
   }
 
@@ -187,6 +187,11 @@ export async function updateCurrentProfile(
   await writeProfileDocument(hyper.drive, nextProfile)
 
   return getCurrentProfile(hyper)
+}
+
+function normalizeOptionalText(value?: string | null) {
+  const normalized = value?.trim()
+  return normalized ? normalized : undefined
 }
 
 export async function upsertProfileCollection(

@@ -6,12 +6,13 @@ import Corestore from 'corestore'
 import Hyperdrive from 'hyperdrive'
 import Hyperswarm from 'hyperswarm'
 import type { FastifyBaseLogger } from 'fastify'
-import { type HyperModuleConfig } from './types'
+import { type HyperModuleConfig, type HyperModuleOptions } from './types'
 
 const STORE_DIR = process.env.CORESTORE_DIR || path.join(os.homedir(), '.cinereel-nas-store')
 
 export async function createHyperModule(
   log: FastifyBaseLogger,
+  options: HyperModuleOptions = {},
 ): Promise<HyperModuleConfig> {
   await fs.mkdir(STORE_DIR, { recursive: true })
 
@@ -20,10 +21,11 @@ export async function createHyperModule(
   await drive.ready()
 
   const driveKey = b4a.toString(drive.key, 'hex')
-  const swarm = new Hyperswarm()
+  const networkEnabled = options.network ?? true
+  const swarm = networkEnabled ? new Hyperswarm() : null
   const driveDiscoverySessions = new Map<string, { flushed: () => Promise<boolean> }>()
 
-  swarm.on('connection', (conn, info) => {
+  swarm?.on('connection', (conn, info) => {
     const peerKey = b4a.toString(info.publicKey, 'hex').slice(0, 8)
 
     log.info({ peer: peerKey }, 'Hypercore peer connected')
@@ -43,6 +45,10 @@ export async function createHyperModule(
   })
 
   const ensureDriveDiscovery = async (topic: Buffer) => {
+    if (!swarm) {
+      return
+    }
+
     const topicKey = b4a.toString(topic, 'hex')
     let session = driveDiscoverySessions.get(topicKey)
 
@@ -55,7 +61,7 @@ export async function createHyperModule(
   }
 
   await ensureDriveDiscovery(drive.discoveryKey)
-  await swarm.flush()
+  await swarm?.flush()
 
   log.info({ storeDir: STORE_DIR, driveKey }, 'Cinereel hyper module ready')
 
@@ -71,12 +77,16 @@ export async function createHyperModule(
     },
     ensureDriveDiscovery,
     async getDriveDiscoveryCount(topic: Buffer) {
+      if (!swarm) {
+        return 1
+      }
+
       await ensureDriveDiscovery(topic)
       const discovery = swarm.status(topic) as { _discovered?: Set<string> } | null
       return (discovery?._discovered?.size ?? 0) + 1
     },
     async close() {
-      await swarm.destroy()
+      await swarm?.destroy()
       await drive.close()
       await store.close()
     },

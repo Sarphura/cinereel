@@ -1,51 +1,14 @@
 import fs from 'node:fs/promises'
-import os from 'node:os'
-import path from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
+import { createControllerTestKit } from '../../../test/controller-test-kit'
 
-type AppBundle = Awaited<ReturnType<typeof import('../../app')['createApp']>>
+const { cleanup, createAppBundle } = createControllerTestKit()
 
-const activeBundles: AppBundle[] = []
-const activeStoreDirs: string[] = []
-
-afterEach(async () => {
-  while (activeBundles.length) {
-    const bundle = activeBundles.pop()
-
-    if (!bundle) {
-      continue
-    }
-
-    await bundle.hyper.close()
-    await bundle.app.close()
-  }
-
-  while (activeStoreDirs.length) {
-    const storeDir = activeStoreDirs.pop()
-
-    if (!storeDir) {
-      continue
-    }
-
-    await fs.rm(storeDir, { recursive: true, force: true })
-  }
-
-  delete process.env.CORESTORE_DIR
-  delete process.env.PORT
-  vi.resetModules()
-})
+afterEach(cleanup)
 
 describe('profile controller', () => {
   it('initializes the current account as a profile drive', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-profile-init-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-profile-init-')
 
     const response = await bundle.app.inject({
       method: 'GET',
@@ -114,15 +77,7 @@ describe('profile controller', () => {
   }, 20_000)
 
   it('updates profile name, bio and avatar inside the profile drive', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-profile-update-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-profile-update-')
 
     const avatarDataUrl = `data:image/png;base64,${Buffer.from('png-avatar').toString('base64')}`
     const response = await bundle.app.inject({
@@ -198,15 +153,7 @@ describe('profile controller', () => {
   }, 20_000)
 
   it('returns collections.json through the profile collections api', async () => {
-    const storeDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cinereel-profile-collections-'))
-    activeStoreDirs.push(storeDir)
-    process.env.CORESTORE_DIR = storeDir
-    process.env.PORT = '0'
-    vi.resetModules()
-
-    const { createApp } = await import('../../app')
-    const bundle = await createApp()
-    activeBundles.push(bundle)
+    const { bundle } = await createAppBundle('cinereel-profile-collections-')
 
     const createResponse = await bundle.app.inject({
       method: 'POST',
