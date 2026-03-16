@@ -14,8 +14,8 @@ describe('loadDriveExplorerData', () => {
       if (url.endsWith('/api/drives')) {
         return new Response(JSON.stringify({
           data: [
-            { driveKey: 'local-a', name: 'A', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
-            { driveKey: 'local-b', name: 'B', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
+            { driveKey: 'local-a', name: 'A', type: 'generic', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
+            { driveKey: 'local-b', name: 'B', type: 'generic', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
           ],
         }));
       }

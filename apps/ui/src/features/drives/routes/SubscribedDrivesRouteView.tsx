@@ -5,6 +5,7 @@ import { getRouteApi } from '@tanstack/react-router';
 import { IconDownload, IconEye, IconPencil, IconPlus, IconTrash } from '../../../components/Icons';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { ContextMenu, type ContextMenuItem } from '../../../components/ui/ContextMenu';
+import { Dialog } from '../../../components/ui/Dialog';
 import { FormDialog } from '../../../components/ui/FormDialog';
 import { ExplorerDetailHeader, ExplorerPage, ExplorerPanel } from '../components/DriveExplorerChrome';
 import { DriveListSidebar } from '../components/DriveListSidebar';
@@ -12,14 +13,14 @@ import { DriveRemarkDialog, type DriveRemarkEditorState } from '../components/Dr
 import { DriveResourceSection } from '../components/DriveResourceSection';
 import { DriveSummaryHeader } from '../components/DriveSummaryHeader';
 import { useDriveSearchSync } from '../hooks';
-import { addSubscription, createDownloadJob, deleteSubscription, driveTreeQueryOptions, drivesQueryOptions, removeDownloadedResource, saveSubscriptionRemark } from '../api';
-import { DrivePreviewPanel, useDrivePreview } from '../preview';
+import { addSubscribedDrive, createDownloadJob, deleteSubscribedDrive, driveTreeQueryOptions, drivesQueryOptions, removeDownloadedResource, saveSubscribedDriveRemark } from '../api';
+import { useDrivePreview } from '../preview';
 import type { DriveRecord, ResourceTreeNode } from '../types';
 import { getPreviewKind } from '../utils';
 
-const routeApi = getRouteApi('/subscriptions');
+const routeApi = getRouteApi('/subscribed-drives');
 
-export function SubscriptionsRouteView() {
+export function SubscribedDrivesRouteView() {
   const search = routeApi.useSearch();
   const { drives, selectedDriveKey, resourceTree } = routeApi.useLoaderData();
   const [creating, setCreating] = useState(false);
@@ -30,7 +31,7 @@ export function SubscriptionsRouteView() {
   const [error, setError] = useState<string | null>(null);
   const [remarkEditor, setRemarkEditor] = useState<DriveRemarkEditorState | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [subscriptionKey, setSubscriptionKey] = useState('');
+  const [subscribedDriveKey, setSubscribedDriveKey] = useState('');
   const [downloadTargetDir, setDownloadTargetDir] = useState('');
   const [pendingDownload, setPendingDownload] = useState<{ resourcePath: string; targetName?: string } | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -39,12 +40,12 @@ export function SubscriptionsRouteView() {
   const [resourceMenuState, setResourceMenuState] = useState<{ node: ResourceTreeNode; x: number; y: number } | null>(null);
   const selectedDrive = drives.find((drive) => drive.driveKey === selectedDriveKey) ?? null;
   const preview = useDrivePreview(selectedDriveKey);
-  const { router, setDriveKey, replaceAndInvalidate } = useDriveSearchSync('/subscriptions', selectedDriveKey, search.driveKey);
+  const { router, setDriveKey, replaceAndInvalidate } = useDriveSearchSync('/subscribed-drives', selectedDriveKey, search.driveKey);
   const queryClient = useQueryClient();
 
-  const invalidateSubscriptionData = async (driveKey?: string | null) => {
-    await queryClient.invalidateQueries({ queryKey: drivesQueryOptions('subscription').queryKey });
-    await queryClient.refetchQueries({ queryKey: drivesQueryOptions('subscription').queryKey, exact: true });
+  const invalidateSubscribedDriveData = async (driveKey?: string | null) => {
+    await queryClient.invalidateQueries({ queryKey: drivesQueryOptions('subscribed').queryKey });
+    await queryClient.refetchQueries({ queryKey: drivesQueryOptions('subscribed').queryKey, exact: true });
     if (driveKey) {
       await queryClient.invalidateQueries({ queryKey: driveTreeQueryOptions(driveKey).queryKey });
       await queryClient.refetchQueries({ queryKey: driveTreeQueryOptions(driveKey).queryKey, exact: true });
@@ -52,22 +53,23 @@ export function SubscriptionsRouteView() {
     await router.invalidate();
   };
 
-  const addSubscriptionMutation = useMutation({
-    mutationFn: addSubscription,
+  const addSubscribedDriveMutation = useMutation({
+    mutationFn: addSubscribedDrive,
     onSuccess: async (result) => {
       const nextDrive: DriveRecord = {
         driveKey: result.driveKey,
         name: result.name?.trim() || `Drive ${result.driveKey.slice(0, 8)}`,
+        type: result.type,
         createdAt: result.createdAt,
         updatedAt: result.createdAt,
         fileCount: 0,
         totalSize: 0,
         publicationCount: 0,
-        peerCount: 0,
+        peerCount: 1,
         isLocal: false,
       };
 
-      queryClient.setQueryData<DriveRecord[]>(drivesQueryOptions('subscription').queryKey, (current) => {
+      queryClient.setQueryData<DriveRecord[]>(drivesQueryOptions('subscribed').queryKey, (current) => {
         const nextDrives = current ?? drives;
 
         if (nextDrives.some((item) => item.driveKey === nextDrive.driveKey)) {
@@ -78,26 +80,26 @@ export function SubscriptionsRouteView() {
       });
 
       await replaceAndInvalidate(result.driveKey);
-      await queryClient.refetchQueries({ queryKey: drivesQueryOptions('subscription').queryKey, exact: true });
+      await queryClient.refetchQueries({ queryKey: drivesQueryOptions('subscribed').queryKey, exact: true });
       setShowAddDialog(false);
-      setSubscriptionKey('');
+      setSubscribedDriveKey('');
       setDialogError(null);
       setError(null);
     },
     onError: (mutationError) => {
-      setDialogError(mutationError instanceof Error ? mutationError.message : '添加订阅源失败。');
+      setDialogError(mutationError instanceof Error ? mutationError.message : '添加订阅失败。');
     },
   });
 
-  const deleteSubscriptionMutation = useMutation({
-    mutationFn: deleteSubscription,
+  const deleteSubscribedDriveMutation = useMutation({
+    mutationFn: deleteSubscribedDrive,
     onSuccess: async (_, deletedDriveKey) => {
-      const currentDrives = queryClient.getQueryData<DriveRecord[]>(drivesQueryOptions('subscription').queryKey) ?? drives;
+      const currentDrives = queryClient.getQueryData<DriveRecord[]>(drivesQueryOptions('subscribed').queryKey) ?? drives;
       const nextDrives = currentDrives.filter((drive) => drive.driveKey !== deletedDriveKey);
       const currentIndex = currentDrives.findIndex((drive) => drive.driveKey === deletedDriveKey);
       const fallback = nextDrives[currentIndex] ?? nextDrives[currentIndex - 1] ?? null;
 
-      queryClient.setQueryData(drivesQueryOptions('subscription').queryKey, nextDrives);
+      queryClient.setQueryData(drivesQueryOptions('subscribed').queryKey, nextDrives);
       await queryClient.removeQueries({ queryKey: driveTreeQueryOptions(deletedDriveKey).queryKey });
       preview.closePreview();
       await replaceAndInvalidate(fallback?.driveKey ?? null);
@@ -111,29 +113,28 @@ export function SubscriptionsRouteView() {
   });
 
   const saveRemarkMutation = useMutation({
-    mutationFn: ({ driveKey, remark }: { driveKey: string; remark: string }) => saveSubscriptionRemark(driveKey, remark),
+    mutationFn: ({ driveKey, remark }: { driveKey: string; remark: string }) => saveSubscribedDriveRemark(driveKey, remark),
     onSuccess: async (_, variables) => {
-      await invalidateSubscriptionData(variables.driveKey);
+      await invalidateSubscribedDriveData(variables.driveKey);
       setRemarkEditor(null);
       setDialogError(null);
       setError(null);
     },
     onError: (mutationError) => {
-      setDialogError(mutationError instanceof Error ? mutationError.message : '保存订阅源备注失败。');
+      setDialogError(mutationError instanceof Error ? mutationError.message : '保存订阅备注失败。');
     },
   });
 
   const downloadMutation = useMutation({
     mutationFn: createDownloadJob,
     onSuccess: async (job, variables) => {
-      await invalidateSubscriptionData(variables.driveKey);
+      await invalidateSubscribedDriveData(variables.driveKey);
       await queryClient.invalidateQueries({ queryKey: ['download-jobs'] });
       setPendingDownload(null);
       setDownloadTargetDir('');
       addToast({
         title: '下载已开始',
         description: `下载任务已加入队列：${job.fileName}`,
-        color: 'success',
         timeout: 4000,
       });
       setDialogError(null);
@@ -147,7 +148,7 @@ export function SubscriptionsRouteView() {
   const removeDownloadMutation = useMutation({
     mutationFn: removeDownloadedResource,
     onSuccess: async (_, variables) => {
-      await invalidateSubscriptionData(variables.driveKey);
+      await invalidateSubscribedDriveData(variables.driveKey);
       await queryClient.invalidateQueries({ queryKey: ['download-jobs'] });
 
       if (
@@ -190,8 +191,8 @@ export function SubscriptionsRouteView() {
     }
   };
 
-  const handleAddSubscription = async () => {
-    const nextKey = subscriptionKey.trim();
+  const handleAddSubscribedDrive = async () => {
+    const nextKey = subscribedDriveKey.trim();
 
     if (!nextKey) {
       setDialogError('Key 不能为空。');
@@ -201,22 +202,22 @@ export function SubscriptionsRouteView() {
     setCreating(true);
 
     try {
-      await addSubscriptionMutation.mutateAsync(nextKey);
+      await addSubscribedDriveMutation.mutateAsync({ driveKey: nextKey });
     } finally {
       setCreating(false);
     }
   };
 
-  const handleDeleteSubscription = async () => {
+  const handleDeleteSubscribedDrive = async () => {
     if (!selectedDrive) {
-      setError('请先选择一个订阅源。');
+      setError('请先选择一个订阅。');
       return;
     }
 
     setDeleting(true);
 
     try {
-      await deleteSubscriptionMutation.mutateAsync(selectedDrive.driveKey);
+      await deleteSubscribedDriveMutation.mutateAsync(selectedDrive.driveKey);
     } finally {
       setDeleting(false);
     }
@@ -238,7 +239,7 @@ export function SubscriptionsRouteView() {
 
   const handleRemoveDownloadedResource = async (node: ResourceTreeNode) => {
     if (!selectedDrive) {
-      setError('请先选择一个订阅源。');
+      setError('请先选择一个订阅。');
       return;
     }
 
@@ -264,7 +265,7 @@ export function SubscriptionsRouteView() {
 
   const startDownload = async (resourcePath: string, targetName?: string) => {
     if (!selectedDrive) {
-      setError('请先选择一个订阅源。');
+      setError('请先选择一个订阅。');
       return;
     }
     const targetDir = downloadTargetDir.trim();
@@ -324,7 +325,7 @@ export function SubscriptionsRouteView() {
         },
         {
           key: 'delete',
-          label: '删除订阅',
+          label: '取消订阅',
           icon: <IconTrash className="size-3.5" />,
           danger: true,
           onSelect: () => openDeleteDialog(contextMenuState.drive),
@@ -365,28 +366,28 @@ export function SubscriptionsRouteView() {
 
   return (
     <ExplorerPage
-      title="订阅管理"
+      title="订阅"
       action={(
         <button
           onClick={() => {
             setShowAddDialog(true);
-            setSubscriptionKey('');
+            setSubscribedDriveKey('');
             setDialogError(null);
           }}
           disabled={creating}
           className="flex items-center gap-2 h-7 px-3 bg-[#c47e09] rounded text-[11px] font-bold text-white hover:bg-[#d48e19] transition-all active:scale-95 shadow-[0_0_15px_rgba(196,126,9,0.2)] disabled:opacity-60"
         >
           <IconPlus className="size-3.5" />
-          {creating ? '添加中...' : '添加订阅源'}
+          {creating ? '添加中...' : '添加订阅'}
         </button>
       )}
     >
       <div className="flex-1 flex min-w-0 overflow-hidden">
         <DriveListSidebar
-          title="订阅源"
+          title="订阅"
           items={drives}
           selectedDriveKey={selectedDriveKey}
-          emptyText="还没有订阅，点击上方添加订阅源"
+          emptyText="还没有订阅，点击上方添加。"
           onSelect={handleSelectDrive}
           getItemMeta={(drive) => ({
             title: drive.remark ?? drive.name,
@@ -397,7 +398,7 @@ export function SubscriptionsRouteView() {
         />
 
         <ExplorerPanel error={error}>
-          <ExplorerDetailHeader emptyText="还没有订阅源">
+          <ExplorerDetailHeader emptyText="还没有订阅">
             {selectedDrive ? (
               <>
                 <DriveSummaryHeader drive={selectedDrive} onEditRemark={() => openRemarkEditor(selectedDrive)} />
@@ -423,7 +424,7 @@ export function SubscriptionsRouteView() {
                     className="flex items-center gap-2 h-7 px-3 bg-[#2b1919] border border-[#5f2222] rounded text-[11px] font-bold text-[#fca5a5] hover:bg-[#3a1f1f] transition-all active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <IconTrash className="size-3.5" />
-                    {deleting ? '删除中...' : '删除订阅'}
+                    {deleting ? '处理中...' : '取消订阅'}
                   </button>
                 </div>
               </>
@@ -474,36 +475,60 @@ export function SubscriptionsRouteView() {
         }}
         onSubmit={() => void handleSaveRemark()}
       />
-      <FormDialog
+      <Dialog
         open={showAddDialog}
-        title="添加订阅源"
-        description="输入远端订阅源的 Hyperdrive Key。"
-        label="订阅源 Key"
-        value={subscriptionKey}
-        placeholder="输入 Hyperdrive Key"
-        submitLabel="添加"
-        submittingLabel="添加中..."
-        error={dialogError}
-        disabled={creating}
-        onClose={() => {
+        title="添加订阅"
+        description="输入远端 Drive 的 Hyperdrive Key，类型会从该 Drive 的 descriptor.json 自动读取。"
+        onClose={creating ? () => undefined : () => {
           setShowAddDialog(false);
-          setSubscriptionKey('');
+          setSubscribedDriveKey('');
         }}
-        onChange={(value) => {
-          setSubscriptionKey(value);
-          setDialogError(null);
-        }}
-        onSubmit={() => void handleAddSubscription()}
-      />
+        footer={(
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                setShowAddDialog(false);
+                setSubscribedDriveKey('');
+              }}
+              disabled={creating}
+              className="h-9 rounded-lg px-4 text-sm text-[#a1a1aa] transition-colors hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleAddSubscribedDrive()}
+              disabled={creating}
+              className="h-9 rounded-lg bg-[#c47e09] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#d48e19] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {creating ? '添加中...' : '添加'}
+            </button>
+          </>
+        )}
+      >
+        <label className="block text-[11px] font-medium uppercase tracking-[0.5px] text-[#71717b]">Drive Key</label>
+        <input
+          autoFocus
+          value={subscribedDriveKey}
+          onChange={(event) => {
+            setSubscribedDriveKey(event.target.value);
+            setDialogError(null);
+          }}
+          placeholder="输入 Hyperdrive Key"
+          className="mt-2 h-10 w-full rounded-lg border border-white/10 bg-[#111114] px-3 text-sm text-[#f4f4f5] outline-none transition-colors placeholder:text-[#52525c] focus:border-[#c47e09]"
+        />
+        {dialogError ? <div className="mt-3 text-xs text-[#fca5a5]">{dialogError}</div> : null}
+      </Dialog>
       <ConfirmDialog
         open={showDeleteDialog}
-        title="删除订阅"
-        description={selectedDrive ? `确定删除订阅“${selectedDrive.name}”吗？` : '确定删除当前订阅吗？'}
-        confirmLabel="删除"
-        confirmingLabel="删除中..."
+        title="取消订阅"
+        description={selectedDrive ? `确定取消订阅“${selectedDrive.name}”吗？` : '确定取消当前订阅吗？'}
+        confirmLabel="取消订阅"
+        confirmingLabel="处理中..."
         disabled={deleting}
         onClose={() => setShowDeleteDialog(false)}
-        onConfirm={() => void handleDeleteSubscription()}
+        onConfirm={() => void handleDeleteSubscribedDrive()}
       />
       <FormDialog
         open={pendingDownload !== null}

@@ -67,9 +67,10 @@ export function DriveResourceSection({
             <button
               type="button"
               onClick={() => void onRefresh()}
+              disabled={refreshing}
               className="size-[22px] flex items-center justify-center rounded hover:bg-white/5 group"
             >
-              <IconRefresh className={`size-3.5 transition-colors ${refreshing ? 'text-white' : 'text-[#52525c] group-hover:text-white'}`} />
+              <IconRefresh className={`size-3.5 transition-[color,transform] ${refreshing ? 'animate-spin text-white' : 'text-[#52525c] group-hover:text-white'}`} />
             </button>
           </div>
         )}

@@ -1,4 +1,7 @@
+@config "../tailwind.config.ts";
 @import "tailwindcss";
+@source "../node_modules/@heroui/theme/dist/**/*.{js,mjs,ts,tsx,jsx}";
+@source "../node_modules/@heroui/toast/dist/**/*.{js,mjs,ts,tsx,jsx}";
 
 :root {
   --font-sans: "Inter", "Noto Sans SC", "Noto Sans JP", sans-serif;

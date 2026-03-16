@@ -1,4 +1,6 @@
 import React from 'react';
+import type { DriveContentType } from '../../features/drives/types';
+import { getDriveTypeLabel } from '../../features/drives/utils';
 
 type PublishedKeyItemProps = {
   title?: string;
@@ -7,7 +9,7 @@ type PublishedKeyItemProps = {
   date?: string;
   size?: string;
   peerNumber?: string;
-  peerStatus?: "Normal" | "Error" | "Updated";
+  driveType?: DriveContentType;
   isHovered?: boolean;
   active?: boolean;
   onClick?: () => void;
@@ -24,7 +26,7 @@ const PublishedKeyItem: React.FC<PublishedKeyItemProps> = ({
   date = "2026-03-13",
   size = "320 GB",
   peerNumber = "210",
-  peerStatus = "Normal",
+  driveType = 'generic',
   active = false,
   onClick,
   onContextMenu,
@@ -66,7 +68,7 @@ const PublishedKeyItem: React.FC<PublishedKeyItemProps> = ({
           {titleNode}
           {titleAction}
         </div>
-        <span className="text-[10px] font-medium text-[#00bc7d]">正常</span>
+        <span className="text-[10px] font-medium text-[#00bc7d]">{getDriveTypeLabel(driveType)}</span>
       </div>
       {subtitle ? (
         <div className="truncate text-[10px] text-[#71717b]">

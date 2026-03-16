@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { addToast } from '@heroui/toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { Button } from '@heroui/react';
 import { Link, useRouter } from '@tanstack/react-router';
 import {
   SidebarItem,
@@ -16,7 +18,7 @@ import {
   IconUpload,
   IconHeartbeatRing
 } from './Icons';
-import { getCurrentProfile, listDownloadJobs, listMountJobs } from '../features/drives/api';
+import { getCurrentProfile, listDownloadJobs, listMountJobs, listScanJobs } from '../features/drives/api';
 import { SearchBar } from './publish/SearchComponents';
 
 interface MainLayoutProps {
@@ -28,6 +30,7 @@ export const Navbar = () => {
   const taskPanelRef = useRef<HTMLDivElement | null>(null);
   const previousJobStatesRef = useRef<Record<string, string>>({});
   const previousMountJobStatesRef = useRef<Record<string, string>>({});
+  const previousScanJobStatesRef = useRef<Record<string, string>>({});
   const queryClient = useQueryClient();
   const router = useRouter();
   const downloadJobsQuery = useQuery({
@@ -43,6 +46,11 @@ export const Navbar = () => {
   const profileQuery = useQuery({
     queryKey: ['profile'],
     queryFn: getCurrentProfile,
+  });
+  const scanJobsQuery = useQuery({
+    queryKey: ['scan-jobs'],
+    queryFn: listScanJobs,
+    refetchInterval: 1000,
   });
 
   useEffect(() => {
@@ -77,12 +85,17 @@ export const Navbar = () => {
   const activeMountTasks = (mountJobsQuery.data ?? []).filter((job) => (
     job.status === 'queued' || job.status === 'mounting'
   ));
+  const activeScanTasks = (scanJobsQuery.data ?? []).filter((job) => (
+    job.status === 'queued' || job.status === 'scanning'
+  ));
+  const failedScanTasks = (scanJobsQuery.data ?? []).filter((job) => job.status === 'failed');
 
   const taskItems: Array<{
     id: string;
     title: string;
     subtitle: string;
     progress: number;
+    tone?: 'default' | 'failed';
   }> = [
     ...activeMountTasks.map((task) => ({
       id: `mount-${task.id}`,
@@ -99,6 +112,25 @@ export const Navbar = () => {
       title: `下载任务：${task.fileName}`,
       subtitle: `文件名：${task.currentFileName ?? (task.status === 'queued' ? '等待开始' : task.fileName)}`,
       progress: task.progress,
+    })),
+    ...activeScanTasks.map((task) => ({
+      id: `scan-${task.id}`,
+      title: `扫描任务：${task.rootPath.split('/').filter(Boolean).pop() ?? task.rootPath}`,
+      subtitle: task.currentFilePath
+        ? `检测中：${task.currentFilePath}`
+        : task.status === 'queued'
+          ? '等待开始'
+          : `文件 ${task.processedFiles}/${task.totalFiles || 0}`,
+      progress: task.progress,
+    })),
+    ...failedScanTasks.map((task) => ({
+      id: `scan-failed-${task.id}`,
+      title: `扫描失败：${task.rootPath.split('/').filter(Boolean).pop() ?? task.rootPath}`,
+      subtitle: task.failedFiles.length > 0
+        ? `失败 ${task.failedFiles.length} 个，首个：${task.failedFiles[0].fileName}`
+        : (task.error ?? '扫描失败'),
+      progress: 1,
+      tone: 'failed',
     })),
   ];
 
@@ -124,7 +156,7 @@ export const Navbar = () => {
 
     void (async () => {
       await queryClient.refetchQueries({ queryKey: ['drive-tree'] });
-      await queryClient.refetchQueries({ queryKey: ['drives', 'subscription'], exact: true });
+      await queryClient.refetchQueries({ queryKey: ['drives', 'subscribed'], exact: true });
       await router.invalidate();
     })();
   }, [downloadJobsQuery.data, queryClient, router]);
@@ -156,15 +188,56 @@ export const Navbar = () => {
     })();
   }, [mountJobsQuery.data, queryClient, router]);
 
+  useEffect(() => {
+    const jobs = scanJobsQuery.data ?? [];
+    const previousJobStates = previousScanJobStatesRef.current;
+    const hasCompletedTransition = jobs.some((job) => {
+      const previousStatus = previousJobStates[job.id];
+      return (
+        (previousStatus === 'queued' || previousStatus === 'scanning')
+        && (job.status === 'completed' || job.status === 'failed')
+      );
+    });
+
+    previousScanJobStatesRef.current = jobs.reduce<Record<string, string>>((accumulator, job) => {
+      accumulator[job.id] = job.status;
+      return accumulator;
+    }, {});
+
+    if (!hasCompletedTransition) {
+      return;
+    }
+
+    void (async () => {
+      await queryClient.refetchQueries({ queryKey: ['drive-tree'] });
+      await queryClient.refetchQueries({ queryKey: ['drives', 'local'], exact: true });
+      await router.invalidate();
+    })();
+  }, [scanJobsQuery.data, queryClient, router]);
+
   return (
     <div className="h-[64px] w-full p-2.5 flex shrink-0">
       <div className="flex-1 bg-[#27272a] rounded-lg flex items-center justify-between px-6 border border-white/[0.03]">
-        <Link to="/publish" search={{ driveKey: undefined }} className="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
+        <Link to="/dashboard" className="text-xl font-extrabold tracking-tight text-white flex items-center gap-2">
           <span className="bg-linear-to-br from-white to-white/60 bg-clip-text text-transparent">Cinereel</span>
         </Link>
 
         <div className="flex items-center gap-4">
           <div ref={taskPanelRef} className="relative flex items-center gap-2">
+            <button
+              type="button"
+              aria-label="触发 toast 测试"
+              onClick={() => {
+                addToast({
+                  title: 'Toast Test',
+                  description: '这是一个无业务的默认样式测试提示。',
+                  timeout: 4000,
+                });
+              }}
+              className="inline-flex h-9 items-center rounded-full border border-white/10 bg-white/5 px-3 text-xs font-medium text-zinc-200 transition hover:border-white/20 hover:bg-white/8"
+            >
+              Toast Test
+            </button>
             <button
               type="button"
               aria-label={isTaskPanelOpen ? '关闭任务面板' : '打开任务面板'}
@@ -215,13 +288,13 @@ export const Navbar = () => {
                             cy="16"
                             r="12"
                             fill="none"
-                            stroke="#f2a41b"
+                            stroke={task.tone === 'failed' ? '#f87171' : '#f2a41b'}
                             strokeWidth="3"
                             strokeLinecap="round"
                             strokeDasharray={`${Math.max(0, Math.min(task.progress, 1)) * 75.4} 75.4`}
                           />
                         </svg>
-                        <span className="absolute text-[9px] font-medium text-[#f2a41b]">
+                        <span className={`absolute text-[9px] font-medium ${task.tone === 'failed' ? 'text-[#f87171]' : 'text-[#f2a41b]'}`}>
                           {Math.round(task.progress * 100)}
                         </span>
                       </div>
@@ -250,7 +323,19 @@ export const Navbar = () => {
               )}
             </Link>
           </div>
-          <SearchBar />
+          <div className="flex items-center gap-3">
+            <SearchBar />
+            <Button 
+                color="success" 
+                variant="solid" 
+                size="sm" 
+                className="font-semibold px-4 h-9 min-w-0"
+                as={Link}
+                to="/publish"
+            >
+                发布
+            </Button>
+          </div>
         </div>
       </div>
     </div>
@@ -259,7 +344,7 @@ export const Navbar = () => {
 
 export const Sidebar = () => {
   return (
-    <aside className="w-[227px] border-r border-[#27272a] flex flex-col p-4 shrink-0 overflow-y-auto">
+    <aside className="w-[240px] border-r border-white/3 flex flex-col p-4 shrink-0 overflow-y-auto">
       <div className="space-y-5">
         <SidebarItem 
             icon={<IconDashboard />} 
@@ -303,7 +388,7 @@ export const Sidebar = () => {
                 activeIcon={<IconMark className="text-[#f59e0b]" />}
                 label="订阅" 
                 color="#f59e0b"
-                to="/subscriptions"
+                to="/subscribed-drives"
                 search={{ driveKey: undefined }}
             />
             <SidebarItem

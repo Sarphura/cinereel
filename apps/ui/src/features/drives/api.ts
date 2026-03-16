@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import type { DriveExplorerLoaderData, DriveRecord, DriveScope, DownloadJob, MountJob, ProfileRecord, ResourceTreeNode } from './types';
+import type { DriveContentType, DriveExplorerLoaderData, DriveRecord, DriveScope, DownloadJob, MountJob, MovieRecord, ProfileRecord, ResourceTreeNode, ScanJob, MediaIndexResponse } from './types';
 import { queryClient } from '../../lib/queryClient';
 import { API_BASE_URL, filterDrivesByScope, resolveSelectedDriveKey } from './utils';
 
@@ -27,6 +27,7 @@ async function requestJson<T>(pathname: string, init?: RequestInit): Promise<T> 
 function normalizeDriveRecord(drive: DriveRecord): DriveRecord {
   return {
     ...drive,
+    type: drive.type ?? 'generic',
     peerCount: Number.isFinite(drive.peerCount) ? drive.peerCount : 0,
   };
 }
@@ -47,6 +48,13 @@ export async function listDrives(scope: DriveScope) {
 
 export async function getDriveTree(driveKey: string) {
   const response = await requestJson<{ data: ResourceTreeNode }>(`/api/drives/${driveKey}/tree`);
+  return response.data;
+}
+
+export async function refreshDriveTree(driveKey: string) {
+  const response = await requestJson<{ data: ResourceTreeNode }>(`/api/drives/${driveKey}/refresh`, {
+    method: 'POST',
+  });
   return response.data;
 }
 
@@ -78,10 +86,10 @@ export async function loadDriveExplorerData(scope: DriveScope, requestedDriveKey
   };
 }
 
-export async function createLocalDrive(name: string) {
+export async function createOwnedDrive(input: { name: string; type: DriveContentType }) {
   const response = await requestJson<{ data: DriveRecord }>('/api/drives', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(input),
   });
 
   return normalizeDriveRecord(response.data);
@@ -130,25 +138,25 @@ export async function listMountJobs() {
   return response.data;
 }
 
-export async function addSubscription(driveKey: string) {
-  const response = await requestJson<{ data: { driveKey: string; name?: string; createdAt: number } }>('/api/subscriptions', {
+export async function addSubscribedDrive(input: { driveKey: string }) {
+  const response = await requestJson<{ data: { driveKey: string; name?: string; type: DriveContentType; createdAt: number } }>('/api/subscribed-drives', {
     method: 'POST',
-    body: JSON.stringify({ driveKey }),
+    body: JSON.stringify(input),
   });
 
   return response.data;
 }
 
-export async function deleteSubscription(driveKey: string) {
-  const response = await requestJson<{ data: { driveKey: string } }>(`/api/subscriptions/${driveKey}`, {
+export async function deleteSubscribedDrive(driveKey: string) {
+  const response = await requestJson<{ data: { driveKey: string } }>(`/api/subscribed-drives/${driveKey}`, {
     method: 'DELETE',
   });
 
   return response.data;
 }
 
-export async function saveSubscriptionRemark(driveKey: string, remark: string) {
-  const response = await requestJson<{ data: { driveKey: string; remark?: string } }>(`/api/subscriptions/${driveKey}`, {
+export async function saveSubscribedDriveRemark(driveKey: string, remark: string) {
+  const response = await requestJson<{ data: { driveKey: string; remark?: string } }>(`/api/subscribed-drives/${driveKey}`, {
     method: 'PATCH',
     body: JSON.stringify({ remark }),
   });
@@ -180,6 +188,16 @@ export async function listDownloadJobs() {
   return response.data;
 }
 
+export async function getScanJob(jobId: string) {
+  const response = await requestJson<{ data: ScanJob }>(`/api/scans/${jobId}`);
+  return response.data;
+}
+
+export async function listScanJobs() {
+  const response = await requestJson<{ data: ScanJob[] }>('/api/scans');
+  return response.data;
+}
+
 export async function removeDownloadedResource(input: {
   driveKey: string;
   resourcePath: string;
@@ -206,4 +224,30 @@ export async function saveCurrentProfile(input: {
   });
 
   return normalizeProfileRecord(response.data);
+}
+export async function getDriveMediaIndex(driveKey: string, resourcePath?: string) {
+  const url = resourcePath 
+    ? `/api/drives/${driveKey}/media-index?path=${encodeURIComponent(resourcePath)}`
+    : `/api/drives/${driveKey}/media-index`;
+  const response = await requestJson<{ data: MediaIndexResponse }>(url);
+  return response.data;
+}
+
+export function mediaIndexQueryOptions(driveKey: string, resourcePath?: string) {
+  return queryOptions({
+    queryKey: ['media-index', driveKey, resourcePath] as const,
+    queryFn: () => getDriveMediaIndex(driveKey, resourcePath),
+  });
+}
+
+export async function listMovies() {
+  const response = await requestJson<{ data: MovieRecord[] }>('/api/movies');
+  return response.data;
+}
+
+export function moviesQueryOptions() {
+  return queryOptions({
+    queryKey: ['movies'] as const,
+    queryFn: listMovies,
+  });
 }

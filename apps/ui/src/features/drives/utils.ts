@@ -1,4 +1,4 @@
-import type { DriveRecord, DriveScope, ResourceTreeNode } from './types';
+import type { DriveContentType, DriveRecord, DriveScope, ResourceTreeNode } from './types';
 
 export type PreviewKind = 'image' | 'pdf' | 'audio' | 'video';
 const STREAMING_VIDEO_PREVIEW_EXTENSIONS = new Set(['mkv']);
@@ -31,6 +31,17 @@ export function formatBytes(size: number) {
 
   const digits = current >= 100 || unitIndex === 0 ? 0 : 1;
   return `${current.toFixed(digits)} ${units[unitIndex]}`;
+}
+
+const DRIVE_TYPE_LABELS: Record<DriveContentType, string> = {
+  movie: '电影',
+  series: '剧集',
+  music: '音乐',
+  generic: '未分类',
+};
+
+export function getDriveTypeLabel(type: DriveContentType) {
+  return DRIVE_TYPE_LABELS[type];
 }
 
 export function getPreviewKind(node: ResourceTreeNode): PreviewKind | null {

@@ -44,10 +44,14 @@ describe('profile route integration', () => {
         return new Response(JSON.stringify({ data: [] }));
       }
 
+      if (url.endsWith('/api/scans')) {
+        return new Response(JSON.stringify({ data: [] }));
+      }
+
       if (url.endsWith('/api/drives')) {
         return new Response(JSON.stringify({
           data: [
-            { driveKey: 'local-collection', name: '我的合集', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
+            { driveKey: 'local-collection', name: '我的合集', type: 'generic', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
           ],
         }));
       }
@@ -110,7 +114,7 @@ describe('profile route integration', () => {
         }));
       }
 
-      if (url.endsWith('/api/downloads') || url.endsWith('/api/mount')) {
+      if (url.endsWith('/api/downloads') || url.endsWith('/api/mount') || url.endsWith('/api/scans')) {
         return new Response(JSON.stringify({ data: [] }));
       }
 

@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRouteApi } from '@tanstack/react-router';
 import { IconPencil, IconPlus, IconTrash, IconUpload } from '../../../components/Icons';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
+import { Dialog } from '../../../components/ui/Dialog';
 import { FormDialog } from '../../../components/ui/FormDialog';
 import { ContextMenu, type ContextMenuItem } from '../../../components/ui/ContextMenu';
 import { ExplorerDetailHeader, ExplorerPage, ExplorerPanel } from '../components/DriveExplorerChrome';
@@ -11,12 +12,18 @@ import { DriveRemarkDialog, type DriveRemarkEditorState } from '../components/Dr
 import { DriveResourceSection } from '../components/DriveResourceSection';
 import { DriveSummaryHeader } from '../components/DriveSummaryHeader';
 import { useDriveSearchSync } from '../hooks';
-import { createLocalDrive, deleteDrive, driveTreeQueryOptions, drivesQueryOptions, mountDrive, renameDrive, saveOwnedDriveRemark } from '../api';
+import { createOwnedDrive, deleteDrive, driveTreeQueryOptions, drivesQueryOptions, mountDrive, refreshDriveTree, renameDrive, saveOwnedDriveRemark } from '../api';
 import { useDrivePreview } from '../preview';
-import type { DriveRecord, ResourceTreeNode } from '../types';
+import type { DriveContentType, DriveRecord, ResourceTreeNode } from '../types';
 import { getPreviewKind } from '../utils';
 
 const routeApi = getRouteApi('/publish');
+const DRIVE_TYPE_OPTIONS: Array<{ value: DriveContentType; label: string }> = [
+  { value: 'movie', label: '电影' },
+  { value: 'series', label: '剧集' },
+  { value: 'music', label: '音乐' },
+  { value: 'generic', label: '未分类' },
+];
 
 export function PublishRoutePending() {
   return (
@@ -97,6 +104,7 @@ export function PublishRouteView() {
   const [error, setError] = useState<string | null>(null);
   const [remarkEditor, setRemarkEditor] = useState<DriveRemarkEditorState | null>(null);
   const [createLabel, setCreateLabel] = useState(`我的 Drive ${drives.length + 1}`);
+  const [createType, setCreateType] = useState<DriveContentType>('generic');
   const [renameLabel, setRenameLabel] = useState('');
   const [mountPath, setMountPath] = useState('');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -121,7 +129,7 @@ export function PublishRouteView() {
   };
 
   const createDriveMutation = useMutation({
-    mutationFn: createLocalDrive,
+    mutationFn: createOwnedDrive,
     onSuccess: async (drive) => {
       queryClient.setQueryData<DriveRecord[]>(drivesQueryOptions('local').queryKey, (current) => {
         const nextDrives = current ?? drives;
@@ -229,6 +237,12 @@ export function PublishRouteView() {
     setRefreshing(true);
 
     try {
+      if (selectedDriveKey) {
+        const nextTree = await refreshDriveTree(selectedDriveKey);
+        queryClient.setQueryData(driveTreeQueryOptions(selectedDriveKey).queryKey, nextTree);
+        await queryClient.invalidateQueries({ queryKey: drivesQueryOptions('local').queryKey });
+      }
+
       await router.invalidate();
       setError(null);
     } catch (refreshError) {
@@ -249,7 +263,7 @@ export function PublishRouteView() {
     setCreating(true);
 
     try {
-      await createDriveMutation.mutateAsync(nextLabel);
+      await createDriveMutation.mutateAsync({ name: nextLabel, type: createType });
     } finally {
       setCreating(false);
     }
@@ -404,6 +418,7 @@ export function PublishRouteView() {
         <button
           onClick={() => {
             setCreateLabel(`我的 Drive ${drives.length + 1}`);
+            setCreateType('generic');
             setDialogError(null);
             setShowCreateDialog(true);
           }}
@@ -483,21 +498,61 @@ export function PublishRouteView() {
         }}
         onSubmit={() => void handleSaveRemark()}
       />
-      <FormDialog
+      <Dialog
         open={showCreateDialog}
         title="新建 Drive"
         description="创建一个新的本地发布 Drive。"
-        label="Drive 名称"
-        value={createLabel}
-        placeholder="输入 Drive 名称"
-        submitLabel="创建"
-        submittingLabel="创建中..."
-        error={dialogError}
-        disabled={creating}
         onClose={() => setShowCreateDialog(false)}
-        onChange={setCreateLabel}
-        onSubmit={() => void handleCreateDrive()}
-      />
+        footer={(
+          <>
+            <button
+              type="button"
+              onClick={() => setShowCreateDialog(false)}
+              disabled={creating}
+              className="h-9 rounded-lg px-4 text-sm text-[#a1a1aa] transition-colors hover:bg-white/5 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCreateDrive()}
+              disabled={creating}
+              className="h-9 rounded-lg bg-[#c47e09] px-4 text-sm font-semibold text-white transition-colors hover:bg-[#d48e19] disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {creating ? '创建中...' : '创建'}
+            </button>
+          </>
+        )}
+      >
+        <label className="block text-[11px] font-medium uppercase tracking-[0.5px] text-[#71717b]">Drive 名称</label>
+        <input
+          autoFocus
+          value={createLabel}
+          onChange={(event) => setCreateLabel(event.target.value)}
+          placeholder="输入 Drive 名称"
+          className="mt-2 h-10 w-full rounded-lg border border-white/10 bg-[#111114] px-3 text-sm text-[#f4f4f5] outline-none transition-colors placeholder:text-[#52525c] focus:border-[#c47e09]"
+        />
+        <div className="mt-4">
+          <div className="text-[11px] font-medium uppercase tracking-[0.5px] text-[#71717b]">Drive 类型</div>
+          <div className="mt-2 grid grid-cols-4 gap-2">
+            {DRIVE_TYPE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setCreateType(option.value)}
+                className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
+                  createType === option.value
+                    ? 'border-[#c47e09] bg-[#c47e09]/15 text-[#f5c46b]'
+                    : 'border-white/10 bg-[#111114] text-[#a1a1aa] hover:border-white/20 hover:text-white'
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {dialogError ? <div className="mt-3 text-xs text-[#fca5a5]">{dialogError}</div> : null}
+      </Dialog>
       <FormDialog
         open={showRenameDialog}
         title="重命名 Drive"

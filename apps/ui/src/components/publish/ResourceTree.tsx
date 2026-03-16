@@ -254,6 +254,14 @@ function NameCell({
             {node.name}
           </span>
         )}
+        {node.scanStatus === 'failed' ? (
+          <span
+            className="ml-2 shrink-0 rounded-full border border-[#7f1d1d] bg-[#450a0a]/70 px-2 py-0.5 text-[10px] font-semibold text-[#fca5a5]"
+            title={node.scanError ?? '扫描失败'}
+          >
+            扫描失败
+          </span>
+        ) : null}
       </div>
       {onDownload && !node.localDirPath ? (
         <button

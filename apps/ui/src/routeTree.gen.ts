@@ -9,7 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SubscriptionsRouteImport } from './routes/subscriptions'
+import { Route as SubscribedDrivesRouteImport } from './routes/subscribed-drives'
 import { Route as SeriesRouteImport } from './routes/series'
 import { Route as PublishRouteImport } from './routes/publish'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -19,9 +19,9 @@ import { Route as DownloadsRouteImport } from './routes/downloads'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 
-const SubscriptionsRoute = SubscriptionsRouteImport.update({
-  id: '/subscriptions',
-  path: '/subscriptions',
+const SubscribedDrivesRoute = SubscribedDrivesRouteImport.update({
+  id: '/subscribed-drives',
+  path: '/subscribed-drives',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SeriesRoute = SeriesRouteImport.update({
@@ -74,7 +74,7 @@ export interface FileRoutesByFullPath {
   '/profile': typeof ProfileRoute
   '/publish': typeof PublishRoute
   '/series': typeof SeriesRoute
-  '/subscriptions': typeof SubscriptionsRoute
+  '/subscribed-drives': typeof SubscribedDrivesRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -85,7 +85,7 @@ export interface FileRoutesByTo {
   '/profile': typeof ProfileRoute
   '/publish': typeof PublishRoute
   '/series': typeof SeriesRoute
-  '/subscriptions': typeof SubscriptionsRoute
+  '/subscribed-drives': typeof SubscribedDrivesRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -97,7 +97,7 @@ export interface FileRoutesById {
   '/profile': typeof ProfileRoute
   '/publish': typeof PublishRoute
   '/series': typeof SeriesRoute
-  '/subscriptions': typeof SubscriptionsRoute
+  '/subscribed-drives': typeof SubscribedDrivesRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -110,7 +110,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/publish'
     | '/series'
-    | '/subscriptions'
+    | '/subscribed-drives'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -121,7 +121,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/publish'
     | '/series'
-    | '/subscriptions'
+    | '/subscribed-drives'
   id:
     | '__root__'
     | '/'
@@ -132,7 +132,7 @@ export interface FileRouteTypes {
     | '/profile'
     | '/publish'
     | '/series'
-    | '/subscriptions'
+    | '/subscribed-drives'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -144,16 +144,16 @@ export interface RootRouteChildren {
   ProfileRoute: typeof ProfileRoute
   PublishRoute: typeof PublishRoute
   SeriesRoute: typeof SeriesRoute
-  SubscriptionsRoute: typeof SubscriptionsRoute
+  SubscribedDrivesRoute: typeof SubscribedDrivesRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/subscriptions': {
-      id: '/subscriptions'
-      path: '/subscriptions'
-      fullPath: '/subscriptions'
-      preLoaderRoute: typeof SubscriptionsRouteImport
+    '/subscribed-drives': {
+      id: '/subscribed-drives'
+      path: '/subscribed-drives'
+      fullPath: '/subscribed-drives'
+      preLoaderRoute: typeof SubscribedDrivesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/series': {
@@ -224,7 +224,7 @@ const rootRouteChildren: RootRouteChildren = {
   ProfileRoute: ProfileRoute,
   PublishRoute: PublishRoute,
   SeriesRoute: SeriesRoute,
-  SubscriptionsRoute: SubscriptionsRoute,
+  SubscribedDrivesRoute: SubscribedDrivesRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

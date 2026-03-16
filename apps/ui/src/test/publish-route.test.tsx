@@ -18,9 +18,27 @@ describe('publish route URL sync', () => {
       if (url.endsWith('/api/drives')) {
         return new Response(JSON.stringify({
           data: [
-            { driveKey: 'local-a', name: 'Drive A', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
-            { driveKey: 'local-b', name: 'Drive B', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
+            { driveKey: 'local-a', name: 'Drive A', type: 'generic', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
+            { driveKey: 'local-b', name: 'Drive B', type: 'generic', createdAt: 1, updatedAt: 2, fileCount: 0, totalSize: 0, publicationCount: 0, peerCount: 0, isLocal: true },
           ],
+        }));
+      }
+
+      if (url.endsWith('/api/downloads') || url.endsWith('/api/mount') || url.endsWith('/api/scans')) {
+        return new Response(JSON.stringify({ data: [] }));
+      }
+
+      if (url.endsWith('/api/profile')) {
+        return new Response(JSON.stringify({
+          data: {
+            driveKey: 'profile-drive',
+            name: 'Lynn',
+            bio: '',
+            avatarPath: null,
+            avatarUrl: null,
+            updatedAt: 1,
+            collections: [],
+          },
         }));
       }
 

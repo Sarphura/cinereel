@@ -64,7 +64,10 @@ export function StreamingVideoPlayer({
         }
 
         appending = true;
-        sourceBuffer.appendBuffer(queue.shift()!);
+        const chunk = queue.shift()!;
+        const normalizedChunk = new Uint8Array(chunk.byteLength);
+        normalizedChunk.set(chunk);
+        sourceBuffer.appendBuffer(normalizedChunk);
       };
 
       sourceBuffer.addEventListener('updateend', () => {
@@ -99,7 +102,7 @@ export function StreamingVideoPlayer({
             }
 
             if (value) {
-              queue.push(value);
+              queue.push(new Uint8Array(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength)));
               flushQueue();
             }
           }

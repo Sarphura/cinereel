@@ -50,6 +50,7 @@ export function DriveListSidebar({
                 date={formatDate(drive.updatedAt || drive.createdAt || Date.now())}
                 size={formatBytes(drive.totalSize)}
                 peerNumber={String(Number.isFinite(drive.peerCount) ? drive.peerCount : 0)}
+                driveType={drive.type}
                 onClick={() => onSelect(drive.driveKey)}
                 onContextMenu={itemMeta?.onContextMenu}
                 onTitleClick={itemMeta?.onTitleClick}

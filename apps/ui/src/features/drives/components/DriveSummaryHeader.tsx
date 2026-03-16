@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { IconPencil } from '../../../components/Icons';
 import type { DriveRecord } from '../types';
-import { formatBytes, formatDate } from '../utils';
+import { formatBytes, formatDate, getDriveTypeLabel } from '../utils';
 
 export function DriveSummaryHeader({
   drive,
@@ -12,6 +12,7 @@ export function DriveSummaryHeader({
 }) {
   const [copied, setCopied] = useState(false);
   const primaryText = drive.remark ?? drive.name;
+  const driveTypeLabel = getDriveTypeLabel(drive.type);
 
   const handleCopyDriveKey = async () => {
     try {
@@ -28,7 +29,7 @@ export function DriveSummaryHeader({
   return (
     <div className="flex min-w-0 flex-col gap-1.5">
       <div className="flex min-w-0 items-center gap-2">
-        <span className="shrink-0 text-[#00bc7d] text-[10px] font-bold uppercase tracking-wider">正常</span>
+        <span className="shrink-0 text-[#00bc7d] text-[10px] font-bold tracking-wider">{driveTypeLabel}</span>
         <div className="group flex min-w-0 items-center gap-1.5">
           <span className="truncate text-[13px] text-[#f5f5f5] font-semibold">{primaryText}</span>
           {onEditRemark ? (
@@ -48,6 +49,11 @@ export function DriveSummaryHeader({
         <div className="flex min-w-0 items-center gap-1.5">
           <span className="uppercase text-[9px] tracking-widest font-bold opacity-50">名称</span>
           <span className="max-w-[220px] truncate text-[#a1a1aa] font-medium">{drive.name}</span>
+        </div>
+        <span className="text-white/10">|</span>
+        <div className="flex items-center gap-1.5">
+          <span className="uppercase text-[9px] tracking-widest font-bold opacity-50">类型</span>
+          <span className="text-[#a1a1aa] font-medium">{driveTypeLabel}</span>
         </div>
         <span className="text-white/10">|</span>
         <div className="flex items-center gap-1.5">
