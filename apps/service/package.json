@@ -1,0 +1,39 @@
+{
+  "name": "@cinereel/server",
+  "version": "0.0.1",
+  "author": "Sarphura",
+  "license": "AGPL-3.0-only",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "PORT=3000 CORESTORE_DIR=./test/.tmp/.main-store CINEREEL_CACHE_DIR=./test/.tmp/.cache vite-node src/index.ts --watch",
+    "dev:peer": "PORT=3001 CORESTORE_DIR=./test/.tmp/.peer-store CINEREEL_CACHE_DIR=./test/.tmp/.peer-cache vite-node src/index.ts --watch",
+    "test": "vitest run",
+    "build": "vite build",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/swagger": "^9.7.0",
+    "@fastify/swagger-ui": "^5.2.6",
+    "b4a": "^1.8.0",
+    "better-sqlite3": "^12.9.0",
+    "corestore": "^7.9.2",
+    "drizzle-orm": "^0.45.2",
+    "fastify": "^5.8.5",
+    "hypercore-crypto": "^3.6.1",
+    "hyperdrive": "^13.3.2",
+    "hyperswarm": "^4.17.0",
+    "localdrive": "^2.2.1",
+    "mirror-drive": "^1.14.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.6.0",
+    "drizzle-kit": "^0.31.10",
+    "vite-node": "^5.3.0",
+    "vitest": "^4.1.5"
+  }
+}
