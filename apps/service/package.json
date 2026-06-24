@@ -1,22 +1,25 @@
 {
-  "name": "@cinereel/server",
+  "name": "@cinereel/service",
   "version": "0.0.1",
   "author": "Sarphura",
   "license": "AGPL-3.0-only",
   "private": true,
-  "type": "module",
-  "main": "dist/index.js",
+  "main": "dist/main.js",
   "scripts": {
-    "dev": "PORT=3000 CORESTORE_DIR=./test/.tmp/.main-store CINEREEL_CACHE_DIR=./test/.tmp/.cache vite-node src/index.ts --watch",
-    "dev:peer": "PORT=3001 CORESTORE_DIR=./test/.tmp/.peer-store CINEREEL_CACHE_DIR=./test/.tmp/.peer-cache vite-node src/index.ts --watch",
+    "dev": "PORT=3000 CORESTORE_DIR=./test/.tmp/.main-store CINEREEL_CACHE_DIR=./test/.tmp/.cache ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
+    "dev:peer": "PORT=3001 CORESTORE_DIR=./test/.tmp/.peer-store CINEREEL_CACHE_DIR=./test/.tmp/.peer-cache ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
     "test": "vitest run",
-    "build": "vite build",
-    "start": "node dist/index.js"
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js"
   },
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^5.2.6",
+    "@nestjs/common": "^11.1.27",
+    "@nestjs/core": "^11.1.27",
+    "@nestjs/platform-fastify": "^11.1.27",
+    "@nestjs/swagger": "^11.4.4",
     "b4a": "^1.8.0",
     "better-sqlite3": "^12.9.0",
     "corestore": "^7.9.2",
@@ -27,12 +30,21 @@
     "hyperswarm": "^4.17.0",
     "localdrive": "^2.2.1",
     "mirror-drive": "^1.14.2",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.2",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@nestjs/cli": "^11.0.23",
+    "@nestjs/testing": "^11.1.27",
+    "@swc/core": "^1.15.43",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.6.0",
     "drizzle-kit": "^0.31.10",
+    "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
+    "tsconfig-paths": "^4.2.0",
+    "unplugin-swc": "^1.5.9",
     "vite-node": "^5.3.0",
     "vitest": "^4.1.5"
   }
