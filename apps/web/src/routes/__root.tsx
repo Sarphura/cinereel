@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, createRootRoute, useRouter } from '@tanstack/react-router';
 import { MainLayout } from '../components/MainLayout';
-import { RouteErrorState, RoutePendingState } from '../features/drives/components/DriveExplorerChrome';
+import { RouteErrorState, RoutePendingState } from '../shared/components/drive-explorer/DriveExplorerChrome';
 
 function RootLayout() {
   return (

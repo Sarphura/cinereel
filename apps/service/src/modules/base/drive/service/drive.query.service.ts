@@ -1,4 +1,5 @@
 import type Hyperdrive from 'hyperdrive'
+import type { HyperdriveEntry } from 'hyperdrive'
 import { Injectable } from '@nestjs/common'
 import { HyperService } from '@/modules/base/hyper/hyper.service'
 
@@ -49,7 +50,12 @@ export class DriveQueryService {
     const target = drive ?? this.hyper.drive
 
     try {
-      const entry = await target.entry(path, { wait })
+      if (wait) {
+        await target.update()
+      }
+      // 注意：entry() 的 options.wait 控制的是「逐 block 网络等待」行为，
+      // 应始终传 false，避免无限阻塞；同步等待已由上方 update() 处理。
+      const entry = await target.entry(path, { wait: false })
       return entry !== null && entry !== undefined
     } catch (error) {
       if (this.isBlockNotAvailableError(error)) {
@@ -75,7 +81,12 @@ export class DriveQueryService {
     const target = drive ?? this.hyper.drive
 
     try {
-      const buffer = await target.get(path, { wait })
+      if (wait) {
+        await target.update()
+      }
+      // 注意：get() 的 options.wait 控制的是「逐 block 网络等待」行为，
+      // 应始终传 false，避免无限阻塞；同步等待已由上方 update() 处理。
+      const buffer = await target.get(path, { wait: false })
       return buffer ?? null
     } catch (error) {
       if (this.isBlockNotAvailableError(error)) {
@@ -86,6 +97,7 @@ export class DriveQueryService {
   }
 
   /**
+   * TODO: 解析 JSON 文件的作用？
    * 读取 drive 中指定路径的 JSON 文件并解析为指定类型。
    * 解析失败或路径不存在时返回 null。
    *
@@ -123,10 +135,13 @@ export class DriveQueryService {
     path: string,
     wait = false,
     drive?: Hyperdrive,
-  ): Promise<Awaited<ReturnType<Hyperdrive['entry']>>> {
+  ): Promise<HyperdriveEntry | null> {
     const target = drive ?? this.hyper.drive
 
     try {
+      if (wait) {
+        await target.update()
+      }
       return await target.entry(path, { wait })
     } catch (error) {
       if (this.isBlockNotAvailableError(error)) {
@@ -151,13 +166,20 @@ export class DriveQueryService {
     prefix: string,
     wait = false,
     drive?: Hyperdrive,
-  ): Promise<NonNullable<Awaited<ReturnType<Hyperdrive['entry']>>>[]> {
+  ): Promise<HyperdriveEntry[]> {
     const target = drive ?? this.hyper.drive
-    const entries: NonNullable<Awaited<ReturnType<Hyperdrive['entry']>>>[] = []
+    const entries: HyperdriveEntry[] = []
 
     try {
-      for await (const entry of target.list(prefix, { wait })) {
-        entries.push(entry as NonNullable<Awaited<ReturnType<Hyperdrive['entry']>>>)
+      if (wait) {
+        await target.update()
+      }
+      // 注意：list() 的 options.wait 控制的是「逐 block 网络等待」行为，
+      // 若传入 wait: true，遍历每一条 entry 时都会阻塞等待网络数据块到来，
+      // 导致 for-await 循环永远无法结束（Swagger 请求 loading 的根本原因）。
+      // 同步等待已由上方 update() 统一处理，此处始终传 false。
+      for await (const entry of target.list(prefix, { wait: false })) {
+        entries.push(entry)
       }
     } catch (error) {
       if (this.isBlockNotAvailableError(error)) {
@@ -181,7 +203,7 @@ export class DriveQueryService {
   async walk(
     prefix: string,
     visitor: (
-      entry: NonNullable<Awaited<ReturnType<Hyperdrive['entry']>>>,
+      entry: HyperdriveEntry,
     ) => boolean | void | Promise<boolean | void>,
     wait = false,
     drive?: Hyperdrive,
@@ -189,10 +211,12 @@ export class DriveQueryService {
     const target = drive ?? this.hyper.drive
 
     try {
-      for await (const entry of target.list(prefix, { wait })) {
-        const result = await visitor(
-          entry as NonNullable<Awaited<ReturnType<Hyperdrive['entry']>>>,
-        )
+      if (wait) {
+        await target.update()
+      }
+      // 与 list() 同理：options.wait 会导致逐 block 阻塞，始终传 false。
+      for await (const entry of target.list(prefix, { wait: false })) {
+        const result = await visitor(entry)
 
         if (result === false) {
           break

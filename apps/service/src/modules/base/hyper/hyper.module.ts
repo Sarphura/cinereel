@@ -45,7 +45,7 @@ export class HyperModule {
         },
         HyperService,
       ],
-      exports: [HyperService],
+      exports: [HYPER_MODULE_CONFIG, HyperService],
     }
   }
 }

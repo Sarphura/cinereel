@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { loadDriveExplorerData } from '../features/drives/api';
-import { PublishRoutePending, PublishRouteView } from '../features/drives/routes/PublishRouteView';
+import { loadPublishedExplorerData } from '../features/publish/api/api';
+import { PublishRoutePending, PublishRouteView } from '../features/publish/routes/PublishRoute';
 
 export const Route = createFileRoute('/publish')({
   pendingMs: 0,
@@ -11,6 +11,12 @@ export const Route = createFileRoute('/publish')({
   loaderDeps: ({ search }) => ({
     driveKey: search.driveKey,
   }),
-  loader: ({ deps }) => loadDriveExplorerData('local', deps.driveKey),
+  loader: async ({ deps }) => {
+    try {
+      return await loadPublishedExplorerData(deps.driveKey);
+    } catch (error) {
+      return { drives: [], selectedDriveKey: null, resourceTree: null, error: error instanceof Error ? error.message : '数据加载失败。' };
+    }
+  },
   component: PublishRouteView,
 });

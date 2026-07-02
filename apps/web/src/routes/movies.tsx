@@ -2,9 +2,9 @@ import React from 'react';
 import { createFileRoute } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { Spinner } from '@heroui/react';
-import { moviesQueryOptions } from '../features/drives/api';
-import { MovieCard } from '../components/movies/MovieCard';
-import { FilterBar } from '../components/movies/FilterBar';
+import { moviesQueryOptions } from '../features/movies/api';
+import { MovieCard } from '../features/movies/components/MovieCard';
+import { FilterBar } from '../features/movies/components/FilterBar';
 
 function MoviesPage() {
   const moviesQuery = useQuery(moviesQueryOptions());

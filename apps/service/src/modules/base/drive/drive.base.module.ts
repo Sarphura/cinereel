@@ -9,9 +9,12 @@ import { DriveWriteService } from './service/drive.write.service'
  * 提供最底层的 Hyperdrive（v13）增删改查能力。
  *
  * 分层职责（单一职责原则）：
- *   - HyperModule    → 管理 Corestore / Hyperdrive / Hyperswarm 生命周期
+ *   - HyperModule       → 管理 Corestore / Hyperdrive / Hyperswarm 生命周期
  *   - DriveQueryService → 只读操作（存在性检测、读取文件/JSON、列举条目）
  *   - DriveWriteService → 写入操作（put/JSON、del、clearAndDel、递归 delTree）
+ *
+ * P2P 网络能力（Hyperswarm）由独立的 SwarmModule 提供，
+ * 需要 P2P 能力的 Feature Module 应同时 import DriveBaseModule 和 SwarmModule。
  *
  * 使用方式：在 Feature Module 的 imports 数组中声明本模块即可。
  * 若 HyperModule 已以 isGlobal: true 注册，则本模块内的 HyperModule
