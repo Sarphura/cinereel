@@ -9,6 +9,7 @@ import { HyperService } from '@/modules/base/hyper/hyper.service'
  * 将底层 Hypercore 数据复制协议与网络连接绑定。
  *   - 启动数据复制（将 Corestore 的复制流与 Swarm 连接绑定）
  *   - 宣告本地 drive 到 DHT 网络（join + announce）
+ *   - 批量宣告所有本地 drive
  *   - 挂载远端 drive（根据对等节点 publicKey 构造只读实例）
  *   - 加入远端 drive 的发现通道（以便找到数据提供方）
  *
@@ -49,22 +50,49 @@ export class SwarmService {
   // ---------------------------------------------------------------------------
 
   /**
-   * 将本地 Hyperdrive 的 discoveryKey 宣告到 DHT 网络，
+   * 将指定 Hyperdrive 的 discoveryKey 宣告到 DHT 网络，
    * 使其他节点能够发现并连接到本节点。
    *
+   * @param drive 要宣告的 Hyperdrive 实例
    * @param flush 是否等待宣告在 DHT 上完成扩散（默认 true）。
    *              生产环境建议 true 以确保宣告可靠；测试时可设为 false。
    */
-  async announce(flush = true): Promise<void> {
-    const discovery = this.hyper.swarm.join(this.hyper.drive.discoveryKey)
+  async announceLocalDrive(drive: Hyperdrive, flush = true): Promise<void> {
+    const discovery = this.hyper.swarm.join(drive.discoveryKey)
 
     if (flush) {
       await discovery.flushed()
     }
 
     this.logger.log(
-      `本地 Drive 已宣告到 DHT，discoveryKey: ${this.hyper.drive.discoveryKey.toString('hex')}`,
+      `Local drive has been announced to DHT, discoveryKey: ${drive.discoveryKey.toString('hex')}`,
     )
+  }
+
+  /**
+   * 将主本地 Drive 宣告到 DHT 网络（向后兼容方法）。
+   * 内部委托 announceLocalDrive(this.hyper.drive, flush)。
+   *
+   * @param flush 是否等待宣告在 DHT 上完成扩散（默认 true）
+   */
+  async announce(flush = true): Promise<void> {
+    return this.announceLocalDrive(this.hyper.drive, flush)
+  }
+
+  /**
+   * 将所有本地 Drive（含主 Drive 及通过 HyperService.createLocalDrive 创建的 Drive）
+   * 全部宣告到 DHT 网络。
+   *
+   * @param flush 是否等待每个 Drive 宣告扩散完成（默认 true）
+   */
+  async announceAll(flush = true): Promise<void> {
+    // 宣告主 Drive
+    await this.announceLocalDrive(this.hyper.drive, flush)
+
+    // 宣告所有额外本地 Drive
+    for (const drive of this.hyper.getAllLocalDrives().values()) {
+      await this.announceLocalDrive(drive, flush)
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -83,7 +111,7 @@ export class SwarmService {
   async mountRemoteDrive(publicKeyHex: string): Promise<Hyperdrive> {
     const cached = this.remoteDrives.get(publicKeyHex)
     if (cached) {
-      this.logger.debug(`返回缓存的远端 Drive, publicKey: ${publicKeyHex}`)
+      this.logger.debug(`Return remote cached drive, publicKey: ${publicKeyHex}`)
       return cached
     }
 
@@ -100,15 +128,20 @@ export class SwarmService {
     // 加入远端 drive 的发现通道，驱动 Swarm 主动寻找数据提供方
     const discovery = this.hyper.swarm.join(remoteDrive.discoveryKey)
 
-    // 始终等待 DHT 宣告扩散完成，确保其他节点能发现我们
-    await discovery.flushed()
+    // 等待 DHT 宣告扩散完成，确保其他节点能发现我们，但最多等 5s
+    await Promise.race([
+      discovery.flushed(),
+      new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+    ])
 
-    // 等待至少一个 P2P 连接建立后，再等远端 drive 同步最新版本。
-    // 若已有活跃连接（重复挂载场景）则跳过等待。
+    // 若已有活跃连接则直接尝试同步；否则最多等 5s 让 Swarm 找到对端。
+    // 超时后继续，数据会在后台通过复制通道自动同步，不阻塞挂载流程。
     const hasPeer = this.hyper.swarm.connections.size > 0
     if (!hasPeer) {
       await new Promise<void>((resolve) => {
+        const timer = setTimeout(resolve, 5000)
         const onConnection = () => {
+          clearTimeout(timer)
           this.hyper.swarm.off('connection', onConnection)
           resolve()
         }
@@ -116,12 +149,15 @@ export class SwarmService {
       })
     }
 
-    // 等待远端 drive 推送最新版本（至少一次 update）
-    await remoteDrive.update().catch(() => {})
+    // 等待远端 drive 推送最新版本（至少一次 update），最多等 5s
+    await Promise.race([
+      remoteDrive.update().catch(() => {}),
+      new Promise<void>((resolve) => setTimeout(resolve, 5000)),
+    ])
 
     this.remoteDrives.set(publicKeyHex, remoteDrive)
 
-    this.logger.log(`远端 Drive 挂载完成，publicKey: ${publicKeyHex}`)
+    this.logger.log(`Remote drive mounted successfully, publicKey: ${publicKeyHex}`)
     return remoteDrive
   }
 
@@ -142,11 +178,11 @@ export class SwarmService {
     }
 
     await drive.close().catch((err: unknown) => {
-      this.logger.warn(`关闭远端 Drive 时出错 [${publicKeyHex}]: ${String(err)}`)
+      this.logger.warn(`Failed when close remote drive: [${publicKeyHex}]: ${String(err)}`)
     })
 
     this.remoteDrives.delete(publicKeyHex)
-    this.logger.log(`远端 Drive 已卸载，publicKey: ${publicKeyHex}`)
+    this.logger.log(`Unmounted remote drive successfully, publicKey: ${publicKeyHex}`)
   }
 
   // ---------------------------------------------------------------------------
@@ -154,10 +190,27 @@ export class SwarmService {
   // ---------------------------------------------------------------------------
 
   /**
-   * 返回当前本地 drive 的 publicKey 十六进制字符串。
+   * 返回主本地 drive 的 publicKey 十六进制字符串。
    * 供调用方广播给其他节点使用。
    */
   get localPublicKey(): string {
     return this.hyper.driveKey
+  }
+
+  /**
+   * 返回所有本地 Drive（含主 Drive）的 publicKey 列表（十六进制字符串）。
+   * 供调用方批量广播给其他节点使用。
+   */
+  get localPublicKeys(): string[] {
+    const keys: string[] = [this.hyper.driveKey]
+
+    for (const drive of this.hyper.getAllLocalDrives().values()) {
+      const key = drive.key?.toString('hex')
+      if (key) {
+        keys.push(key)
+      }
+    }
+
+    return keys
   }
 }

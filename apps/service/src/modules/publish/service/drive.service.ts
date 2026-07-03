@@ -1,26 +1,27 @@
-import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common'
-import Hyperdrive from 'hyperdrive'
+import { v4 as uuidv4 } from 'uuid'
+import { Injectable, NotFoundException, Logger, OnModuleInit } from '@nestjs/common'
+import type Hyperdrive from 'hyperdrive'
 import { HyperService } from '@/modules/base/hyper/hyper.service'
 import { DriveQueryService } from '@/modules/base/drive/service/drive.query.service'
 import { SwarmService } from '@/modules/base/swarm/swarm.service'
 import { DriveRepository } from '../repository/drive.repository'
 import type { DriveRecord, CreateDriveDto, UpdateDriveDto, DriveResponseDto } from '../domain/dto/drive.dto'
+import { buildTreeFromEntries } from '@/modules/common/utils/tree.util'
 
 /**
  * DriveService
  *
  * 职责：Drive 元数据的 CRUD 与文件树查询。
  *
- * - 本地 drive 的创建（从 Corestore 派生新 Hyperdrive 实例）
+ * - 本地 drive 的创建（委托 HyperService.createLocalDrive 以 namespace 派生）
  * - 元数据的读、写、删（委托 DriveRepository）
  * - 文件树读取（委托 DriveQueryService）
  * - subscribed drive 的元数据记录（由 SubscribedDriveService 调用）
+ * - 应用启动时从 DriveRepository 恢复所有本地 Drive 实例
  */
 @Injectable()
-export class DriveService {
+export class DriveService implements OnModuleInit {
   private readonly logger = new Logger(DriveService.name)
-  /** 缓存已打开的本地 drives（key = driveKey hex） */
-  private readonly localDrives = new Map<string, Hyperdrive>()
 
   constructor(
     private readonly hyper: HyperService,
@@ -28,6 +29,37 @@ export class DriveService {
     private readonly swarm: SwarmService,
     private readonly driveRepo: DriveRepository,
   ) {}
+
+  // ---------------------------------------------------------------------------
+  // 生命周期：启动恢复
+  // ---------------------------------------------------------------------------
+
+  /**
+   * 应用启动时，从 DriveRepository 读取所有本地 Drive 记录，
+   * 并通过 HyperService.createLocalDrive 重新 ready() 对应实例，
+   * 确保重启后已创建的本地 Drive 可以立即被使用。
+   */
+  async onModuleInit(): Promise<void> {
+    const localRecords = this.driveRepo.findAllLocal()
+    let restored = 0
+
+    for (const record of localRecords) {
+      // 主 Drive（无 namespace）由 HyperService 自动管理，无需恢复
+      if (!record.namespace) continue
+
+      try {
+        await this.hyper.createLocalDrive(record.namespace)
+        restored++
+        this.logger.debug(`恢复本地 Drive [namespace=${record.namespace}]，driveKey: ${record.id}`)
+      } catch (err) {
+        this.logger.warn(`恢复本地 Drive 失败 [namespace=${record.namespace}]: ${String(err)}`)
+      }
+    }
+
+    if (restored > 0) {
+      this.logger.log(`已恢复 ${restored} 个本地 Drive 实例`)
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // 查询
@@ -49,14 +81,24 @@ export class DriveService {
   // ---------------------------------------------------------------------------
 
   async getTree(driveKey: string): Promise<object> {
+    const record = this.driveRepo.findById(driveKey)
+    if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
     const drive = await this.resolveDrive(driveKey)
-    return this.buildTree(drive, '/')
+    if (!record.isLocal) {
+      // 必须先有活跃连接再 update，否则 update() 立即 resolve 返回空
+      await this.waitForPeer(8000)
+      await drive.update().catch(() => {})
+    }
+    return this.buildTree(drive, '/', !record.isLocal)
   }
 
   async refreshTree(driveKey: string): Promise<object> {
+    const record = this.driveRepo.findById(driveKey)
+    if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
     const drive = await this.resolveDrive(driveKey)
+    await this.waitForPeer(5000)
     await drive.update().catch(() => {})
-    return this.buildTree(drive, '/')
+    return this.buildTree(drive, '/', !record.isLocal)
   }
 
   // ---------------------------------------------------------------------------
@@ -64,18 +106,16 @@ export class DriveService {
   // ---------------------------------------------------------------------------
 
   async create(dto: CreateDriveDto): Promise<DriveResponseDto> {
-    // 以名称为命名空间从 Corestore 派生一个新的 Hyperdrive
-    const namespace = `drive-${Date.now()}-${Math.random().toString(36).slice(2)}`
-    const newDrive = new Hyperdrive(this.hyper.store.namespace(namespace))
-    await newDrive.ready()
+    // 生成 UUID 作为 namespace，确保唯一性且重启后可重现
+    const namespace = uuidv4()
 
+    // 委托 HyperService 通过命名空间派生并管理新 Drive 的生命周期
+    const newDrive = await this.hyper.createLocalDrive(namespace)
     const driveKey = newDrive.key!.toString('hex')
-    this.localDrives.set(driveKey, newDrive)
 
     // 将本地 drive 宣告到 P2P 网络
     try {
-      const discovery = this.hyper.swarm.join(newDrive.discoveryKey)
-      await discovery.flushed()
+      await this.swarm.announceLocalDrive(newDrive)
     } catch (err) {
       this.logger.warn(`宣告 Drive 到 DHT 时出错: ${String(err)}`)
     }
@@ -86,12 +126,13 @@ export class DriveService {
       name: dto.name,
       type: dto.type,
       isLocal: true,
+      namespace,
       createdAt: now,
       updatedAt: now,
     }
 
     this.driveRepo.save(record)
-    this.logger.log(`本地 Drive 已创建: ${driveKey} (${dto.name})`)
+    this.logger.log(`本地 Drive 已创建: ${driveKey} (${dto.name}) [namespace=${namespace}]`)
     return this.toResponseDto(record)
   }
 
@@ -119,11 +160,12 @@ export class DriveService {
     const record = this.driveRepo.findById(driveKey)
     if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
 
-    // 关闭本地 drive 实例（若已打开）
-    const drive = this.localDrives.get(driveKey)
-    if (drive) {
-      await drive.close().catch(() => {})
-      this.localDrives.delete(driveKey)
+    // 若有 namespace，从 HyperService 的 localDrives 中关闭对应实例
+    if (record.namespace) {
+      const drive = this.hyper.getLocalDrive(record.namespace)
+      if (drive) {
+        await drive.close().catch(() => {})
+      }
     }
 
     this.driveRepo.delete(driveKey)
@@ -152,87 +194,57 @@ export class DriveService {
 
   /**
    * 解析指定 driveKey 对应的 Hyperdrive 实例。
-   * 本地 drive：从缓存或重新打开；远端 drive：委托 SwarmService。
+   * 本地 drive：主 Drive 直接返回；其余按 namespace 从 HyperService 缓存取。
+   * 远端 drive：委托 SwarmService。
    */
   async resolveDrive(driveKey: string): Promise<Hyperdrive> {
     const record = this.driveRepo.findById(driveKey)
     if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
 
     if (record.isLocal) {
-      const cached = this.localDrives.get(driveKey)
-      if (cached) return cached
-
-      // 主 drive（第一个本地 drive）直接用 HyperService.drive
+      // 主 Drive（无 namespace）
       if (this.hyper.drive.key?.toString('hex') === driveKey) {
         return this.hyper.drive
       }
 
-      // 其他本地 drive：从 Corestore 重新构建（仅 key-based，不命名空间）
-      const keyBuffer = Buffer.from(driveKey, 'hex')
-      const drive = new Hyperdrive(this.hyper.store.session(), keyBuffer)
-      await drive.ready()
-      this.localDrives.set(driveKey, drive)
-      return drive
+      // 其他本地 Drive：必须有 namespace，从 HyperService 缓存取，若未命中则重新创建
+      if (!record.namespace) {
+        throw new NotFoundException(`本地 Drive 数据不完整，缺少 namespace: ${driveKey}`)
+      }
+
+      const cached = this.hyper.getLocalDrive(record.namespace)
+      if (cached) return cached
+
+      // 恢复未命中的 Drive（极少情况，例如缓存丢失）
+      return this.hyper.createLocalDrive(record.namespace)
     }
 
     // 远端订阅 drive
     return this.swarm.mountRemoteDrive(driveKey)
   }
 
-  private async buildTree(drive: Hyperdrive, prefix: string): Promise<object> {
-    const entries = await this.driveQuery.list(prefix, false, drive)
-
-    // 组织为树形结构
-    type TreeNode = {
-      path: string
-      name: string
-      type: 'file' | 'directory'
-      size: number
-      updatedAt: number
-      children?: TreeNode[]
+  /**
+   * 等待 Hyperswarm 至少建立一个活跃连接，最多等待 timeoutMs。
+   * 运行时已有连接则立即返回。
+   */
+  private waitForPeer(timeoutMs: number): Promise<void> {
+    if (this.hyper.swarm.connections.size > 0) {
+      return Promise.resolve()
     }
-
-    const nodeMap = new Map<string, TreeNode>()
-    const root: TreeNode = {
-      path: '/',
-      name: '/',
-      type: 'directory',
-      size: 0,
-      updatedAt: 0,
-      children: [],
-    }
-    nodeMap.set('/', root)
-
-    for (const entry of entries) {
-      const parts = entry.key.split('/').filter(Boolean)
-      let current = root
-
-      for (let i = 0; i < parts.length; i++) {
-        const segPath = '/' + parts.slice(0, i + 1).join('/')
-        let node = nodeMap.get(segPath)
-
-        if (!node) {
-          const isLast = i === parts.length - 1
-          node = {
-            path: segPath,
-            name: parts[i],
-            type: isLast ? 'file' : 'directory',
-            size: isLast ? (entry.value?.blob?.byteLength ?? 0) : 0,
-            updatedAt: isLast ? (entry.value?.metadata?.mtime ?? 0) : 0,
-            children: isLast ? undefined : [],
-          }
-          nodeMap.set(segPath, node)
-          current.children = current.children ?? []
-          current.children.push(node)
-        }
-
-        if (node.type === 'directory') {
-          current = node
-        }
+    return new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, timeoutMs)
+      const onConn = () => {
+        clearTimeout(timer)
+        this.hyper.swarm.off('connection', onConn)
+        resolve()
       }
-    }
+      this.hyper.swarm.once('connection', onConn)
+    })
+  }
 
-    return root
+  private async buildTree(drive: Hyperdrive, prefix: string, wait = false): Promise<object> {
+    const entries = await this.driveQuery.list(prefix, wait, drive)
+    return buildTreeFromEntries(entries as any)
   }
 
   private toResponseDto(record: DriveRecord): DriveResponseDto {

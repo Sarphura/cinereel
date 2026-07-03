@@ -2,6 +2,7 @@ import type Hyperdrive from 'hyperdrive'
 import type { HyperdriveEntry } from 'hyperdrive'
 import { Injectable } from '@nestjs/common'
 import { HyperService } from '@/modules/base/hyper/hyper.service'
+import { isBlockNotAvailableError } from '../exception/drive.exception'
 
 /**
  * DriveQueryService
@@ -19,21 +20,7 @@ import { HyperService } from '@/modules/base/hyper/hyper.service'
 export class DriveQueryService {
   constructor(private readonly hyper: HyperService) {}
 
-  // ---------------------------------------------------------------------------
-  // 错误判断工具
-  // ---------------------------------------------------------------------------
 
-  /**
-   * 判断是否为远端节点数据块暂不可用的错误（对等节点尚未同步）。
-   */
-  isBlockNotAvailableError(error: unknown): boolean {
-    return (
-      !!error &&
-      typeof error === 'object' &&
-      'code' in error &&
-      (error as Record<string, unknown>).code === 'BLOCK_NOT_AVAILABLE'
-    )
-  }
 
   // ---------------------------------------------------------------------------
   // 存在性检测
@@ -58,7 +45,7 @@ export class DriveQueryService {
       const entry = await target.entry(path, { wait: false })
       return entry !== null && entry !== undefined
     } catch (error) {
-      if (this.isBlockNotAvailableError(error)) {
+      if (isBlockNotAvailableError(error)) {
         return false
       }
       throw error
@@ -89,7 +76,7 @@ export class DriveQueryService {
       const buffer = await target.get(path, { wait: false })
       return buffer ?? null
     } catch (error) {
-      if (this.isBlockNotAvailableError(error)) {
+      if (isBlockNotAvailableError(error)) {
         return null
       }
       throw error
@@ -144,7 +131,7 @@ export class DriveQueryService {
       }
       return await target.entry(path, { wait })
     } catch (error) {
-      if (this.isBlockNotAvailableError(error)) {
+      if (isBlockNotAvailableError(error)) {
         return null
       }
       throw error
@@ -182,7 +169,7 @@ export class DriveQueryService {
         entries.push(entry)
       }
     } catch (error) {
-      if (this.isBlockNotAvailableError(error)) {
+      if (isBlockNotAvailableError(error)) {
         return []
       }
       throw error
@@ -223,7 +210,7 @@ export class DriveQueryService {
         }
       }
     } catch (error) {
-      if (this.isBlockNotAvailableError(error)) {
+      if (isBlockNotAvailableError(error)) {
         return
       }
       throw error

@@ -20,6 +20,12 @@ export interface DriveRecord {
   remark?: string
   /** 是否为本地 owned drive（true=publish, false=subscribed） */
   isLocal: boolean
+  /**
+   * Corestore 命名空间（仅本地 drive 有此字段）。
+   * 用于应用重启后通过 store.namespace(namespace) 重新打开同一个 Drive。
+   * 使用 UUID v4 生成，保证唯一性。
+   */
+  namespace?: string
   createdAt: number
   updatedAt: number
 }

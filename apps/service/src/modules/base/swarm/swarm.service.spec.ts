@@ -10,6 +10,7 @@ const fakeDriveInstance = {
   update: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
   discoveryKey: Buffer.from('d'.repeat(64), 'hex'),
+  key: Buffer.from('e'.repeat(64), 'hex'),
 }
 vi.mock('hyperdrive', () => {
   const MockHyperdrive = vi.fn().mockImplementation(function () {
@@ -44,6 +45,7 @@ describe('SwarmService', () => {
         key: Buffer.from('b'.repeat(64), 'hex'),
       },
       driveKey: 'b'.repeat(64),
+      getAllLocalDrives: vi.fn().mockReturnValue(new Map()),
     }
 
     const module: TestingModule = await Test.createTestingModule({
@@ -87,11 +89,40 @@ describe('SwarmService', () => {
   })
 
   // ---------------------------------------------------------------------------
-  // announce()
+  // announceLocalDrive()
+  // ---------------------------------------------------------------------------
+
+  describe('announceLocalDrive()', () => {
+    it('应该调用 swarm.join 并传入指定 drive 的 discoveryKey', async () => {
+      const fakeDrive = { discoveryKey: Buffer.from('c'.repeat(64), 'hex') } as any
+      await service.announceLocalDrive(fakeDrive)
+
+      expect(hyperServiceMock.swarm.join).toHaveBeenCalledWith(fakeDrive.discoveryKey)
+    })
+
+    it('flush=true 时应等待 discovery.flushed()', async () => {
+      const fakeDrive = { discoveryKey: Buffer.from('c'.repeat(64), 'hex') } as any
+      fakeDiscovery.flushed.mockClear()
+      await service.announceLocalDrive(fakeDrive, true)
+
+      expect(fakeDiscovery.flushed).toHaveBeenCalled()
+    })
+
+    it('flush=false 时不应调用 discovery.flushed()', async () => {
+      const fakeDrive = { discoveryKey: Buffer.from('c'.repeat(64), 'hex') } as any
+      fakeDiscovery.flushed.mockClear()
+      await service.announceLocalDrive(fakeDrive, false)
+
+      expect(fakeDiscovery.flushed).not.toHaveBeenCalled()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // announce()（向后兼容 — 宣告主 Drive）
   // ---------------------------------------------------------------------------
 
   describe('announce()', () => {
-    it('应该调用 swarm.join 并传入本地 drive 的 discoveryKey', async () => {
+    it('应该调用 swarm.join 并传入主 drive 的 discoveryKey', async () => {
       await service.announce()
 
       expect(hyperServiceMock.swarm.join).toHaveBeenCalledWith(
@@ -100,6 +131,7 @@ describe('SwarmService', () => {
     })
 
     it('flush=true 时应等待 discovery.flushed()', async () => {
+      fakeDiscovery.flushed.mockClear()
       await service.announce(true)
 
       expect(fakeDiscovery.flushed).toHaveBeenCalled()
@@ -110,6 +142,31 @@ describe('SwarmService', () => {
       await service.announce(false)
 
       expect(fakeDiscovery.flushed).not.toHaveBeenCalled()
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // announceAll()
+  // ---------------------------------------------------------------------------
+
+  describe('announceAll()', () => {
+    it('无额外本地 Drive 时只宣告主 Drive', async () => {
+      hyperServiceMock.getAllLocalDrives.mockReturnValue(new Map())
+      await service.announceAll(false)
+
+      expect(hyperServiceMock.swarm.join).toHaveBeenCalledTimes(1)
+      expect(hyperServiceMock.swarm.join).toHaveBeenCalledWith(
+        hyperServiceMock.drive.discoveryKey,
+      )
+    })
+
+    it('有额外本地 Drive 时应宣告所有 Drive', async () => {
+      const extraDrive = { discoveryKey: Buffer.from('f'.repeat(64), 'hex'), key: Buffer.from('f'.repeat(64), 'hex') } as any
+      hyperServiceMock.getAllLocalDrives.mockReturnValue(new Map([['ns-1', extraDrive]]))
+
+      await service.announceAll(false)
+
+      expect(hyperServiceMock.swarm.join).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -156,6 +213,29 @@ describe('SwarmService', () => {
   describe('localPublicKey', () => {
     it('应返回 HyperService.driveKey 的值', () => {
       expect(service.localPublicKey).toBe('b'.repeat(64))
+    })
+  })
+
+  // ---------------------------------------------------------------------------
+  // localPublicKeys
+  // ---------------------------------------------------------------------------
+
+  describe('localPublicKeys', () => {
+    it('无额外本地 Drive 时应只包含主 Drive 的 key', () => {
+      hyperServiceMock.getAllLocalDrives.mockReturnValue(new Map())
+
+      const keys = service.localPublicKeys
+      expect(keys).toEqual(['b'.repeat(64)])
+    })
+
+    it('有额外本地 Drive 时应包含所有 key', () => {
+      const extraDrive = { key: Buffer.from('f'.repeat(64), 'hex') } as any
+      hyperServiceMock.getAllLocalDrives.mockReturnValue(new Map([['ns-1', extraDrive]]))
+
+      const keys = service.localPublicKeys
+      expect(keys).toContain('b'.repeat(64))
+      expect(keys).toContain('f'.repeat(64))
+      expect(keys).toHaveLength(2)
     })
   })
 })

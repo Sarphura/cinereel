@@ -18,17 +18,35 @@ export const TaskPanel = () => {
   const downloadJobsQuery = useQuery({
     queryKey: ['download-jobs'],
     queryFn: listDownloadJobs,
-    refetchInterval: 1000,
+    refetchInterval: (query) => {
+      const jobs = query.state.data ?? [];
+      const hasActive = jobs.some(
+        (job) => job.status === 'queued' || job.status === 'downloading',
+      );
+      return hasActive ? 1000 : false;
+    },
   });
   const mountJobsQuery = useQuery({
     queryKey: ['mount-jobs'],
     queryFn: listMountJobs,
-    refetchInterval: 1000,
+    refetchInterval: (query) => {
+      const jobs = query.state.data ?? [];
+      const hasActive = jobs.some(
+        (job) => job.status === 'queued' || job.status === 'mounting',
+      );
+      return hasActive ? 1000 : false;
+    },
   });
   const scanJobsQuery = useQuery({
     queryKey: ['scan-jobs'],
     queryFn: listScanJobs,
-    refetchInterval: 1000,
+    refetchInterval: (query) => {
+      const jobs = query.state.data ?? [];
+      const hasActive = jobs.some(
+        (job) => job.status === 'queued' || job.status === 'scanning',
+      );
+      return hasActive ? 1000 : false;
+    },
   });
 
   useEffect(() => {
