@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { IconUpload } from '../../../components/icons/Icons';
 import { FormDialog } from '../../../components/ui/FormDialog';
-import { DriveSummaryHeader } from '../../../shared/components/drive-explorer/DriveSummaryHeader';
-import type { DriveRecord } from '../../../shared/types/drive';
+import { DriveSummaryHeader } from '../../drive/components/DriveSummaryHeader';
+import type { DriveRecord } from '../../drive/types';
 
 interface PublishDetailHeaderProps {
   drive: DriveRecord | null;
   submitting: boolean;
+  defaultMountPath?: string | null;
   onMount: (targetPath: string) => Promise<void>;
 }
 
-export function PublishDetailHeader({ drive, submitting, onMount }: PublishDetailHeaderProps) {
+export function PublishDetailHeader({ drive, submitting, defaultMountPath, onMount }: PublishDetailHeaderProps) {
   const [showMountDialog, setShowMountDialog] = useState(false);
   const [mountPath, setMountPath] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export function PublishDetailHeader({ drive, submitting, onMount }: PublishDetai
       <div className="flex items-center gap-2">
         <button
           onClick={() => {
-            setMountPath('');
+            setMountPath(defaultMountPath ?? '');
             setError(null);
             setShowMountDialog(true);
           }}

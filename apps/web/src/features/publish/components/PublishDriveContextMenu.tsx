@@ -1,7 +1,7 @@
 import React from 'react';
 import { IconPencil, IconTrash } from '../../../components/icons/Icons';
 import { ContextMenu } from '../../../components/ui/ContextMenu';
-import type { DriveRecord } from '../../../shared/types/drive';
+import type { DriveRecord } from '../../drive/types';
 
 export interface DriveContextMenuState {
   drive: DriveRecord;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Card, CardFooter } from '@heroui/react';
 import type { MovieRecord } from '../types';
-import { buildPreviewUrl } from '../../../shared/utils/drive';
+import { buildPreviewUrl } from '../../drive/utils';
 
 interface MovieCardProps {
   movie: MovieRecord;

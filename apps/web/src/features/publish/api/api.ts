@@ -1,8 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
 import { requestJson } from '../../../lib/api';
 import { queryClient } from '../../../lib/queryClient';
-import type { DriveContentType, DriveExplorerLoaderData, DriveRecord, ResourceTreeNode } from '../../../shared/types/drive';
-import { filterDrivesByScope, resolveSelectedDriveKey } from '../../../shared/utils/drive';
+import type { DriveContentType, DriveExplorerLoaderData, DriveRecord, ResourceTreeNode } from '../../drive/types';
+import { filterDrivesByScope, resolveSelectedDriveKey } from '../../drive/utils';
 
 function normalizeDriveRecord(drive: DriveRecord): DriveRecord {
   return {
@@ -88,4 +88,53 @@ export async function deletePublishedDrive(driveKey: string) {
   await requestJson(`/api/drives/${driveKey}`, {
     method: 'DELETE',
   });
+}
+
+export async function moveDriveFile(driveKey: string, from: string, to: string) {
+  await requestJson(`/api/drives/${driveKey}/files/move`, {
+    method: 'POST',
+    body: JSON.stringify({ from, to }),
+  });
+}
+
+export async function copyDriveFile(driveKey: string, from: string, to: string) {
+  await requestJson(`/api/drives/${driveKey}/files/copy`, {
+    method: 'POST',
+    body: JSON.stringify({ from, to }),
+  });
+}
+
+export async function createDriveFolder(driveKey: string, path: string) {
+  await requestJson(`/api/drives/${driveKey}/files/folder`, {
+    method: 'POST',
+    body: JSON.stringify({ path }),
+  });
+}
+
+export async function deleteDriveFile(driveKey: string, path: string) {
+  await requestJson(`/api/drives/${driveKey}/files`, {
+    method: 'DELETE',
+    body: JSON.stringify({ path }),
+  });
+}
+
+/**
+ * 批量执行文件操作，逐个串行调用单文件 API 以隔离单项失败，
+ * 并在结束后返回失败列表供调用方展示汇总错误。
+ */
+export async function runBatchFileOperation<T>(
+  items: T[],
+  operation: (item: T) => Promise<void>,
+): Promise<{ failures: Array<{ item: T; error: string }> }> {
+  const failures: Array<{ item: T; error: string }> = [];
+
+  for (const item of items) {
+    try {
+      await operation(item);
+    } catch (err) {
+      failures.push({ item, error: err instanceof Error ? err.message : '操作失败' });
+    }
+  }
+
+  return { failures };
 }

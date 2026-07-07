@@ -11,7 +11,7 @@ import {
   savePublishedDriveRemark,
 } from '../api/api';
 import { mountDrive } from '../../jobs/api';
-import type { DriveContentType, DriveRecord, ResourceTreeNode } from '../../../shared/types/drive';
+import type { DriveContentType, DriveRecord, ResourceTreeNode } from '../../drive/types';
 
 interface UsePublishDriveActionsOptions {
   drives: DriveRecord[];

@@ -1,7 +1,7 @@
-import type { DriveContentType, DriveRecord, DriveScope, ResourceTreeNode } from '../types/drive';
+import type { DriveContentType, DriveRecord, DriveScope, ResourceTreeNode } from './types';
+import { API_BASE_URL } from '../../lib/api';
 
 export type PreviewKind = 'image' | 'pdf' | 'audio' | 'video';
-import { API_BASE_URL } from '../../lib/api';
 
 const STREAMING_VIDEO_PREVIEW_EXTENSIONS = new Set(['mkv']);
 
@@ -94,4 +94,9 @@ export function resolveSelectedDriveKey(drives: DriveRecord[], requestedDriveKey
   }
 
   return drives[0]?.driveKey ?? null;
+}
+
+/** 判断该节点是否可下载：尚未同步到本地目录的文件才需要下载。 */
+export function isDriveNodeDownloadable(node: ResourceTreeNode) {
+  return !node.localDirPath;
 }

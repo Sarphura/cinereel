@@ -1,7 +1,7 @@
 import React from 'react';
-import PublishedKeyItem from './PublishedKeyItem';
-import type { DriveRecord } from '../../types/drive';
-import { formatBytes, formatDate } from '../../utils/drive';
+import DriveListItem from './DriveListItem';
+import type { DriveRecord } from '../types';
+import { formatBytes, formatDate } from '../utils';
 
 export type DriveListSidebarItemMeta = {
   title?: string;
@@ -40,7 +40,7 @@ export function DriveListSidebar({
             const itemMeta = getItemMeta?.(drive);
 
             return (
-              <PublishedKeyItem
+              <DriveListItem
                 key={drive.driveKey}
                 active={drive.driveKey === selectedDriveKey}
                 title={itemMeta?.title ?? drive.name}

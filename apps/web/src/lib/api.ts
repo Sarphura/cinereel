@@ -15,7 +15,14 @@ export async function requestJson<T>(pathname: string, init?: RequestInit): Prom
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(payload.error ?? '请求失败。');
+    // Nest 默认异常响应体使用 `message` 字段承载具体错误信息
+    // （class-validator 校验失败时为字符串数组），`error` 通常只是状态短语。
+    const message = typeof payload.message === 'string'
+      ? payload.message
+      : Array.isArray(payload.message)
+        ? payload.message.join('; ')
+        : undefined;
+    throw new Error(message ?? payload.error ?? '请求失败。');
   }
 
   return payload as T;

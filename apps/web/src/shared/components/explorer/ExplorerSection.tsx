@@ -1,18 +1,33 @@
 import React, { useState } from 'react';
+import type { ColumnDef } from '@tanstack/react-table';
 import { IconRefresh } from '../../../components/icons/Icons';
-import { ResourceTree } from './ResourceTree';
-import { DrivePreviewPanel, type PreviewLoadState, type PreviewState } from './preview';
-import type { ResourceTreeNode } from '../../types/drive';
-import { ExplorerTreeHeader } from './DriveExplorerChrome';
+import { ExplorerTreeHeader } from './ExplorerChrome';
+import { ExplorerTree } from './ExplorerTree';
+import { ExplorerPreviewPanel, type ExplorerPreviewRenderer, type ExplorerPreviewRendererRegistry, type ExplorerPreviewState, type PreviewLoadState } from './ExplorerPreviewPanel';
+import type { FileExplorerColumnOptions } from './columns';
+import type { ExplorerColumnLayoutConfig, ExplorerNode, ExplorerNodeIconRenderer } from './types';
 
-export function DriveResourceSection({
+export function ExplorerSection<TNode extends ExplorerNode, TPreview extends ExplorerPreviewState>({
   resourceTree,
+  buildColumns,
+  columnLayout,
   refreshing,
   onRefresh,
   onPreviewNode,
   isPreviewableNode,
+  isDownloadable,
   onDownloadNode,
   onContextMenuNode,
+  onSelectNode,
+  selectedNodePath,
+  onRenameNode,
+  onMoveNode,
+  onCopyNode,
+  onCreateFolder,
+  onDeleteNode,
+  getRenameDescription,
+  renderNodeIcon,
+  renderNodeBadge,
   showTreeControls = false,
   preview,
   previewLabel,
@@ -20,21 +35,40 @@ export function DriveResourceSection({
   previewError,
   onClosePreview,
   onPreviewError,
+  renderPreviewContent,
+  previewRenderers,
+  requiresStreamingPlayer,
 }: {
-  resourceTree: ResourceTreeNode | null;
+  resourceTree: TNode | null;
+  buildColumns?: (options: FileExplorerColumnOptions<TNode>) => ColumnDef<TNode, any>[];
+  columnLayout: ExplorerColumnLayoutConfig;
   refreshing: boolean;
   onRefresh: () => void | Promise<void>;
-  onPreviewNode: (node: ResourceTreeNode) => void;
-  isPreviewableNode: (node: ResourceTreeNode) => boolean;
-  onDownloadNode?: (node: ResourceTreeNode) => void;
-  onContextMenuNode?: (event: React.MouseEvent<HTMLElement>, node: ResourceTreeNode) => void;
+  onPreviewNode: (node: TNode) => void;
+  isPreviewableNode: (node: TNode) => boolean;
+  isDownloadable?: (node: TNode) => boolean;
+  onDownloadNode?: (node: TNode) => void;
+  onContextMenuNode?: (event: React.MouseEvent<HTMLElement>, node: TNode) => void;
+  onSelectNode?: (node: TNode) => void;
+  selectedNodePath?: string | null;
+  onRenameNode?: (node: TNode, newPath: string) => Promise<void>;
+  onMoveNode?: (node: TNode, targetDir: TNode) => Promise<void>;
+  onCopyNode?: (node: TNode, targetDir: TNode) => Promise<void>;
+  onCreateFolder?: (parentDir: TNode, name: string) => Promise<void>;
+  onDeleteNode?: (node: TNode) => Promise<void>;
+  getRenameDescription?: (node: TNode) => string | undefined;
+  renderNodeIcon?: ExplorerNodeIconRenderer<TNode>;
+  renderNodeBadge?: (node: TNode) => React.ReactNode;
   showTreeControls?: boolean;
-  preview: PreviewState | null;
+  preview: TPreview | null;
   previewLabel: string;
   previewLoadState: PreviewLoadState;
   previewError: string | null;
   onClosePreview: () => void;
   onPreviewError: (message: string) => void;
+  renderPreviewContent?: ExplorerPreviewRenderer<TPreview>;
+  previewRenderers?: ExplorerPreviewRendererRegistry<TPreview>;
+  requiresStreamingPlayer?: (name: string) => boolean;
 }) {
   const [expandAllTrigger, setExpandAllTrigger] = useState(0);
   const [collapseAllTrigger, setCollapseAllTrigger] = useState(0);
@@ -78,25 +112,41 @@ export function DriveResourceSection({
 
       <div className="flex-1 min-h-0 flex">
         <div className={preview ? 'flex-1 min-w-0 border-r border-[#27272a]' : 'flex-1 min-w-0'}>
-          <ResourceTree
+          <ExplorerTree
             root={resourceTree}
+            buildColumns={buildColumns}
+            columnLayout={columnLayout}
             expandAllTrigger={showTreeControls ? expandAllTrigger : undefined}
             collapseAllTrigger={showTreeControls ? collapseAllTrigger : undefined}
+            isDownloadable={isDownloadable}
             onDownloadNode={onDownloadNode}
             onPreviewNode={onPreviewNode}
             isPreviewableNode={isPreviewableNode}
             onContextMenuNode={onContextMenuNode}
+            onSelectNode={onSelectNode}
+            selectedNodePath={selectedNodePath}
+            onRenameNode={onRenameNode}
+            onMoveNode={onMoveNode}
+            onCopyNode={onCopyNode}
+            onCreateFolder={onCreateFolder}
+            onDeleteNode={onDeleteNode}
+            getRenameDescription={getRenameDescription}
+            renderNodeIcon={renderNodeIcon}
+            renderNodeBadge={renderNodeBadge}
           />
         </div>
 
         {preview ? (
-          <DrivePreviewPanel
+          <ExplorerPreviewPanel
             preview={preview}
             previewLabel={previewLabel}
             previewLoadState={previewLoadState}
             previewError={previewError}
             onClose={onClosePreview}
             onPreviewError={onPreviewError}
+            renderContent={renderPreviewContent as ExplorerPreviewRenderer | undefined}
+            renderers={previewRenderers as ExplorerPreviewRendererRegistry | undefined}
+            requiresStreamingPlayer={requiresStreamingPlayer}
           />
         ) : null}
       </div>

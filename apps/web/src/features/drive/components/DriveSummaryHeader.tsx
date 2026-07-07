@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { IconPencil } from '../../../components/icons/Icons';
-import type { DriveRecord } from '../../types/drive';
-import { formatBytes, formatDate, getDriveTypeLabel } from '../../utils/drive';
+import type { DriveRecord } from '../types';
+import { formatBytes, formatDate, getDriveTypeLabel } from '../utils';
 
 export function DriveSummaryHeader({
   drive,

@@ -3,18 +3,19 @@ import { getRouteApi } from '@tanstack/react-router';
 import { IconPlus } from '../../../components/icons/Icons';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { FormDialog } from '../../../components/ui/FormDialog';
-import { ExplorerDetailHeader, ExplorerPage, ExplorerPanel } from '../../../shared/components/drive-explorer/DriveExplorerChrome';
-import { DriveListSidebar } from '../../../shared/components/drive-explorer/DriveListSidebar';
-import { DriveRemarkDialog, type DriveRemarkEditorState } from '../../../shared/components/drive-explorer/DriveRemarkDialog';
-import { DriveResourceSection } from '../../../shared/components/drive-explorer/DriveResourceSection';
-import { useDriveSearchSync } from '../../../shared/hooks/drive';
-import { useDrivePreview } from '../../../shared/components/drive-explorer/preview';
-import { getPreviewKind } from '../../../shared/utils/drive';
-import type { DriveRecord, ResourceTreeNode } from '../../../shared/types/drive';
+import { ExplorerDetailHeader, ExplorerPage, ExplorerPanel } from '../../../shared/components/explorer/ExplorerChrome';
+import { DriveListSidebar } from '../../drive/components/DriveListSidebar';
+import { DriveRemarkDialog, type DriveRemarkEditorState } from '../../drive/components/DriveRemarkDialog';
+import { useDriveSearchSync } from '../../drive/hooks/useDriveSearchSync';
+import { useDrivePreview } from '../../drive/hooks/useDrivePreview';
+import { getPreviewKind, requiresStreamingVideoPreview } from '../../drive/utils';
+import type { DriveRecord, ResourceTreeNode } from '../../drive/types';
 import { usePublishDriveActions } from '../hooks/usePublishDriveActions';
+import { copyDriveFile, createDriveFolder, deleteDriveFile, moveDriveFile } from '../api/api';
 import { CreatePublishDriveDialog } from '../components/CreatePublishDriveDialog';
 import { PublishDriveContextMenu, type DriveContextMenuState } from '../components/PublishDriveContextMenu';
 import { PublishDetailHeader } from '../components/PublishDetailHeader';
+import { PublishDriveExplorer } from '../explorer/PublishDriveExplorer';
 
 const routeApi = getRouteApi('/publish');
 
@@ -34,7 +35,7 @@ export function PublishRoutePending() {
           </div>
           <div className="space-y-3 px-4 py-4">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="rounded-lg border border-white/6 bg-white/[0.02] px-3 py-3">
+              <div key={index} className="rounded-lg border border-white/6 bg-white/2 px-3 py-3">
                 <div className="h-3 w-24 rounded bg-white/7" />
                 <div className="mt-2 h-3 w-16 rounded bg-white/5" />
                 <div className="mt-3 h-2 w-full rounded bg-white/5" />
@@ -92,6 +93,9 @@ export function PublishRouteView() {
   const selectedDrive = drives.find((drive) => drive.driveKey === selectedDriveKey) ?? null;
   const preview = useDrivePreview(selectedDriveKey);
 
+  // 当前 tree 中选中的节点（用于确定默认挂载路径）
+  const [selectedNode, setSelectedNode] = useState<ResourceTreeNode | null>(null);
+
   // Dialog open states
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showRenameDialog, setShowRenameDialog] = useState(false);
@@ -108,6 +112,16 @@ export function PublishRouteView() {
     replaceAndInvalidate,
     onClosePreview: preview.closePreview,
   });
+
+  // 切换 Drive 时重置选中节点
+  const prevDriveKeyRef = React.useRef(selectedDriveKey);
+  if (prevDriveKeyRef.current !== selectedDriveKey) {
+    prevDriveKeyRef.current = selectedDriveKey;
+    setSelectedNode(null);
+  }
+
+  // 默认挂载路径：优先用节点的 localDirPath（上次挂载来源目录），回退到节点在 drive 内的 path
+  const defaultMountPath = selectedNode?.localDirPath ?? null;
 
   const openRemarkEditor = (drive: DriveRecord) => {
     setRemarkEditor({ driveKey: drive.driveKey, label: drive.name, remark: drive.remark ?? '' });
@@ -140,6 +154,39 @@ export function PublishRouteView() {
     }
 
     actions.setError(null);
+  };
+
+  const handleRenameNode = async (node: ResourceTreeNode, newPath: string) => {
+    if (!selectedDriveKey) return;
+    await moveDriveFile(selectedDriveKey, node.path, newPath);
+    await actions.handleRefresh(selectedDriveKey);
+  };
+
+  const handleMoveNode = async (node: ResourceTreeNode, targetDir: ResourceTreeNode) => {
+    if (!selectedDriveKey) return;
+    const newPath = targetDir.path === '/' ? `/${node.name}` : `${targetDir.path}/${node.name}`;
+    await moveDriveFile(selectedDriveKey, node.path, newPath);
+    await actions.handleRefresh(selectedDriveKey);
+  };
+
+  const handleCopyNode = async (node: ResourceTreeNode, targetDir: ResourceTreeNode) => {
+    if (!selectedDriveKey) return;
+    const newPath = targetDir.path === '/' ? `/${node.name}` : `${targetDir.path}/${node.name}`;
+    await copyDriveFile(selectedDriveKey, node.path, newPath);
+    await actions.handleRefresh(selectedDriveKey);
+  };
+
+  const handleCreateFolder = async (parentDir: ResourceTreeNode, name: string) => {
+    if (!selectedDriveKey) return;
+    const path = parentDir.path === '/' ? `/${name}` : `${parentDir.path}/${name}`;
+    await createDriveFolder(selectedDriveKey, path);
+    await actions.handleRefresh(selectedDriveKey);
+  };
+
+  const handleDeleteNode = async (node: ResourceTreeNode) => {
+    if (!selectedDriveKey) return;
+    await deleteDriveFile(selectedDriveKey, node.path);
+    await actions.handleRefresh(selectedDriveKey);
   };
 
   return (
@@ -189,16 +236,16 @@ export function PublishRouteView() {
                   <PublishDetailHeader
                     drive={selectedDrive}
                     submitting={actions.submitting}
+                    defaultMountPath={defaultMountPath}
                     onMount={actions.handlePublish}
                   />
                 ) : null}
               </ExplorerDetailHeader>
 
-              <DriveResourceSection
+              <PublishDriveExplorer
                 resourceTree={resourceTree}
                 refreshing={actions.refreshing}
                 onRefresh={() => void actions.handleRefresh(selectedDriveKey)}
-                showTreeControls
                 onPreviewNode={handlePreviewNode}
                 isPreviewableNode={(node) => getPreviewKind(node) !== null}
                 preview={preview.preview}
@@ -210,6 +257,14 @@ export function PublishRouteView() {
                   preview.setPreviewLoadState('failed');
                   preview.setPreviewError(message);
                 }}
+                requiresStreamingPlayer={requiresStreamingVideoPreview}
+                onSelectNode={setSelectedNode}
+                selectedNodePath={selectedNode?.path ?? null}
+                onRenameNode={handleRenameNode}
+                onMoveNode={handleMoveNode}
+                onCopyNode={handleCopyNode}
+                onCreateFolder={handleCreateFolder}
+                onDeleteNode={handleDeleteNode}
               />
             </ExplorerPanel>
           </>

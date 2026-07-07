@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Dialog } from '../../../components/ui/Dialog';
-import type { DriveContentType } from '../../../shared/types/drive';
+import type { DriveContentType } from '../../drive/types';
 
 const DRIVE_TYPE_OPTIONS: Array<{ value: DriveContentType; label: string }> = [
   { value: 'movie', label: '电影' },

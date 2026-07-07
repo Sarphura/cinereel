@@ -174,3 +174,41 @@ export const IconCheck = (props: React.SVGProps<SVGSVGElement>) => (
     <path d="M20 6L9 17l-5-5" />
   </svg>
 );
+
+export const IconMove = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <path d="M7 2V12M7 2L4.5 4.5M7 2L9.5 4.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M2 7H12M2 7L4.5 4.5M2 7L4.5 9.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+
+export const IconCopy = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <rect x="5" y="5" width="7.25" height="7.25" rx="1" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M3.75 9.25H2.75C2.19772 9.25 1.75 8.80228 1.75 8.25V2.75C1.75 2.19772 2.19772 1.75 2.75 1.75H8.25C8.80228 1.75 9.25 2.19772 9.25 2.75V3.75" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const IconScissors = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <circle cx="3.5" cy="3.5" r="1.75" stroke="currentColor" strokeWidth="1.25" />
+    <circle cx="3.5" cy="10.5" r="1.75" stroke="currentColor" strokeWidth="1.25" />
+    <path d="M4.9 4.6L12.25 11.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+    <path d="M4.9 9.4L12.25 2.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+  </svg>
+);
+
+export const IconClipboardPaste = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <path d="M5.25 2.75H8.75C8.75 3.44036 8.19036 4 7.5 4H6.5C5.80964 4 5.25 3.44036 5.25 2.75Z" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M5.25 2.75H3.75C3.19772 2.75 2.75 3.19772 2.75 3.75V11.25C2.75 11.8023 3.19772 12.25 3.75 12.25H10.25C10.8023 12.25 11.25 11.8023 11.25 11.25V3.75C11.25 3.19772 10.8023 2.75 10.25 2.75H8.75" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+    <path d="M5 8L6.3 9.3L9 6.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+export const IconFolderPlus = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg" {...props}>
+    <path d="M1.75 3.5C1.75 2.5335 2.5335 1.75 3.5 1.75H5.25L7 3.5H10.5C11.4665 3.5 12.25 4.2835 12.25 5.25V10.5C12.25 11.4665 11.4665 12.25 10.5 12.25H3.5C2.5335 12.25 1.75 11.4665 1.75 10.5V3.5Z" stroke="currentColor" strokeWidth="1.1" />
+    <path d="M7 6.75V9.75M5.5 8.25H8.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+  </svg>
+);

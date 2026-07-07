@@ -1,8 +1,8 @@
 import { queryOptions } from '@tanstack/react-query';
 import { requestJson } from '../../lib/api';
 import { queryClient } from '../../lib/queryClient';
-import type { DriveContentType, DriveExplorerLoaderData, DriveRecord, ResourceTreeNode } from '../../shared/types/drive';
-import { filterDrivesByScope, resolveSelectedDriveKey } from '../../shared/utils/drive';
+import type { DriveContentType, DriveExplorerLoaderData, DriveRecord, ResourceTreeNode } from '../drive/types';
+import { filterDrivesByScope, resolveSelectedDriveKey } from '../drive/utils';
 
 function normalizeDriveRecord(drive: DriveRecord): DriveRecord {
   return {

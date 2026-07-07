@@ -7,17 +7,17 @@ import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { ContextMenu, type ContextMenuItem } from '../../../components/ui/ContextMenu';
 import { Dialog } from '../../../components/ui/Dialog';
 import { FormDialog } from '../../../components/ui/FormDialog';
-import { ExplorerDetailHeader, ExplorerPage, ExplorerPanel } from '../../../shared/components/drive-explorer/DriveExplorerChrome';
-import { DriveListSidebar } from '../../../shared/components/drive-explorer/DriveListSidebar';
-import { DriveRemarkDialog, type DriveRemarkEditorState } from '../../../shared/components/drive-explorer/DriveRemarkDialog';
-import { DriveResourceSection } from '../../../shared/components/drive-explorer/DriveResourceSection';
-import { DriveSummaryHeader } from '../../../shared/components/drive-explorer/DriveSummaryHeader';
-import { useDriveSearchSync } from '../../../shared/hooks/drive';
+import { ExplorerDetailHeader, ExplorerPage, ExplorerPanel } from '../../../shared/components/explorer/ExplorerChrome';
+import { DriveListSidebar } from '../../drive/components/DriveListSidebar';
+import { DriveRemarkDialog, type DriveRemarkEditorState } from '../../drive/components/DriveRemarkDialog';
+import { DriveSummaryHeader } from '../../drive/components/DriveSummaryHeader';
+import { useDriveSearchSync } from '../../drive/hooks/useDriveSearchSync';
 import { subscribedDriveTreeQueryOptions, subscribedDrivesQueryOptions, addSubscribedDrive, deleteSubscribedDrive, saveSubscribedDriveRemark, refreshSubscribedDriveTree } from '../api';
 import { createDownloadJob, removeDownloadedResource } from '../../downloads/api';
-import { useDrivePreview } from '../../../shared/components/drive-explorer/preview';
-import type { DriveRecord, ResourceTreeNode } from '../../../shared/types/drive';
-import { getPreviewKind } from '../../../shared/utils/drive';
+import { useDrivePreview } from '../../drive/hooks/useDrivePreview';
+import type { DriveRecord, ResourceTreeNode } from '../../drive/types';
+import { getPreviewKind, isDriveNodeDownloadable, requiresStreamingVideoPreview } from '../../drive/utils';
+import { SubscriptionDriveExplorer } from '../explorer/SubscriptionDriveExplorer';
 
 const routeApi = getRouteApi('/subscribed-drives');
 
@@ -440,11 +440,11 @@ export function SubscriptionsRoute() {
                 ) : null}
               </ExplorerDetailHeader>
 
-              <DriveResourceSection
+              <SubscriptionDriveExplorer
                 resourceTree={resourceTree}
                 refreshing={refreshing}
                 onRefresh={handleRefresh}
-                showTreeControls
+                isDownloadable={isDriveNodeDownloadable}
                 onDownloadNode={(node) => {
                   setPendingDownload({ resourcePath: node.path, targetName: node.name });
                   setDownloadTargetDir('');
@@ -469,6 +469,7 @@ export function SubscriptionsRoute() {
                   preview.setPreviewLoadState('failed');
                   preview.setPreviewError(message);
                 }}
+                requiresStreamingPlayer={requiresStreamingVideoPreview}
               />
             </ExplorerPanel>
           </>

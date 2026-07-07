@@ -1,8 +1,8 @@
 import React from 'react';
-import type { DriveContentType } from '../../types/drive';
-import { getDriveTypeLabel } from '../../utils/drive';
+import type { DriveContentType } from '../types';
+import { getDriveTypeLabel } from '../utils';
 
-type PublishedKeyItemProps = {
+type DriveListItemProps = {
   title?: string;
   subtitle?: string;
   subtitlePrefix?: string;
@@ -19,7 +19,7 @@ type PublishedKeyItemProps = {
   titleAction?: React.ReactNode;
 };
 
-const PublishedKeyItem: React.FC<PublishedKeyItemProps> = ({
+const DriveListItem: React.FC<DriveListItemProps> = ({
   title = "订阅源标题",
   subtitle,
   subtitlePrefix = '备注：',
@@ -92,4 +92,4 @@ const PublishedKeyItem: React.FC<PublishedKeyItemProps> = ({
   );
 };
 
-export default PublishedKeyItem;
+export default DriveListItem;
