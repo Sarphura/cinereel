@@ -1,7 +1,14 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common'
 import { ApiTags, ApiOperation } from '@nestjs/swagger'
 import { DriveService } from '../service/drive.service'
-import { CreateDriveDto, UpdateDriveDto } from '../domain/dto/drive.dto'
+import {
+  CreateDriveDto,
+  UpdateDriveDto,
+  MoveFileDto,
+  CopyFileDto,
+  CreateFolderDto,
+  DeleteFileDto,
+} from '../domain/dto/drive.dto'
 
 /**
  * DriveController
@@ -60,5 +67,45 @@ export class DriveController {
   async refreshDriveTree(@Param('driveKey') driveKey: string) {
     const data = await this.driveService.refreshTree(driveKey)
     return { data }
+  }
+
+  @Post(':driveKey/files/move')
+  @ApiOperation({ summary: '移动/重命名 Drive 内的文件或目录（get+put+del）' })
+  async moveFile(
+    @Param('driveKey') driveKey: string,
+    @Body() dto: MoveFileDto,
+  ) {
+    await this.driveService.moveFile(driveKey, dto)
+    return { data: { from: dto.from, to: dto.to } }
+  }
+
+  @Post(':driveKey/files/copy')
+  @ApiOperation({ summary: '复制 Drive 内的文件或目录（get+put）' })
+  async copyFile(
+    @Param('driveKey') driveKey: string,
+    @Body() dto: CopyFileDto,
+  ) {
+    await this.driveService.copyFile(driveKey, dto)
+    return { data: { from: dto.from, to: dto.to } }
+  }
+
+  @Post(':driveKey/files/folder')
+  @ApiOperation({ summary: '在 Drive 内创建新目录' })
+  async createFolder(
+    @Param('driveKey') driveKey: string,
+    @Body() dto: CreateFolderDto,
+  ) {
+    await this.driveService.createFolder(driveKey, dto)
+    return { data: { path: dto.path } }
+  }
+
+  @Delete(':driveKey/files')
+  @ApiOperation({ summary: '删除 Drive 内的文件或目录' })
+  async deleteFile(
+    @Param('driveKey') driveKey: string,
+    @Body() dto: DeleteFileDto,
+  ) {
+    await this.driveService.deleteFile(driveKey, dto)
+    return { data: { path: dto.path } }
   }
 }

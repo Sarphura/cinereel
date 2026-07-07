@@ -112,13 +112,9 @@ export class MountService {
 
       const pubId = randomUUID()
 
-      // 计算 drive 内的挂载根路径：
-      //   - 单文件：直接挂到根目录下（/<filename>）
-      //   - 目录：以 targetPath 为根，保留子目录结构
-      const driveRoot =
-        job.kind === 'directory'
-          ? '/'
-          : '/'
+      // drive 内的挂载根路径始终为根目录；
+      // 子路径由下方 path.relative 逐文件计算，完整保留目录层级
+      const driveRoot = '/'
 
       for (const file of files) {
         update({ currentFilePath: file.absPath })

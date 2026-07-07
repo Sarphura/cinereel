@@ -1,3 +1,5 @@
+import { DRIVE_FOLDER_MARKER_NAME } from './drive-path.util'
+
 export type TreeNode = {
   path: string
   name: string
@@ -37,11 +39,18 @@ export function buildTreeFromEntries(entries: DriveEntry[]): TreeNode {
     let current = root
 
     for (let i = 0; i < parts.length; i++) {
+      const isLast = i === parts.length - 1
+
+      // 空目录占位文件本身不应作为可见节点出现——它的作用仅是让父目录
+      // （已在上一轮迭代中创建）在没有其他真实文件时依然能被列出。
+      if (isLast && parts[i] === DRIVE_FOLDER_MARKER_NAME) {
+        continue
+      }
+
       const segPath = '/' + parts.slice(0, i + 1).join('/')
       let node = nodeMap.get(segPath)
 
       if (!node) {
-        const isLast = i === parts.length - 1
         node = {
           path: segPath,
           name: parts[i],

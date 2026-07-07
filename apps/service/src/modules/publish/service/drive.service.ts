@@ -1,12 +1,29 @@
 import { v4 as uuidv4 } from 'uuid'
-import { Injectable, NotFoundException, Logger, OnModuleInit } from '@nestjs/common'
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException, Logger, OnModuleInit } from '@nestjs/common'
 import type Hyperdrive from 'hyperdrive'
 import { HyperService } from '@/modules/base/hyper/hyper.service'
 import { DriveQueryService } from '@/modules/base/drive/service/drive.query.service'
+import { DriveWriteService } from '@/modules/base/drive/service/drive.write.service'
 import { SwarmService } from '@/modules/base/swarm/swarm.service'
 import { DriveRepository } from '../repository/drive.repository'
-import type { DriveRecord, CreateDriveDto, UpdateDriveDto, DriveResponseDto } from '../domain/dto/drive.dto'
+import type {
+  DriveRecord,
+  CreateDriveDto,
+  UpdateDriveDto,
+  MoveFileDto,
+  CopyFileDto,
+  CreateFolderDto,
+  DeleteFileDto,
+  DriveResponseDto,
+} from '../domain/dto/drive.dto'
 import { buildTreeFromEntries } from '@/modules/common/utils/tree.util'
+import {
+  DRIVE_FOLDER_MARKER_NAME,
+  normalizeDrivePath,
+  isRootPath,
+  isPathWithin,
+  joinDrivePath,
+} from '@/modules/common/utils/drive-path.util'
 
 /**
  * DriveService
@@ -26,6 +43,7 @@ export class DriveService implements OnModuleInit {
   constructor(
     private readonly hyper: HyperService,
     private readonly driveQuery: DriveQueryService,
+    private readonly driveWrite: DriveWriteService,
     private readonly swarm: SwarmService,
     private readonly driveRepo: DriveRepository,
   ) {}
@@ -169,6 +187,150 @@ export class DriveService implements OnModuleInit {
   }
 
   // ---------------------------------------------------------------------------
+  // 文件移动（重命名 / 拖拽移动）
+  // ---------------------------------------------------------------------------
+
+  /**
+   * 将 drive 内的文件或目录从 `from` 路径移动到 `to` 路径。
+   *
+   * - 文件：get(from) → put(to, buf) → del(from)
+   * - 目录：递归遍历子文件，批量 get/put/del
+   *
+   * 注意：Hyperdrive 无原生 rename，移动会产生新的 blob 块，
+   * 订阅者将重新同步被移动的文件内容。
+   */
+  async moveFile(driveKey: string, dto: MoveFileDto): Promise<void> {
+    const record = this.getLocalRecordOrThrow(driveKey)
+
+    const from = normalizeDrivePath(dto.from)
+    const to = normalizeDrivePath(dto.to)
+
+    if (isRootPath(from)) throw new BadRequestException('不能移动根目录')
+    if (from === to) throw new BadRequestException('源路径与目标路径相同')
+    if (isPathWithin(to, from)) throw new BadRequestException('不能将目录移动到其自身子目录中')
+
+    const drive = await this.resolveDrive(record.id)
+    const sourceStatus = await this.resolvePathStatus(drive, from)
+    if (!sourceStatus.exists) throw new NotFoundException(`源路径不存在: ${from}`)
+
+    const destStatus = await this.resolvePathStatus(drive, to)
+    if (destStatus.exists) throw new BadRequestException(`目标路径已存在: ${to}`)
+
+    if (sourceStatus.isDirectory) {
+      // 目录：递归移动所有子文件（含空目录占位文件）
+      const entries = await this.driveQuery.list(`${from}/`, false, drive)
+      for (const entry of entries) {
+        const relPath = entry.key.slice(from.length)
+        const newPath = to + relPath
+        const buf = await drive.get(entry.key, { wait: false })
+        if (buf) {
+          await this.driveWrite.put(newPath, buf, drive)
+          await this.driveWrite.del(entry.key, drive)
+        }
+      }
+    } else {
+      // 单文件
+      const buf = await drive.get(from, { wait: false })
+      if (!buf) throw new NotFoundException(`文件不存在或无法读取: ${from}`)
+      await this.driveWrite.put(to, buf, drive)
+      await this.driveWrite.del(from, drive)
+    }
+
+    this.logger.log(`文件移动完成: ${from} → ${to} [drive=${driveKey}]`)
+  }
+
+  // ---------------------------------------------------------------------------
+  // 文件复制
+  // ---------------------------------------------------------------------------
+
+  /**
+   * 将 drive 内的文件或目录从 `from` 复制到 `to`，源文件保留不变。
+   * 与 moveFile 的区别仅在于不执行 del 步骤。
+   */
+  async copyFile(driveKey: string, dto: CopyFileDto): Promise<void> {
+    const record = this.getLocalRecordOrThrow(driveKey)
+
+    const from = normalizeDrivePath(dto.from)
+    const to = normalizeDrivePath(dto.to)
+
+    if (isRootPath(from)) throw new BadRequestException('不能复制根目录')
+    if (from === to) throw new BadRequestException('源路径与目标路径相同')
+    if (isPathWithin(to, from)) throw new BadRequestException('不能将目录复制到其自身子目录中')
+
+    const drive = await this.resolveDrive(record.id)
+    const sourceStatus = await this.resolvePathStatus(drive, from)
+    if (!sourceStatus.exists) throw new NotFoundException(`源路径不存在: ${from}`)
+
+    const destStatus = await this.resolvePathStatus(drive, to)
+    if (destStatus.exists) throw new BadRequestException(`目标路径已存在: ${to}`)
+
+    if (sourceStatus.isDirectory) {
+      const entries = await this.driveQuery.list(`${from}/`, false, drive)
+      for (const entry of entries) {
+        const relPath = entry.key.slice(from.length)
+        const newPath = to + relPath
+        const buf = await drive.get(entry.key, { wait: false })
+        if (buf) {
+          await this.driveWrite.put(newPath, buf, drive)
+        }
+      }
+    } else {
+      const buf = await drive.get(from, { wait: false })
+      if (!buf) throw new NotFoundException(`文件不存在或无法读取: ${from}`)
+      await this.driveWrite.put(to, buf, drive)
+    }
+
+    this.logger.log(`文件复制完成: ${from} → ${to} [drive=${driveKey}]`)
+  }
+
+  // ---------------------------------------------------------------------------
+  // 目录创建
+  // ---------------------------------------------------------------------------
+
+  /**
+   * 在 drive 内创建一个空目录。
+   *
+   * Hyperdrive 没有原生目录概念，因此通过写入一个隐藏占位文件
+   * （DRIVE_FOLDER_MARKER_NAME）使该目录在文件树中持久可见，
+   * 占位文件本身会在 buildTreeFromEntries 中被过滤，不对用户可见。
+   */
+  async createFolder(driveKey: string, dto: CreateFolderDto): Promise<void> {
+    const record = this.getLocalRecordOrThrow(driveKey)
+
+    const path = normalizeDrivePath(dto.path)
+    if (isRootPath(path)) throw new BadRequestException('不能创建根目录')
+
+    const drive = await this.resolveDrive(record.id)
+    const status = await this.resolvePathStatus(drive, path)
+    if (status.exists) throw new BadRequestException(`路径已存在: ${path}`)
+
+    const markerPath = joinDrivePath(path, DRIVE_FOLDER_MARKER_NAME)
+    await this.driveWrite.put(markerPath, Buffer.alloc(0), drive)
+    this.logger.log(`目录已创建: ${path} [drive=${driveKey}]`)
+  }
+
+  // ---------------------------------------------------------------------------
+  // 文件删除
+  // ---------------------------------------------------------------------------
+
+  /**
+   * 删除 drive 内指定路径的文件或目录（含其所有子内容）。
+   */
+  async deleteFile(driveKey: string, dto: DeleteFileDto): Promise<void> {
+    const record = this.getLocalRecordOrThrow(driveKey)
+
+    const path = normalizeDrivePath(dto.path)
+    if (isRootPath(path)) throw new BadRequestException('不能删除根目录')
+
+    const drive = await this.resolveDrive(record.id)
+    const status = await this.resolvePathStatus(drive, path)
+    if (!status.exists) throw new NotFoundException(`路径不存在: ${path}`)
+
+    await this.driveWrite.delTree(path, drive)
+    this.logger.log(`已删除: ${path} [drive=${driveKey}]`)
+  }
+
+  // ---------------------------------------------------------------------------
   // 内部：供 SubscribedDriveService 调用，保存非本地 drive 元数据
   // ---------------------------------------------------------------------------
 
@@ -187,6 +349,40 @@ export class DriveService implements OnModuleInit {
   // ---------------------------------------------------------------------------
   // 私有工具
   // ---------------------------------------------------------------------------
+
+  /**
+   * 查找 driveKey 对应的记录，并确保其为本地 owned drive。
+   * 文件写操作（创建/删除/移动/复制）仅允许作用于本地 drive。
+   */
+  private getLocalRecordOrThrow(driveKey: string): DriveRecord {
+    const record = this.driveRepo.findById(driveKey)
+    if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
+    if (!record.isLocal) throw new ForbiddenException('该操作仅支持本地 Drive')
+    return record
+  }
+
+  /**
+   * 判断路径在 drive 中的存在状态与类型。
+   *
+   * 通过 `${path}/` 前缀列举子条目判断是否为目录，避免 `/foo` 前缀
+   * 误匹配 `/foobar` 等同名前缀路径；若无子条目再检查是否为单个文件条目。
+   */
+  private async resolvePathStatus(
+    drive: Hyperdrive,
+    path: string,
+  ): Promise<{ exists: boolean; isDirectory: boolean }> {
+    const childEntries = await this.driveQuery.list(`${path}/`, false, drive)
+    if (childEntries.length > 0) {
+      return { exists: true, isDirectory: true }
+    }
+
+    const entry = await this.driveQuery.getEntry(path, false, drive)
+    if (entry) {
+      return { exists: true, isDirectory: false }
+    }
+
+    return { exists: false, isDirectory: false }
+  }
 
   /**
    * 解析指定 driveKey 对应的 Hyperdrive 实例。

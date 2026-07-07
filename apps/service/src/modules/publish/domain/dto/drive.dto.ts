@@ -57,6 +57,44 @@ export class UpdateDriveDto {
   remark?: string | null
 }
 
+export class MoveFileDto {
+  @ApiProperty({ description: 'Drive 内的源路径', example: '/old/name.mkv' })
+  @IsString()
+  @IsNotEmpty()
+  from: string
+
+  @ApiProperty({ description: 'Drive 内的目标路径', example: '/new/name.mkv' })
+  @IsString()
+  @IsNotEmpty()
+  to: string
+}
+
+export class CopyFileDto {
+  @ApiProperty({ description: 'Drive 内的源路径', example: '/movies/a.mkv' })
+  @IsString()
+  @IsNotEmpty()
+  from: string
+
+  @ApiProperty({ description: 'Drive 内的目标路径', example: '/movies/copy-of-a.mkv' })
+  @IsString()
+  @IsNotEmpty()
+  to: string
+}
+
+export class CreateFolderDto {
+  @ApiProperty({ description: '要创建的 drive 内目录路径', example: '/movies/新建文件夹' })
+  @IsString()
+  @IsNotEmpty()
+  path: string
+}
+
+export class DeleteFileDto {
+  @ApiProperty({ description: '要删除的 drive 内路径（文件或目录）', example: '/movies/old.mkv' })
+  @IsString()
+  @IsNotEmpty()
+  path: string
+}
+
 // ---------------------------------------------------------------------------
 // Response DTOs（与前端 DriveRecord 类型对齐）
 // ---------------------------------------------------------------------------
