@@ -161,11 +161,12 @@ export class DriveQueryService {
       if (wait) {
         await target.update()
       }
-      // 注意：list() 的 options.wait 控制的是「逐 block 网络等待」行为，
-      // 若传入 wait: true，遍历每一条 entry 时都会阻塞等待网络数据块到来，
-      // 导致 for-await 循环永远无法结束（Swagger 请求 loading 的根本原因）。
-      // 同步等待已由上方 update() 统一处理，此处始终传 false。
-      for await (const entry of target.list(prefix, { wait: false })) {
+      // options.wait 控制「逐 block 网络等待」：
+      // - 本地 drive（wait=false）：所有 block 都在本地，无需等待，遍历立即完成。
+      // - 远端 drive（wait=true）：首次读取时 hyperbee metadata 的 block 尚未复制到
+      //   本地，必须等待其从 peer 拉取，否则会抛 BLOCK_NOT_AVAILABLE 被下方吞成空列表，
+      //   表现为「远端资源树为空」。调用方需先确保已有活跃 peer 连接，避免无限等待。
+      for await (const entry of target.list(prefix, { wait })) {
         entries.push(entry)
       }
     } catch (error) {

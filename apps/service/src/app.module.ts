@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common'
 import { HyperModule } from '@/modules/base/hyper/hyper.module'
+import { parseDhtBootstrapEnv } from '@/modules/base/hyper/hyper.types'
 import { PublishModule } from '@/modules/publish/publish.module'
 import { SubscribeModule } from '@/modules/subscribe/subscribe.module'
 import { DownloadModule } from '@/modules/download/download.module'
@@ -23,6 +24,10 @@ import { DownloadModule } from '@/modules/download/download.module'
       config: {
         storeDir: process.env.CORESTORE_DIR ?? './storage',
         cacheDir: process.env.CINEREEL_CACHE_DIR ?? './cache',
+        swarmPort: process.env.HYPERSWARM_PORT
+          ? Number(process.env.HYPERSWARM_PORT)
+          : undefined,
+        dhtBootstrap: parseDhtBootstrapEnv(process.env.DHT_BOOTSTRAP),
       },
     }),
     PublishModule,

@@ -84,11 +84,6 @@ export class DriveService implements OnModuleInit {
     const record = this.driveRepo.findById(driveKey)
     if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
     const drive = await this.resolveDrive(driveKey)
-    if (!record.isLocal) {
-      // 必须先有活跃连接再 update，否则 update() 立即 resolve 返回空
-      await this.waitForPeer(8000)
-      await drive.update().catch(() => {})
-    }
     return this.buildTree(drive, '/', !record.isLocal)
   }
 
@@ -96,8 +91,9 @@ export class DriveService implements OnModuleInit {
     const record = this.driveRepo.findById(driveKey)
     if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
     const drive = await this.resolveDrive(driveKey)
-    await this.waitForPeer(5000)
-    await drive.update().catch(() => {})
+    await (drive as Hyperdrive & { update(options?: { wait?: boolean }): Promise<boolean> })
+      .update({ wait: !record.isLocal })
+      .catch(() => {})
     return this.buildTree(drive, '/', !record.isLocal)
   }
 
@@ -221,25 +217,6 @@ export class DriveService implements OnModuleInit {
 
     // 远端订阅 drive
     return this.swarm.mountRemoteDrive(driveKey)
-  }
-
-  /**
-   * 等待 Hyperswarm 至少建立一个活跃连接，最多等待 timeoutMs。
-   * 运行时已有连接则立即返回。
-   */
-  private waitForPeer(timeoutMs: number): Promise<void> {
-    if (this.hyper.swarm.connections.size > 0) {
-      return Promise.resolve()
-    }
-    return new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, timeoutMs)
-      const onConn = () => {
-        clearTimeout(timer)
-        this.hyper.swarm.off('connection', onConn)
-        resolve()
-      }
-      this.hyper.swarm.once('connection', onConn)
-    })
   }
 
   private async buildTree(drive: Hyperdrive, prefix: string, wait = false): Promise<object> {

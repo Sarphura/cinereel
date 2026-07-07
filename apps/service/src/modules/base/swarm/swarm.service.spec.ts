@@ -9,6 +9,7 @@ const fakeDriveInstance = {
   ready: vi.fn().mockResolvedValue(undefined),
   update: vi.fn().mockResolvedValue(undefined),
   close: vi.fn().mockResolvedValue(undefined),
+  findingPeers: vi.fn().mockReturnValue(vi.fn()),
   discoveryKey: Buffer.from('d'.repeat(64), 'hex'),
   key: Buffer.from('e'.repeat(64), 'hex'),
 }
@@ -34,11 +35,12 @@ describe('SwarmService', () => {
         once: vi.fn(),
         off: vi.fn(),
         join: vi.fn().mockReturnValue(fakeDiscovery),
-        connections: { size: 1 }, // 模拟已有活跃连接，跳过等待 peer
+        flush: vi.fn().mockResolvedValue(undefined),
+        connections: new Set([{}]),
       },
       store: {
         replicate: vi.fn(),
-        session: vi.fn().mockReturnValue({}), // 模拟 Corestore.session()
+        session: vi.fn().mockReturnValue({}),
       },
       drive: {
         discoveryKey: Buffer.from('a'.repeat(64), 'hex'),
@@ -76,15 +78,21 @@ describe('SwarmService', () => {
       expect(hyperServiceMock.swarm.on).toHaveBeenCalledWith('connection', expect.any(Function))
     })
 
-    it('连接建立时应调用 store.replicate(conn)', () => {
+    it('连接建立时应调用 store.replicate(conn) 一次', () => {
       service.enableReplication()
 
-      // 取出注册的 connection 回调并手动触发
       const connectionHandler = hyperServiceMock.swarm.on.mock.calls[0][1]
       const fakeConn = {}
       connectionHandler(fakeConn)
 
       expect(hyperServiceMock.store.replicate).toHaveBeenCalledWith(fakeConn)
+    })
+
+    it('重复调用 enableReplication 时不应重复注册 listener', () => {
+      service.enableReplication()
+      service.enableReplication()
+
+      expect(hyperServiceMock.swarm.on).toHaveBeenCalledTimes(1)
     })
   })
 
@@ -97,7 +105,10 @@ describe('SwarmService', () => {
       const fakeDrive = { discoveryKey: Buffer.from('c'.repeat(64), 'hex') } as any
       await service.announceLocalDrive(fakeDrive)
 
-      expect(hyperServiceMock.swarm.join).toHaveBeenCalledWith(fakeDrive.discoveryKey)
+      expect(hyperServiceMock.swarm.join).toHaveBeenCalledWith(fakeDrive.discoveryKey, {
+        server: true,
+        client: false,
+      })
     })
 
     it('flush=true 时应等待 discovery.flushed()', async () => {
@@ -127,6 +138,7 @@ describe('SwarmService', () => {
 
       expect(hyperServiceMock.swarm.join).toHaveBeenCalledWith(
         hyperServiceMock.drive.discoveryKey,
+        { server: true, client: false },
       )
     })
 
@@ -157,11 +169,15 @@ describe('SwarmService', () => {
       expect(hyperServiceMock.swarm.join).toHaveBeenCalledTimes(1)
       expect(hyperServiceMock.swarm.join).toHaveBeenCalledWith(
         hyperServiceMock.drive.discoveryKey,
+        { server: true, client: false },
       )
     })
 
     it('有额外本地 Drive 时应宣告所有 Drive', async () => {
-      const extraDrive = { discoveryKey: Buffer.from('f'.repeat(64), 'hex'), key: Buffer.from('f'.repeat(64), 'hex') } as any
+      const extraDrive = {
+        discoveryKey: Buffer.from('f'.repeat(64), 'hex'),
+        key: Buffer.from('f'.repeat(64), 'hex'),
+      } as any
       hyperServiceMock.getAllLocalDrives.mockReturnValue(new Map([['ns-1', extraDrive]]))
 
       await service.announceAll(false)

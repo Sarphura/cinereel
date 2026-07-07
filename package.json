@@ -4,11 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently \"pnpm run dev:ui\" \"pnpm run dev:service\"",
+    "dev": "concurrently -n bootstrap,ui,service \"pnpm run dev:bootstrap\" \"pnpm run dev:ui\" \"pnpm run dev:service\"",
     "dev:peer": "concurrently \"pnpm run dev:ui:peer\" \"pnpm run dev:service:peer\"",
     "build:start": "pnpm run build && pnpm run start",
     "test": "pnpm run test:service",
     
+    "dev:bootstrap": "pnpm --filter @cinereel/service dev:bootstrap",
     "dev:ui": "pnpm --filter ui dev",
     "dev:service": "pnpm --filter @cinereel/service dev",
     "dev:ui:peer": "pnpm --filter ui dev:peer",

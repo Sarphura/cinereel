@@ -6,8 +6,9 @@
   "private": true,
   "main": "dist/main.js",
   "scripts": {
-    "dev": "PORT=3000 CORESTORE_DIR=./test/.tmp/.main-store CINEREEL_CACHE_DIR=./test/.tmp/.cache ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
-    "dev:peer": "PORT=3001 CORESTORE_DIR=./test/.tmp/.peer-store CINEREEL_CACHE_DIR=./test/.tmp/.peer-cache ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
+    "dev:bootstrap": "hyperdht --bootstrap --host 127.0.0.1 --port 49737",
+    "dev": "PORT=3000 HYPERSWARM_PORT=49738 DHT_BOOTSTRAP=127.0.0.1:49737 CORESTORE_DIR=./test/.tmp/.main-store CINEREEL_CACHE_DIR=./test/.tmp/.cache ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
+    "dev:peer": "PORT=3001 HYPERSWARM_PORT=49739 DHT_BOOTSTRAP=127.0.0.1:49737 CORESTORE_DIR=./test/.tmp/.peer-store CINEREEL_CACHE_DIR=./test/.tmp/.peer-cache ts-node-dev --respawn --transpile-only -r tsconfig-paths/register src/main.ts",
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js"
@@ -46,6 +47,7 @@
     "@types/node": "^25.6.0",
     "@types/uuid": "^11.0.0",
     "drizzle-kit": "^0.31.10",
+    "hyperdht": "6.30.0",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "tsconfig-paths": "^4.2.0",

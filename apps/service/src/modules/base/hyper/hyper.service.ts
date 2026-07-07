@@ -47,7 +47,10 @@ export class HyperService implements OnModuleInit, OnModuleDestroy {
 
     this._store = new Corestore(this.config.storeDir)
     this._drive = new Hyperdrive(this._store)
-    this._swarm = new Hyperswarm()
+    this._swarm = new Hyperswarm({
+      ...(this.config.swarmPort !== undefined ? { port: this.config.swarmPort } : {}),
+      ...(this.config.dhtBootstrap?.length ? { bootstrap: this.config.dhtBootstrap } : {}),
+    })
 
     await this._drive.ready()
 
