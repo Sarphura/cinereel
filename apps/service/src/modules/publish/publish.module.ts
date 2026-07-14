@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { DriveBaseModule } from '@/modules/base/drive/drive.base.module'
 import { SwarmModule } from '@/modules/base/swarm/swarm.module'
+import { ProfileModule } from '@/modules/profile/profile.module'
 import { DriveRepository } from './repository/drive.repository'
 import { MountRepository } from './repository/mount.repository'
 import { DriveService } from './service/drive.service'
@@ -25,7 +26,7 @@ import { MountController } from './controller/mount.controller'
  * 导出 DriveService，供 SubscribeModule 共享使用（存取订阅 drive 元数据）。
  */
 @Module({
-  imports: [DriveBaseModule, SwarmModule],
+  imports: [DriveBaseModule, SwarmModule, ProfileModule],
   controllers: [DriveController, MountController],
   providers: [DriveRepository, MountRepository, DriveService, MountService],
   exports: [DriveService],

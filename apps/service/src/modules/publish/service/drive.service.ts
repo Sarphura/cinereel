@@ -5,6 +5,11 @@ import { HyperService } from '@/modules/base/hyper/hyper.service'
 import { DriveQueryService } from '@/modules/base/drive/service/drive.query.service'
 import { DriveWriteService } from '@/modules/base/drive/service/drive.write.service'
 import { SwarmService } from '@/modules/base/swarm/swarm.service'
+import {
+  DRIVE_DESCRIPTOR_PATH,
+  type DriveDescriptor,
+} from '@/modules/common/domain/drive-manifest'
+import { ProfileService } from '@/modules/profile/service/profile.service'
 import { DriveRepository } from '../repository/drive.repository'
 import type {
   DriveRecord,
@@ -33,7 +38,7 @@ import {
  * - 本地 drive 的创建（委托 HyperService.createLocalDrive 以 namespace 派生）
  * - 元数据的读、写、删（委托 DriveRepository）
  * - 文件树读取（委托 DriveQueryService）
- * - subscribed drive 的元数据记录（由 SubscribedDriveService 调用）
+ * - 订阅 drive 的元数据记录（由 SubscribeService 调用）
  * - 应用启动时从 DriveRepository 恢复所有本地 Drive 实例
  */
 @Injectable()
@@ -46,6 +51,7 @@ export class DriveService implements OnModuleInit {
     private readonly driveWrite: DriveWriteService,
     private readonly swarm: SwarmService,
     private readonly driveRepo: DriveRepository,
+    private readonly profile: ProfileService,
   ) {}
 
   // ---------------------------------------------------------------------------
@@ -126,26 +132,43 @@ export class DriveService implements OnModuleInit {
     // 委托 HyperService 通过命名空间派生并管理新 Drive 的生命周期
     const newDrive = await this.hyper.createLocalDrive(namespace)
     const driveKey = newDrive.key!.toString('hex')
-
-    // 将本地 drive 宣告到 P2P 网络
-    try {
-      await this.swarm.announceLocalDrive(newDrive)
-    } catch (err) {
-      this.logger.warn(`宣告 Drive 到 DHT 时出错: ${String(err)}`)
-    }
-
+    const ownerProfileKey = this.hyper.driveKey
     const now = Date.now()
+
+    const descriptor: DriveDescriptor = {
+      name: dto.name,
+      type: dto.type,
+      ownerProfileKey,
+    }
+    await this.driveWrite.putJson(DRIVE_DESCRIPTOR_PATH, descriptor, newDrive)
+
+    await this.profile.upsertCollection({
+      driveKey,
+      name: dto.name,
+      addedAt: now,
+      updatedAt: now,
+    })
+
     const record: DriveRecord = {
       id: driveKey,
       name: dto.name,
       type: dto.type,
       isLocal: true,
       namespace,
+      ownerProfileKey,
       createdAt: now,
       updatedAt: now,
     }
 
     this.driveRepo.save(record)
+
+    // 元数据完整写入后再宣告，避免远端读到未初始化的资源 Drive。
+    try {
+      await this.swarm.announceLocalDrive(newDrive)
+    } catch (err) {
+      this.logger.warn(`宣告 Drive 到 DHT 时出错: ${String(err)}`)
+    }
+
     this.logger.log(`本地 Drive 已创建: ${driveKey} (${dto.name}) [namespace=${namespace}]`)
     return this.toResponseDto(record)
   }
@@ -158,12 +181,41 @@ export class DriveService implements OnModuleInit {
     const record = this.driveRepo.findById(driveKey)
     if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
 
-    if (dto.name !== undefined) record.name = dto.name
-    if (dto.remark !== undefined) record.remark = dto.remark === null ? undefined : dto.remark
-    record.updatedAt = Date.now()
+    const now = Date.now()
+    const updatedRecord: DriveRecord = {
+      ...record,
+      name: dto.name ?? record.name,
+      type: dto.type ?? record.type,
+      remark: dto.remark === undefined
+        ? record.remark
+        : dto.remark === null
+          ? undefined
+          : dto.remark,
+      updatedAt: now,
+    }
 
-    this.driveRepo.save(record)
-    return this.toResponseDto(record)
+    const publicMetadataChanged = dto.name !== undefined || dto.type !== undefined
+    if (record.isLocal && publicMetadataChanged) {
+      const drive = await this.resolveDrive(driveKey)
+      const ownerProfileKey = record.ownerProfileKey ?? this.hyper.driveKey
+      const descriptor: DriveDescriptor = {
+        name: updatedRecord.name,
+        type: updatedRecord.type,
+        ownerProfileKey,
+      }
+
+      await this.driveWrite.putJson(DRIVE_DESCRIPTOR_PATH, descriptor, drive)
+      await this.profile.upsertCollection({
+        driveKey,
+        name: updatedRecord.name,
+        addedAt: record.createdAt,
+        updatedAt: now,
+      })
+      updatedRecord.ownerProfileKey = ownerProfileKey
+    }
+
+    this.driveRepo.save(updatedRecord)
+    return this.toResponseDto(updatedRecord)
   }
 
   // ---------------------------------------------------------------------------
@@ -173,6 +225,10 @@ export class DriveService implements OnModuleInit {
   async delete(driveKey: string): Promise<void> {
     const record = this.driveRepo.findById(driveKey)
     if (!record) throw new NotFoundException(`Drive 不存在: ${driveKey}`)
+
+    if (record.isLocal) {
+      await this.profile.removeCollection(driveKey)
+    }
 
     // 若有 namespace，从 HyperService 的 localDrives 中关闭对应实例
     if (record.namespace) {
@@ -331,7 +387,7 @@ export class DriveService implements OnModuleInit {
   }
 
   // ---------------------------------------------------------------------------
-  // 内部：供 SubscribedDriveService 调用，保存非本地 drive 元数据
+  // 内部：供 SubscribeService 调用，保存非本地 drive 元数据
   // ---------------------------------------------------------------------------
 
   saveRecord(record: DriveRecord): DriveRecord {
@@ -433,6 +489,7 @@ export class DriveService implements OnModuleInit {
       publicationCount: 0,
       peerCount: this.hyper.swarm.connections.size,
       isLocal: record.isLocal,
+      ownerProfileKey: record.ownerProfileKey,
     }
   }
 }

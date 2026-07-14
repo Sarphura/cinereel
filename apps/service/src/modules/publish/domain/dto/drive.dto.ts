@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsString, IsNotEmpty, IsOptional, IsIn } from 'class-validator'
+import type { DriveContentType } from '@/modules/common/domain/drive-manifest'
 
-export type DriveContentType = 'movie' | 'series' | 'music' | 'generic'
+export type { DriveContentType } from '@/modules/common/domain/drive-manifest'
 
 /**
  * DriveRecord
@@ -26,6 +27,8 @@ export interface DriveRecord {
    * 使用 UUID v4 生成，保证唯一性。
    */
   namespace?: string
+  /** 资源所有者的 Profile Drive 公钥；本地资源库创建时写入 */
+  ownerProfileKey?: string
   createdAt: number
   updatedAt: number
 }
@@ -50,6 +53,14 @@ export class UpdateDriveDto {
   @IsOptional()
   @IsString()
   name?: string
+
+  @ApiPropertyOptional({
+    description: '新的内容类型',
+    enum: ['movie', 'series', 'music', 'generic'],
+  })
+  @IsOptional()
+  @IsIn(['movie', 'series', 'music', 'generic'])
+  type?: DriveContentType
 
   @ApiPropertyOptional({ description: '备注内容（传 null 可清除）', nullable: true })
   @IsOptional()
@@ -111,4 +122,5 @@ export interface DriveResponseDto {
   publicationCount: number
   peerCount: number
   isLocal: boolean
+  ownerProfileKey?: string
 }
