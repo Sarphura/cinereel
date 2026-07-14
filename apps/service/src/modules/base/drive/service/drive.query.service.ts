@@ -84,7 +84,6 @@ export class DriveQueryService {
   }
 
   /**
-   * TODO: 解析 JSON 文件的作用？
    * 读取 drive 中指定路径的 JSON 文件并解析为指定类型。
    * 解析失败或路径不存在时返回 null。
    *
@@ -180,7 +179,7 @@ export class DriveQueryService {
   }
 
   /**
-   * 流式遍历指定前缀路径下的所有条目，对每个条目执行回调。
+   * 流式遍历指定前缀路径下的所有条目，逐个调用回调函数，若回调函数返回 false，则停止遍历。
    * 与 `list` 的区别在于它不会将全部条目加载到内存中，适合处理大量文件。
    *
    * @param prefix  路径前缀

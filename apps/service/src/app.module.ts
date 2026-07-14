@@ -4,6 +4,7 @@ import { parseDhtBootstrapEnv } from '@/modules/base/hyper/hyper.types'
 import { PublishModule } from '@/modules/publish/publish.module'
 import { SubscribeModule } from '@/modules/subscribe/subscribe.module'
 import { DownloadModule } from '@/modules/download/download.module'
+import { ProfileModule } from '@/modules/profile/profile.module'
 
 /**
  * AppModule
@@ -14,8 +15,9 @@ import { DownloadModule } from '@/modules/download/download.module'
  *
  * 功能模块：
  *   - PublishModule   → 本地 Drive 管理 + 挂载任务（/api/drives, /api/mount）
- *   - SubscribeModule → 远端 Drive 订阅管理（/api/subscribed-drives）
+ *   - SubscribeModule → 远端 Drive 订阅管理（/api/subscribe）
  *   - DownloadModule  → 文件下载任务队列（/api/downloads）
+ *   - ProfileModule   → 主 Drive 公开主页（/api/profile）
  */
 @Module({
   imports: [
@@ -33,6 +35,7 @@ import { DownloadModule } from '@/modules/download/download.module'
     PublishModule,
     SubscribeModule,
     DownloadModule,
+    ProfileModule,
   ],
 })
 export class AppModule {}

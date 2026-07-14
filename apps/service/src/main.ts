@@ -15,7 +15,8 @@ import { AppModule } from './app.module'
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
-    new FastifyAdapter({ logger: true }),
+    // Profile API 以 Data URL 接收头像；允许不超过 5 MB 图片的 Base64 开销。
+    new FastifyAdapter({ logger: true, bodyLimit: 7 * 1024 * 1024 }),
   )
 
   // ---------------------------------------------------------------------------
