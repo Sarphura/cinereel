@@ -14,6 +14,7 @@ export type DriveRecord = {
   publicationCount: number;
   peerCount: number;
   isLocal: boolean;
+  ownerProfileKey?: string;
 };
 
 /**

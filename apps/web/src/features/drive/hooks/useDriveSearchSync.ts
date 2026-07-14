@@ -1,7 +1,7 @@
 import { startTransition, useEffect } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
 
-export function useDriveSearchSync(from: '/publish' | '/subscribed-drives', selectedDriveKey: string | null, currentDriveKey?: string) {
+export function useDriveSearchSync(from: '/publish' | '/subscribe', selectedDriveKey: string | null, currentDriveKey?: string) {
   const navigate = useNavigate({ from });
   const router = useRouter();
 

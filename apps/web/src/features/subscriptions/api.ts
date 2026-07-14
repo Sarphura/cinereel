@@ -12,42 +12,42 @@ function normalizeDriveRecord(drive: DriveRecord): DriveRecord {
   };
 }
 
-export async function listSubscribedDrives() {
+export async function listSubscribeDrives() {
   const response = await requestJson<{ data: DriveRecord[] }>('/api/drives');
   return filterDrivesByScope(response.data.map(normalizeDriveRecord), 'subscribed');
 }
 
-export async function getSubscribedDriveTree(driveKey: string) {
+export async function getSubscribeDriveTree(driveKey: string) {
   const response = await requestJson<{ data: ResourceTreeNode }>(`/api/drives/${driveKey}/tree`);
   return response.data;
 }
 
-export async function refreshSubscribedDriveTree(driveKey: string) {
+export async function refreshSubscribeDriveTree(driveKey: string) {
   const response = await requestJson<{ data: ResourceTreeNode }>(`/api/drives/${driveKey}/refresh`, {
     method: 'POST',
   });
   return response.data;
 }
 
-export function subscribedDrivesQueryOptions() {
+export function subscribeDrivesQueryOptions() {
   return queryOptions({
     queryKey: ['drives', 'subscribed'] as const,
-    queryFn: listSubscribedDrives,
+    queryFn: listSubscribeDrives,
   });
 }
 
-export function subscribedDriveTreeQueryOptions(driveKey: string) {
+export function subscribeDriveTreeQueryOptions(driveKey: string) {
   return queryOptions({
     queryKey: ['drive-tree', driveKey] as const,
-    queryFn: () => getSubscribedDriveTree(driveKey),
+    queryFn: () => getSubscribeDriveTree(driveKey),
   });
 }
 
-export async function loadSubscribedExplorerData(requestedDriveKey?: string): Promise<DriveExplorerLoaderData> {
-  const drives = await queryClient.ensureQueryData(subscribedDrivesQueryOptions());
+export async function loadSubscribeExplorerData(requestedDriveKey?: string): Promise<DriveExplorerLoaderData> {
+  const drives = await queryClient.ensureQueryData(subscribeDrivesQueryOptions());
   const selectedDriveKey = resolveSelectedDriveKey(drives, requestedDriveKey);
   const resourceTree = selectedDriveKey
-    ? await queryClient.ensureQueryData(subscribedDriveTreeQueryOptions(selectedDriveKey))
+    ? await queryClient.ensureQueryData(subscribeDriveTreeQueryOptions(selectedDriveKey))
     : null;
 
   return {
@@ -57,8 +57,24 @@ export async function loadSubscribedExplorerData(requestedDriveKey?: string): Pr
   };
 }
 
-export async function addSubscribedDrive(input: { driveKey: string }) {
-  const response = await requestJson<{ data: { driveKey: string; name?: string; type: DriveContentType; createdAt: number } }>('/api/subscribed-drives', {
+export async function addSubscribe(input: { driveKey: string }) {
+  const response = await requestJson<{
+    data: {
+      driveKey: string
+      name?: string
+      type: DriveContentType
+      createdAt: number
+      ownerProfileKey: string
+      owner: {
+        driveKey: string
+        name: string
+        bio: string
+        avatarPath: string | null
+        avatarUrl: string | null
+        updatedAt: number
+      }
+    }
+  }>('/api/subscribe', {
     method: 'POST',
     body: JSON.stringify(input),
   });
@@ -66,16 +82,16 @@ export async function addSubscribedDrive(input: { driveKey: string }) {
   return response.data;
 }
 
-export async function deleteSubscribedDrive(driveKey: string) {
-  const response = await requestJson<{ data: { driveKey: string } }>(`/api/subscribed-drives/${driveKey}`, {
+export async function deleteSubscribe(driveKey: string) {
+  const response = await requestJson<{ data: { driveKey: string } }>(`/api/subscribe/${driveKey}`, {
     method: 'DELETE',
   });
 
   return response.data;
 }
 
-export async function saveSubscribedDriveRemark(driveKey: string, remark: string) {
-  const response = await requestJson<{ data: { driveKey: string; remark?: string } }>(`/api/subscribed-drives/${driveKey}`, {
+export async function saveSubscribeRemark(driveKey: string, remark: string) {
+  const response = await requestJson<{ data: { driveKey: string; remark?: string } }>(`/api/subscribe/${driveKey}`, {
     method: 'PATCH',
     body: JSON.stringify({ remark }),
   });

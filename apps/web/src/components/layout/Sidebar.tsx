@@ -60,7 +60,7 @@ export const Sidebar = () => {
                 activeIcon={<IconMark className="text-[#f59e0b]" />}
                 label="订阅" 
                 color="#f59e0b"
-                to="/subscribed-drives"
+                to="/subscribe"
                 search={{ driveKey: undefined }}
             />
             <SidebarItem

@@ -1,8 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { loadSubscribedExplorerData } from '../features/subscriptions/api';
-import { SubscriptionsRoute as SubscribedDrivesRouteView } from '../features/subscriptions/routes/SubscriptionsRoute';
+import { loadSubscribeExplorerData } from '../features/subscriptions/api';
+import { SubscriptionsRoute } from '../features/subscriptions/routes/SubscriptionsRoute';
 
-export const Route = createFileRoute('/subscribed-drives')({
+export const Route = createFileRoute('/subscribe')({
   validateSearch: (search: Record<string, unknown>) => ({
     driveKey: typeof search.driveKey === 'string' && search.driveKey ? search.driveKey : undefined,
   }),
@@ -11,10 +11,10 @@ export const Route = createFileRoute('/subscribed-drives')({
   }),
   loader: async ({ deps }) => {
     try {
-      return await loadSubscribedExplorerData(deps.driveKey);
+      return await loadSubscribeExplorerData(deps.driveKey);
     } catch (error) {
       return { drives: [], selectedDriveKey: null, resourceTree: null, error: error instanceof Error ? error.message : '数据加载失败。' };
     }
   },
-  component: SubscribedDrivesRouteView,
+  component: SubscriptionsRoute,
 });
