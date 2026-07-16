@@ -58,3 +58,8 @@ corestore/
 
 cache/
 test/
+
+# Re-include legitimate source directories accidentally matched by the broad
+# storage/, cache/, and test/ ignore rules above.
+!apps/service/src/common/storage/
+!apps/web/src/test/
