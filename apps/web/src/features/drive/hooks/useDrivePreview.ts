@@ -45,10 +45,17 @@ export function useDrivePreview(selectedDriveKey: string | null) {
       setPreviewError((current) => (preview.kind === 'video' ? current : null));
 
       try {
+        // 用 GET + Range: bytes=0-0 做"轻量探测"：服务端只返回状态码，
+        // 真正读 body 由后续组件挂载 <img>/<video> 时再做。
+        // 这里立即 cancel response stream，避免下载整个文件。
         const response = await fetch(preview.url, {
-          method: 'HEAD',
+          method: 'GET',
+          headers: { Range: 'bytes=0-0' },
           signal: controller.signal,
         });
+
+        // 收到响应头即可，丢弃 body。range 请求服务端通常返回 206 Partial Content。
+        await response.body?.cancel();
 
         if (response.status === 202) {
           setPreviewError(preview.kind === 'video' ? '视频预览正在转码，请稍候...' : null);
@@ -56,7 +63,7 @@ export function useDrivePreview(selectedDriveKey: string | null) {
           return;
         }
 
-        if (!response.ok) {
+        if (!response.ok && response.status !== 206) {
           throw new Error(`预览接口不可用（${response.status}）。请确认服务端已经重启并加载最新代码。`);
         }
 

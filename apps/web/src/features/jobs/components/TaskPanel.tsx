@@ -5,6 +5,7 @@ import { addToast } from '@heroui/toast';
 import { listMountJobs, listScanJobs } from '../api';
 import { listDownloadJobs } from '../../downloads/api';
 import { IconHeartbeatRing } from '../../../components/icons/Icons';
+import { normalizeTaskProgress, taskProgressToDash } from '../task-progress';
 
 export const TaskPanel = () => {
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
@@ -101,13 +102,13 @@ export const TaskPanel = () => {
         : task.status === 'queued'
           ? '等待开始'
           : `文件 ${task.processedFiles}/${task.totalFiles || 0}`,
-      progress: task.progress,
+      progress: normalizeTaskProgress(task.progress),
     })),
     ...activeTasks.map((task) => ({
       id: `download-${task.id}`,
       title: `下载任务：${task.fileName}`,
       subtitle: `文件名：${task.currentFileName ?? (task.status === 'queued' ? '等待开始' : task.fileName)}`,
-      progress: task.progress,
+      progress: normalizeTaskProgress(task.progress),
     })),
     ...activeScanTasks.map((task) => ({
       id: `scan-${task.id}`,
@@ -117,7 +118,7 @@ export const TaskPanel = () => {
         : task.status === 'queued'
           ? '等待开始'
           : `文件 ${task.processedFiles}/${task.totalFiles || 0}`,
-      progress: task.progress,
+      progress: normalizeTaskProgress(task.progress),
     })),
     ...failedScanTasks.map((task) => ({
       id: `scan-failed-${task.id}`,
@@ -125,7 +126,7 @@ export const TaskPanel = () => {
       subtitle: task.failedFiles.length > 0
         ? `失败 ${task.failedFiles.length} 个，首个：${task.failedFiles[0].fileName}`
         : (task.error ?? '扫描失败'),
-      progress: 1,
+      progress: 100,
       tone: 'failed',
     })),
   ];
@@ -280,11 +281,11 @@ export const TaskPanel = () => {
                       stroke={task.tone === 'failed' ? '#f87171' : '#f2a41b'}
                       strokeWidth="3"
                       strokeLinecap="round"
-                      strokeDasharray={`${Math.max(0, Math.min(task.progress, 1)) * 75.4} 75.4`}
+                      strokeDasharray={`${taskProgressToDash(task.progress, 75.4)} 75.4`}
                     />
                   </svg>
                   <span className={`absolute text-[9px] font-medium ${task.tone === 'failed' ? 'text-[#f87171]' : 'text-[#f2a41b]'}`}>
-                    {Math.round(task.progress * 100)}
+                    {Math.round(task.progress)}%
                   </span>
                 </div>
               </div>
