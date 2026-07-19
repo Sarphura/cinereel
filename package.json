@@ -4,12 +4,18 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently -n bootstrap,ui,service \"pnpm run dev:bootstrap\" \"pnpm run dev:ui\" \"pnpm run dev:service\"",
-    "dev:peer": "concurrently \"pnpm run dev:ui:peer\" \"pnpm run dev:service:peer\"",
+    "dev": "concurrently -n sidecar,bootstrap,ui,service \"pnpm run dev:sidecar\" \"pnpm run dev:bootstrap\" \"pnpm run dev:ui\" \"pnpm run dev:service\"",
+    "dev:peer": "concurrently \"pnpm run dev:ui:peer\" \"pnpm run dev:service:peer\" \"pnpm run dev:sidecar:peer\"",
+
+    "dev:sidecar": "pnpm --filter @cinereel/sidecar dev",
+    "dev:sidecar:build": "pnpm --filter @cinereel/sidecar build && pnpm --filter @cinereel/sidecar start",
+    "dev:sidecar:peer": "pnpm --filter @cinereel/sidecar dev:peer",
+    "dev:sidecar:peer:build": "pnpm --filter @cinereel/sidecar build && pnpm --filter @cinereel/sidecar dev:peer",
+
     "build:start": "pnpm run build && pnpm run start",
     "test": "pnpm run test:service",
     
-    "dev:bootstrap": "pnpm --filter @cinereel/service dev:bootstrap",
+    "dev:bootstrap": "pnpm --filter @cinereel/sidecar dev:bootstrap",
     "dev:ui": "pnpm --filter ui dev",
     "dev:service": "pnpm --filter @cinereel/service dev",
     "dev:ui:peer": "pnpm --filter ui dev:peer",
