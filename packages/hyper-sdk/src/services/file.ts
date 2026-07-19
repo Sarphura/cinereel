@@ -1,29 +1,24 @@
 import { Readable } from 'node:stream';
-import Hyperdrive from 'hyperdrive';
-import type { CorestoreRuntime } from '../runtime/corestore.js';
-import { resolveDriveByKey } from '../utils/hyperdrive.factory.js';
+import type { Drive } from '../types/hyperdrive.js';
+import type { StoreRuntime } from '../runtime/corestore.js';
 import type { HyperdriveEntry, TreeNode } from '../types/types.js';
-
-type Drive = InstanceType<typeof Hyperdrive>;
 
 export interface FileService {
   getEntry: (driveKey: string, path: string, wait?: boolean) => Promise<HyperdriveEntry | null>;
-  getTree: (driveKey: string, prefix?: string, wait?: boolean) => Promise<TreeNode>;
+  getTree: (
+    driveKey: string,
+    prefix?: string,
+    waitOrOpts?: boolean | { wait?: boolean; recursive?: boolean },
+  ) => Promise<TreeNode>;
   readStream: (driveKey: string, path: string, wait?: boolean) => Promise<Readable>;
   write: (driveKey: string, path: string, body: Buffer, metadata?: unknown) => Promise<{ ok: true; byteLength: number }>;
   deleteEntry: (driveKey: string, path: string, recursive?: boolean) => Promise<{ ok: true }>;
 }
 
-async function loadDrive(runtime: CorestoreRuntime, key: string): Promise<Drive> {
-  return resolveDriveByKey(runtime, key);
-}
-
 /**
- * hyperdrive v13 has no callback API — every lookup returns either a Promise
- * or a Readable. This helper adapts the v13 async iterator surface to the
- * { key, seq, value } shape that the rest of the SDK (and the HTTP layer)
- * already speaks. `value.type` is inferred from `value.blob === null`
- * (a directory entry has no blob in v13).
+ * Adapt hyperdrive v13's async iterator surface to the { key, seq, value } shape
+ * the rest of the SDK (and the HTTP layer) already speaks. `value.type` is
+ * inferred from `value.blob === null` (a directory entry has no blob in v13).
  */
 function adaptEntry(node: unknown | null): HyperdriveEntry | null {
   if (!node) return null;
@@ -52,13 +47,61 @@ function adaptEntry(node: unknown | null): HyperdriveEntry | null {
   };
 }
 
-export function makeFileService(runtime: CorestoreRuntime): FileService {
+function normalizePath(p: string): string {
+  if (!p || p === '/') return '/';
+  const cleaned = p.replace(/^\/+/, '');
+  return `/${cleaned}`;
+}
+
+interface ChildEntry {
+  name: string;
+  type: 'file' | 'directory';
+}
+
+async function listChildren(
+  drive: Drive,
+  folder: string,
+  wait: boolean,
+  recursive: boolean,
+): Promise<ChildEntry[]> {
+  if (recursive) {
+    const stream = drive.list(folder, { wait, recursive: true }) as unknown as Readable;
+    const names = new Set<string>();
+    const directories = new Set<string>();
+    for await (const node of stream) {
+      const raw = node as { key?: unknown };
+      const keyStr =
+        raw.key instanceof Buffer ? raw.key.toString('utf8') : String(raw.key);
+      const rel = keyStr.startsWith(folder)
+        ? keyStr.slice(folder.length).replace(/^\/+/, '')
+        : keyStr.replace(/^\/+/, '');
+      const segments = rel.split('/').filter(Boolean);
+      const top = segments[0];
+      if (!top) continue;
+      names.add(top);
+      if (segments.length > 1) directories.add(top);
+    }
+    return Array.from(names)
+      .sort()
+      .map((name) => ({ name, type: directories.has(name) ? 'directory' : 'file' }));
+  }
+  const stream = drive.readdir(folder, { wait }) as unknown as Readable;
+  const names: string[] = [];
+  for await (const name of stream) {
+    if (typeof name === 'string' && name !== '.' && name !== '..') {
+      names.push(name);
+    }
+  }
+  return names.sort().map((name) => ({ name, type: 'file' as const }));
+}
+
+export function makeFileService(runtime: StoreRuntime): FileService {
   async function getEntry(
     driveKey: string,
     pathStr: string,
     wait = true,
   ): Promise<HyperdriveEntry | null> {
-    const drive = await loadDrive(runtime, driveKey);
+    const drive = await runtime.resolveByKey(driveKey);
     const drivePath = normalizePath(pathStr);
     const node = await drive.entry(drivePath, { wait });
     return adaptEntry(node as Parameters<typeof adaptEntry>[0]);
@@ -67,9 +110,12 @@ export function makeFileService(runtime: CorestoreRuntime): FileService {
   async function getTree(
     driveKey: string,
     prefix = '',
-    wait = true,
+    waitOrOpts: boolean | { wait?: boolean; recursive?: boolean } = true,
   ): Promise<TreeNode> {
-    const drive = await loadDrive(runtime, driveKey);
+    const opts = typeof waitOrOpts === 'boolean' ? { wait: waitOrOpts } : waitOrOpts;
+    const wait = opts.wait ?? true;
+    const recursive = opts.recursive ?? false;
+    const drive = await runtime.resolveByKey(driveKey);
     const rootPath = normalizePath(prefix);
     const tree: TreeNode = {
       name: rootPath === '/' ? '/' : rootPath.split('/').filter(Boolean).pop() ?? '/',
@@ -77,38 +123,8 @@ export function makeFileService(runtime: CorestoreRuntime): FileService {
       children: [],
     };
 
-    // v13: `list(folder, { recursive: true })` is the streaming iterator over
-    // every descendant; `readdir` is non-recursive. We always want recursive
-    // listing for the tree view — fall back to non-recursive when the caller
-    // explicitly opts out via wait=false to keep snapshots cheap.
-    const useRecursive = wait;
-    const names = new Set<string>();
-    if (useRecursive) {
-      const stream = drive.list(rootPath, { wait, recursive: true }) as unknown as Readable;
-      for await (const node of stream) {
-        const raw = node as { key?: unknown };
-        const keyStr =
-          raw.key instanceof Buffer ? raw.key.toString('utf8') : String(raw.key);
-        // keys are drive-relative paths like "/a.txt"; pull out the top-level
-        // segment under rootPath so the tree stays one level deep.
-        const rel = keyStr.startsWith(rootPath)
-          ? keyStr.slice(rootPath.length).replace(/^\/+/, '')
-          : keyStr.replace(/^\/+/, '');
-        const top = rel.split('/')[0];
-        if (top) names.add(top);
-      }
-    } else {
-      const stream = drive.readdir(rootPath, { wait }) as unknown as Readable;
-      for await (const name of stream) {
-        if (typeof name === 'string' && name !== '.' && name !== '..') {
-          names.add(name);
-        }
-      }
-    }
-
-    tree.children = Array.from(names)
-      .sort()
-      .map((name) => ({ name, type: 'file' as const }));
+    const children = await listChildren(drive, rootPath, wait, recursive);
+    tree.children = children;
     return tree;
   }
 
@@ -117,7 +133,7 @@ export function makeFileService(runtime: CorestoreRuntime): FileService {
     pathStr: string,
     wait = true,
   ): Promise<Readable> {
-    const drive = await loadDrive(runtime, driveKey);
+    const drive = await runtime.resolveByKey(driveKey);
     const drivePath = normalizePath(pathStr);
     return drive.createReadStream(drivePath, { wait }) as unknown as Readable;
   }
@@ -128,7 +144,7 @@ export function makeFileService(runtime: CorestoreRuntime): FileService {
     body: Buffer,
     metadata?: unknown,
   ): Promise<{ ok: true; byteLength: number }> {
-    const drive = await loadDrive(runtime, driveKey);
+    const drive = await runtime.resolveByKey(driveKey);
     const drivePath = normalizePath(pathStr);
     await new Promise<void>((resolve, reject) => {
       const ws = drive.createWriteStream(drivePath, {
@@ -136,11 +152,6 @@ export function makeFileService(runtime: CorestoreRuntime): FileService {
       });
       ws.on('error', reject);
       ws.on('finish', () => resolve());
-      ws.on('close', () => {
-        // Normal completion: 'finish' already resolved with no error.
-        // Abnormal path: surface the close error if 'finish' hasn't fired.
-        // (v13 calls callOnfinish on both events; resolving twice is a no-op.)
-      });
       ws.end(body);
     });
     return { ok: true, byteLength: body.length };
@@ -151,7 +162,7 @@ export function makeFileService(runtime: CorestoreRuntime): FileService {
     pathStr: string,
     recursive = false,
   ): Promise<{ ok: true }> {
-    const drive = await loadDrive(runtime, driveKey);
+    const drive = await runtime.resolveByKey(driveKey);
     const drivePath = normalizePath(pathStr);
 
     if (!recursive) {
@@ -179,10 +190,4 @@ export function makeFileService(runtime: CorestoreRuntime): FileService {
   }
 
   return { getEntry, getTree, readStream, write, deleteEntry };
-}
-
-function normalizePath(p: string): string {
-  if (!p || p === '/') return '/';
-  const cleaned = p.replace(/^\/+/, '');
-  return `/${cleaned}`;
 }

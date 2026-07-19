@@ -1,21 +1,26 @@
-import Hyperdrive from 'hyperdrive';
-import type { CorestoreRuntime } from '../runtime/corestore.js';
+import type { Drive } from '../types/hyperdrive.js';
 
-type Drive = InstanceType<typeof Hyperdrive>;
+const DRIVE_KEY_RE = /^[0-9a-f]{64}$/;
 
-/**
- * Resolve a drive by its public key (hex string).
- * Delegates to `runtime.resolveByKey`, which enforces the v13 invariant
- * that each Hyperdrive has its own dedicated Corestore.
- */
-export async function resolveDriveByKey(
-  runtime: CorestoreRuntime,
-  driveKey: string,
-): Promise<Drive> {
-  return runtime.resolveByKey(driveKey);
+export interface NormalizedDriveKey {
+  hex: string;
+  buffer: Buffer;
 }
 
-export { InvalidDriveKeyError } from '../runtime/corestore.js';
+export class InvalidDriveKeyError extends Error {
+  constructor(public readonly provided: string) {
+    super(`Invalid drive key: ${provided}`);
+    this.name = 'InvalidDriveKeyError';
+  }
+}
+
+export function normalizeAndValidateDriveKey(input: string): NormalizedDriveKey {
+  const hex = input.toLowerCase().replace(/^0x/, '');
+  if (!DRIVE_KEY_RE.test(hex)) {
+    throw new InvalidDriveKeyError(input);
+  }
+  return { hex, buffer: Buffer.from(hex, 'hex') };
+}
 
 export function driveKeyOf(drive: Drive): string {
   return drive.key.toString('hex');

@@ -7,6 +7,11 @@ declare module 'corestore' {
     ready(): Promise<void>;
     session(): CorestoreInstance;
     namespace(name: string): CorestoreInstance;
+    /**
+     * Return an async iterable of discovery keys for the given namespace.
+     * An empty stream means the namespace has no stored cores.
+     */
+    list(namespace?: string): AsyncIterable<Buffer>;
   }
   export type NamespaceInstance = CorestoreInstance & {
     discoveryKey: Buffer;
@@ -48,7 +53,6 @@ declare module 'hyperdrive' {
     // lifecycle
     ready(): Promise<this>;
     close(): Promise<void>;
-    update(opts?: { flush?: boolean }): Promise<void>;
 
     // content ops — v13 all return Promise / Readable / Writable
     entry(name: string, opts?: { wait?: boolean; follow?: boolean }): Promise<HyperdriveEntryResult | null>;
@@ -85,7 +89,7 @@ declare module 'hyperdrive' {
   // v13 constructor: `Hyperdrive(corestore, key, opts)`.
   // NOTE: key is a POSITIONAL argument. Passing `{ key }` as the second
   // arg is silently ignored (because isOptions({...}) === true) and a
-  // random key is generated — a footgun that bites resolveDriveByKey.
+  // random key is generated — a footgun that bites resolveByKey.
   const Hyperdrive: {
     new (corestore: unknown): HyperdriveInstance;
     new (corestore: unknown, name: string): HyperdriveInstance;
@@ -117,7 +121,12 @@ declare module 'hyperswarm' {
   }
   export interface Connection {
     readonly remotePublicKey: Buffer;
-    on(event: 'close', cb: () => void): this;
+    on(event: 'close', cb: () => void): unknown;
+    /**
+     * Internal timestamp set by `__testInjectPeer` on synthetic connections so
+     * snapshot tests can produce a stable `connectedAt` per peer.
+     */
+    _connectedAt?: string;
   }
   export interface SwarmOptions {
     port?: number;
@@ -129,6 +138,8 @@ declare module 'hyperswarm' {
   export interface DHTHandle {
     /** Pass an "ip:port" string to register as a bootstrap node. */
     bootstrap(addr: string): void;
+    /** Add a node to the bootstrap pool as `{ host, port }`. */
+    addNode(node: { host: string; port: number }): void;
     /** Set of bound UDP sockets. Used by the SDK to discover its own port. */
     listening: Set<{ address(): { host: string; port: number } }>;
     /** Low-level UDX + noise socket used for outgoing holepunch packets. */
@@ -148,7 +159,13 @@ declare module 'hyperswarm' {
     connect(
       target: Buffer,
       opts: { relayAddresses: RemoteAddress[]; keyPair?: NoiseKeyPair },
-    ): Connection;
+    ): DHTConnection;
+  }
+  export interface DHTConnection {
+    readonly remotePublicKey: Buffer;
+    on(event: 'open', cb: () => void): unknown;
+    on(event: 'error', cb: (err: Error) => void): unknown;
+    on(event: 'close', cb: () => void): unknown;
   }
   export default class Hyperswarm {
     constructor(opts?: SwarmOptions);

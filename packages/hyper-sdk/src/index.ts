@@ -1,23 +1,18 @@
 export {
-  createCorestoreRuntime,
-  type CorestoreRuntime,
+  createStoreRuntime,
+  type StoreRuntime,
   type CreatedDrive,
   type DriveInfo,
   InvalidDriveKeyError,
 } from './runtime/corestore.js';
 export {
   createHyperswarmRuntime,
-  type HyperswarmRuntime,
+  type SwarmRuntime,
 } from './runtime/hyperswarm.js';
 export {
-  resolveDriveByKey,
   driveKeyOf,
+  type NormalizedDriveKey,
 } from './utils/hyperdrive.factory.js';
-export {
-  makeDriveService,
-  driveKeyOf as _driveKeyOf,
-  type DriveService,
-} from './services/drive.js';
 export {
   makeFileService,
   type FileService,
