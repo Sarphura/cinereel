@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardFooter } from '@heroui/react';
 import type { MovieRecord } from '../types';
 import { buildPreviewUrl } from '../../drive/utils';
@@ -18,6 +18,9 @@ export const MovieCard: React.FC<MovieCardProps> = ({ movie, onClick }) => {
     ? buildPreviewUrl(movie.driveKey, movie.posterPath)
     : null;
 
+  const [imageBroken, setImageBroken] = useState(false);
+  const showPlaceholder = !posterUrl || imageBroken;
+
   return (
     <Card
       isPressable
@@ -26,18 +29,20 @@ export const MovieCard: React.FC<MovieCardProps> = ({ movie, onClick }) => {
       onPress={() => onClick?.(movie)}
     >
       <div className="relative aspect-[2/3] overflow-hidden">
-        {posterUrl ? (
+        {!showPlaceholder ? (
           <img
             src={posterUrl}
             alt={title}
             className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            onError={() => setImageBroken(true)}
+            loading="lazy"
           />
         ) : (
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(250,204,21,0.24),_transparent_45%),linear-gradient(160deg,_rgba(63,63,70,0.95)_0%,_rgba(24,24,27,1)_72%)] transition-transform duration-300 group-hover:scale-105" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-black/10" />
         <div className="absolute inset-x-0 bottom-0 top-auto h-24 bg-gradient-to-t from-black/60 to-transparent" />
-        {!posterUrl ? (
+        {showPlaceholder ? (
           <div className="absolute inset-0 flex items-center justify-center px-4 text-center">
             <span className="line-clamp-3 text-sm font-semibold tracking-[0.04em] text-zinc-100">
               {title}
