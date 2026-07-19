@@ -15,6 +15,19 @@ build/
 out/
 *.tsbuildinfo
 
+# .NET / C# build artifacts
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+.vs/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+
 # IDE / Editor
 .vscode/*
 !.vscode/extensions.json
@@ -58,3 +71,10 @@ corestore/
 
 cache/
 test/
+
+.bootstrap-store
+.peer-sidecar-store
+.sidecar-store
+.demo
+
+scripts
