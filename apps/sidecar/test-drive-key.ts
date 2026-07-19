@@ -1,4 +1,4 @@
-import { createCorestoreRuntime, driveKeyOf } from '@cinereel/hyper-sdk';
+import { createStoreRuntime, driveKeyOf } from '@cinereel/hyper-sdk';
 import os from 'os';
 import path from 'path';
 
@@ -7,7 +7,7 @@ import path from 'path';
 // Replaces the raw corestore/hyperdrive imports that violated the SDK boundary.
 
 const tmpDir = path.join(os.tmpdir(), 'hy-sdk-test-' + Date.now());
-const runtime = await createCorestoreRuntime(tmpDir);
+const runtime = await createStoreRuntime(tmpDir);
 const main = runtime.main;
 await main.ready();
 

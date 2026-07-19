@@ -13,6 +13,7 @@ import { registerTestRoutes } from './http/routes/_test.js';
 import type {
   FileService,
   SwarmService,
+  SwarmRuntime,
 } from '@cinereel/hyper-sdk';
 import type { SidecarDriveService } from './drive-service';
 import {
@@ -26,6 +27,14 @@ export interface Services {
   drives: SidecarDriveService;
   files: FileService;
   swarm: SwarmService;
+  /**
+   * Underlying `SwarmRuntime` from the SDK. Surfaced here (not on
+   * `SwarmService`) because the SDK deliberately does NOT expose test
+   * hooks on the public service surface — see the comment in
+   * `registerTestRoutes` for the rationale. Test-only routes use this to
+   * inject synthetic connections into `swarm.swarm.connections`.
+   */
+  swarmRuntime: SwarmRuntime;
 }
 
 export interface BuildServerOptions {
@@ -83,7 +92,7 @@ export async function buildServer(
   // tests can inject peers without juggling dev tokens.
   const wantsTestRoutes = options.testRoutes === true && process.env.NODE_ENV !== 'production';
   if (wantsTestRoutes) {
-    await registerTestRoutes(app, uc.swarm);
+    await registerTestRoutes(app, uc.swarm, uc.swarmRuntime);
   }
 
   // Auth gate for /v1/* — but skip /v1/auth/* (those are their own auth logic)

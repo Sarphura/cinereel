@@ -2,7 +2,7 @@
  * DriveService — sidecar-level business wrapper around the hyper-sdk.
  *
  * Composes:
- *   - `CorestoreRuntime` from the SDK (Hyperdrive lifecycle, UUID namespaces)
+ *   - `StoreRuntime` from the SDK (Hyperdrive lifecycle, UUID namespaces)
  *   - `DriveIndex` (business metadata: name, type, createdAt)
  *
  * The SDK is responsible for data storage; this service injects business
@@ -10,7 +10,7 @@
  */
 
 import type {
-  CorestoreRuntime,
+  StoreRuntime,
   DriveType,
 } from '@cinereel/hyper-sdk';
 import { driveKeyOf } from '@cinereel/hyper-sdk';
@@ -44,7 +44,7 @@ export interface SidecarDriveService {
 }
 
 export function createSidecarDriveService(
-  runtime: CorestoreRuntime,
+  runtime: StoreRuntime,
   index: DriveIndex,
   keyToUuid?: Map<string, string>,
 ): SidecarDriveService {
@@ -102,7 +102,7 @@ export function createSidecarDriveService(
  * return a fully-initialised SidecarDriveService.
  */
 export async function createSidecarDriveServiceWithRecovery(
-  runtime: CorestoreRuntime,
+  runtime: StoreRuntime,
   storeDir: string,
 ): Promise<{ service: SidecarDriveService; index: DriveIndex }> {
   const index = createDriveIndex(storeDir);

@@ -1,7 +1,7 @@
 import { loadConfig } from './config.js';
 import { loadApiKeys } from './auth/keys.js';
 import {
-  createCorestoreRuntime,
+  createStoreRuntime,
   createHyperswarmRuntime,
   makeFileService,
   makeSwarmService,
@@ -31,7 +31,7 @@ async function main(): Promise<void> {
     }
   }
 
-  const runtime = await createCorestoreRuntime(config.storeDir);
+  const runtime = await createStoreRuntime(config.storeDir);
   const swarm = createHyperswarmRuntime(config.swarmPort, config.bootstrap);
 
   // Bootstrap: load drive index from disk and remount all recorded drives.
@@ -52,6 +52,7 @@ async function main(): Promise<void> {
     drives,
     files,
     swarm: swarmUc,
+    swarmRuntime: swarm,
   });
 
   await app.listen({ host: config.host, port: config.port });
