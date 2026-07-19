@@ -72,3 +72,8 @@
 | 昵称、简介、头像、公开库列表 | 主 Drive `/profile.json` 等 | 任意读到 Profile 的节点 |
 
 跨节点可见的信息必须写在 Hyperdrive 内；仅本机 UI 用的备注等可留在本地仓库。
+
+## 类型相关的扫描规则
+
+- **movie**：电影目录识别、海报/NFO 匹配、降级策略详见 [电影扫描规则](./08-movie-scanning.md)
+- series / music / generic 类型 Drive 的目录约定与扫描规则待定

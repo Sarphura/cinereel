@@ -14,6 +14,12 @@
 | [账号与权限（规划）](./05-accounts-permissions.md) | 本机多账号 RBAC，与 P2P 身份正交 |
 | [传输治理（规划）](./06-transport-governance.md) | 限速、反吸血等 Swarm 层能力 |
 | [落地清单](./07-implementation-checklist.md) | 按当前代码扫描得到的改动清单与顺序 |
+| [电影扫描规则](./08-movie-scanning.md) | movie 类型 Drive 的电影目录识别、海报/NFO 匹配、降级策略 |
+| [Movie 模块项目架构](./09-movie-architecture.md) | publish / subscribe 等模块改造时对照 movie 的分层约定 |
+| [HyperSwarm 官方文档总结](./HyperSwarm%20%E5%AE%98%E6%96%B9%E6%96%87%E6%A1%A3%E6%80%BB%E7%BB%93.md) | Hyperswarm（v4.17.0）API 能力、与 Cinereel 现有模块的对应 |
+| [调试案例索引](./cases/) | 单次排错实录：栈帧解读、定位思路、经验沉淀 |
+| &nbsp;&nbsp;&nbsp;↳ [三实例 Swarm 互不可见](./cases/2026-07-19-swarm-mutual-discovery.md) | dev / peer / bootstrap 启动后谁也找不到谁：`peerCount` 永远是 `1/1/0` |
+| &nbsp;&nbsp;&nbsp;↳ [TUN 代理把入站 UDP 砍掉后，Sidecar 在 DHT 里彻底失联](./cases/2026-07-19-warp-firewalled-swarm.md) | `firewalled: true` + `ephemeral: true` 的真正根因：QX / WARP / Surge / Tailscale 等 TUN 工具接管 default route |
 
 ## 术语
 
