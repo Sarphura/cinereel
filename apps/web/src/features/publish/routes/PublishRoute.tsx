@@ -238,6 +238,7 @@ export function PublishRouteView() {
                     submitting={actions.submitting}
                     defaultMountPath={defaultMountPath}
                     onMount={actions.handlePublish}
+                    onManualMovieMount={actions.handleManualMovieMount}
                   />
                 ) : null}
               </ExplorerDetailHeader>

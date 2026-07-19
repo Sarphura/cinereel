@@ -10,7 +10,7 @@ import {
   renamePublishedDrive,
   savePublishedDriveRemark,
 } from '../api/api';
-import { mountDrive } from '../../jobs/api';
+import { mountDrive, mountMovieManually, type ManualMovieMountInput } from '../../jobs/api';
 import type { DriveContentType, DriveRecord, ResourceTreeNode } from '../../drive/types';
 
 interface UsePublishDriveActionsOptions {
@@ -36,6 +36,7 @@ export interface PublishDriveActions {
   handleRenameDrive: (driveKey: string, name: string) => Promise<void>;
   handleDelete: () => Promise<void>;
   handlePublish: (targetPath: string) => Promise<void>;
+  handleManualMovieMount: (input: ManualMovieMountInput) => Promise<void>;
   handleSaveRemark: (driveKey: string, remark: string) => Promise<void>;
   handleRefresh: (selectedDriveKey: string | null) => Promise<void>;
 }
@@ -133,6 +134,14 @@ export function usePublishDriveActions({
     },
   });
 
+  const mountMovieManuallyMutation = useMutation({
+    mutationFn: ({ driveKey, input }: { driveKey: string; input: ManualMovieMountInput }) => mountMovieManually(driveKey, input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['mount-jobs'] });
+      setError(null);
+    },
+  });
+
   const saveRemarkMutation = useMutation({
     mutationFn: ({ driveKey, remark }: { driveKey: string; remark: string }) => savePublishedDriveRemark(driveKey, remark),
     onSuccess: async (_, variables) => {
@@ -207,6 +216,20 @@ export function usePublishDriveActions({
     }
   };
 
+  const handleManualMovieMount = async (input: ManualMovieMountInput) => {
+    if (!selectedDrive) {
+      throw new Error('请先新建并选择一个 Drive。');
+    }
+
+    setSubmitting(true);
+
+    try {
+      await mountMovieManuallyMutation.mutateAsync({ driveKey: selectedDrive.driveKey, input });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSaveRemark = async (driveKey: string, remark: string) => {
     setSavingRemark(true);
 
@@ -249,6 +272,7 @@ export function usePublishDriveActions({
     handleRenameDrive,
     handleDelete,
     handlePublish,
+    handleManualMovieMount,
     handleSaveRemark,
     handleRefresh,
   };
