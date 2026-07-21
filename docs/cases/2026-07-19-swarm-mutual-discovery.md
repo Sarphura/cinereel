@@ -102,7 +102,7 @@ curl -s -H "X-Sidecar-Token: $TOK_B" http://127.0.0.1:9000/v1/swarm/identity
 # {"message":"Route GET:/v1/swarm/identity not found", ...404}
 ```
 
-404 说明路径对不上。回去翻 `apps/sidecar/src/http/routes/identity.ts`：
+404 说明路径对不上。回去翻 `apps/sidecar/src/controllers/identity.controller.ts`：
 
 ```ts
 app.get('/v1/identity', { schema: { response: { 200: IdentityInfoSchema } } },
@@ -335,6 +335,6 @@ curl -s -H "X-Sidecar-Token: $TOK_B" http://127.0.0.1:9000/v1/swarm/peers \
 
 - SDK 关键路径：`packages/hyper-sdk/src/runtime/hyperswarm.ts`（`createHyperswarmRuntime`、`connectToPeer`、`exposeLanAddress`、`join`）
 - SDK 服务层：`packages/hyper-sdk/src/services/swarm.ts`（`announce`、`mount`、`identity`、`getPeers`）
-- HTTP 路由：`apps/sidecar/src/http/routes/swarm.ts` 与 `apps/sidecar/src/http/routes/identity.ts`
+- HTTP 路由：`apps/sidecar/src/controllers/swarm.controller.ts` 与 `apps/sidecar/src/controllers/identity.controller.ts`
 - 配置映射：`apps/sidecar/src/config.ts`（`SIDECAR_BOOTSTRAP` → `cfg.bootstrap: string[]`）
 - 启动编排：`apps/sidecar/src/index.ts`（`makeSwarmService + swarmUc.announce(true)`）

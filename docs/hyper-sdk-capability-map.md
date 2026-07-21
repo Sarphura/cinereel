@@ -1,198 +1,183 @@
 # Hyper SDK Capability Map
 
 > 这份文档回答一个具体问题：
-> **"drive 的每一种能力，在 `@cinereel/hyper-sdk` 的哪个文件、哪个函数里？"**
+> **"drive 的每一种能力，在 sidecar 的哪个文件、哪个函数里？"**
 >
-> 它不是 API 文档（完整签名见 `hyper-sdk-design.md` §3），
+> 它不是 API 文档（完整签名见 [`hyper-sdk-design.md`](./hyper-sdk-design.md) §3），
 > 也不是入门教程。它是一张**业务侧读代码时的"地图"**——
-> 当你想动手改 SDK 时，知道应该打开哪一个文件。
+> 当你想动手改 sidecar 时，知道应该打开哪一个文件。
 >
-> 最近一次实质性更新：把 `StoreRuntime.store` 字段搬进 `InternalStoreRuntime`，
-> 并加入 `__hyperByKey` 的运行时栈检查；详见
-> [`hyper-sdk-acl.md`](./hyper-sdk-acl.md)。
+> 最近一次实质性更新：把 `apps/sidecar/src` 按 CSR 五层重组
+> （`controllers/` + `services/` + `repositories/` + `infrastructure/` + `middlewares/` + `bootstrap/`）。
+> 旧路径（`core/`、`domain/`、`http/`、`shared/`）全部消失。
 
 ---
 
 ## 一图速查
 
 ```
-业务侧 import '@cinereel/hyper-sdk' 看到的全部 drive 相关 API
+apps/sidecar/src 下全部与 drive / swarm / file 相关的代码
+
+├── config/                          ← 配置（schema + loader）
+│   ├── schema.ts                    zod schema
+│   └── load.ts                      env 读取
 │
-├─ runtime/corestore.ts                  ← drive 生命周期的全部真相
-│   ├─ createStoreRuntime(storeDir)      ── 入口：开 corestore + main drive
-│   ├─ createDrive(type, name?)          ── 本地新建
-│   ├─ mountDrive(name, type?)           ── 本地挂载
-│   ├─ mountOrCreateDrive(name, type?)   ── 幂等入口（namespace 有数据则挂，否则建）
-│   ├─ getDrive(name)                    ── 纯查（未挂载 → null）
-│   ├─ listDrives()                      ── 列出本地已挂载
-│   ├─ openDriveByKey(hex)               ── 远端挂载（按 driveKey）
-│   ├─ closeDriveByKey(hex)              ── 关闭并摘除
-│   └─ close()                           ── 关整个 store
+├── infrastructure/                  ← 跨层原语 + SDK 边界
+│   ├── sdk/index.ts                 hyper-sdk 的唯一 import 点
+│   ├── types/
+│   │   ├── dto.ts                   wire-format DTOs
+│   │   ├── hyperdrive.ts            HyperdriveLike 结构类型
+│   │   └── key.ts                   hex / driveKey 编解码
+│   └── errors/index.ts              SidecarError + 错误码 → HTTP 状态码
 │
-├─ services/file.ts                      ← drive 上的文件级操作
-│   └─ getEntry / getTree / readStream
-│      / write / deleteEntry
-│       走 runtime.__hyperByKey(hex) 拿底层 hyper 实例
+├── repositories/                    ← 数据访问层
+│   ├── drive.repository.ts          interface + HyperdriveRepository
+│   ├── drive-index.repository.ts    interface + FileSystemDriveIndexRepository
+│   ├── peer-connection.repository.ts   interface + HyperdriveSwarmRepository
+│   └── in-memory/                   测试用 fake 实现
 │
-├─ runtime/hyperswarm.ts                 ← drive 上 DHT 网络加入
-│   └─ join(drive, flush?) / leave(drive) / destroy()
-│       sidecar 在 createRuntime 时包成 SwarmRuntime 给业务侧
+├── services/                        ← 业务规则（class-based）
+│   ├── drives.service.ts            class DriveService
+│   ├── files.service.ts             class FileService
+│   ├── swarm.service.ts             class SwarmService
+│   └── index.ts                     barrel
 │
-├─ services/swarm.ts                     ← 业务友好的网络 API（基于 key）
-│   └─ announce / getPeers / mount / unmount / identity
+├── bootstrap/                       ← composition root + 共享 in-memory 状态
+│   ├── bootstrap.ts                 bootstrap(config)
+│   └── drive-registry.ts            class InMemoryDriveRegistry
 │
-├─ types/types.ts                        ← Drive, DriveType, HyperdriveEntry, TreeNode…
+├── controllers/                     ← HTTP 适配器（class-based）
+│   ├── schemas.ts                   JSON Schema (draft-07)
+│   ├── auth.controller.ts           POST /v1/auth/token
+│   ├── health.controller.ts         GET /healthz
+│   ├── identity.controller.ts       GET /v1/identity
+│   ├── drives.controller.ts         /v1/drives/* + /v1/drives/:key/{tree,entry,file}
+│   ├── swarm.controller.ts          /v1/swarm/{announce,peers,mount,unmount}
+│   ├── _test.controller.ts          /v1/_test/peer  (test-only)
+│   └── index.ts                     registerControllers(app, deps)
 │
-├─ utils/hyper.factory.ts                ← drive key 校验 + hex<->Buffer
-│   └─ normalizeAndValidateDriveKey (Internal)
-│   └─ InvalidDriveKeyError   (Re-exported from index.ts)
+├── middlewares/                     ← Fastify 管道
+│   ├── server.ts                    buildServer()
+│   ├── auth.middleware.ts           makeAuthPreHandler()
+│   ├── register-auth.ts             addHook('preHandler', ...)
+│   └── error.middleware.ts          setErrorHandler()
 │
-├─ types/hyper.ts                        ← HyperdriveInstance 类型（internal only）
+├── auth/                            ← 加密原语（JWT + API key）
 │
-└─ utils/acl.ts                          ← 运行时栈检查
-    └─ assertCallerInPackage()           ── 不在 SDK 包内直接调用 → throw
+└── index.ts                         ← 顶层 entry：loadConfig → bootstrap → buildServer
 ```
 
 ---
 
-## 一行索引（业务侧最常找的）
+## 能力 → 文件 / 函数
 
-| 业务诉求 | 打开的文件 | 关键函数 / 类型 |
+### Drive 元数据
+
+| 能力 | 文件 | 类 / 函数 |
 | --- | --- | --- |
-| "我要新建一个 drive" | `runtime/corestore.ts` | `createDrive(type, name?)` |
-| "我要按名字找 drive" | `runtime/corestore.ts` | `getDrive(name)` / `listDrives()` |
-| "我要按公钥打开一个远端 drive" | `runtime/corestore.ts` | `openDriveByKey(hex)` |
-| "我要把已挂载的 drive 关掉" | `runtime/corestore.ts` | `closeDriveByKey(hex)` |
-| "我要把 drive 挂到 P2P 网络" | `services/swarm.ts` | `mount(publicKey)` |
-| "我要在 drive 里读 / 写文件" | `services/file.ts` | `getEntry` / `getTree` / `readStream` / `write` |
-| "我的 drive key 格式不对" | `utils/hyper.factory.ts` | `InvalidDriveKeyError` |
-| "ACL 阻止我访问某个内部 API" | `utils/acl.ts` | `AclViolationError` |
+| 列出所有 drive | `services/drives.service.ts` | `DriveService.list()` |
+| 创建一个 drive | `services/drives.service.ts` | `DriveService.create(name, type)` |
+| 删一个 drive | `services/drives.service.ts` | `DriveService.remove(driveKey)` |
+| `DriveDescriptor` 类型 | `infrastructure/types/dto.ts` | `DriveDescriptor` |
+| `DriveType` 类型 | `infrastructure/types/dto.ts` | `DriveType = 'metadata' \| 'blob'` |
+| 业务元数据持久化 | `repositories/drive-index.repository.ts` | `FileSystemDriveIndexRepository` (interface `DriveIndexRepository`) |
+| 启动时从 index 恢复 | `bootstrap/bootstrap.ts` | `bootstrap()` 内部 `index.load()` |
 
----
+### Drive 文件操作
 
-## drive 的三种"姿势"
+| 能力 | HTTP | 文件 | 类 / 函数 |
+| --- | --- | --- | --- |
+| 拿单条 entry | `GET /v1/drives/:key/entry` | `services/files.service.ts` | `FileService.getEntry(key, path, wait)` |
+| 列目录 | `GET /v1/drives/:key/tree` | `services/files.service.ts` | `FileService.getTree(key, prefix, wait)` |
+| 读文件流 | `GET /v1/drives/:key/file` | `services/files.service.ts` | `FileService.readStream(key, path, wait)` |
+| 写文件 | `PUT /v1/drives/:key/file` | `services/files.service.ts` | `FileService.write(key, path, body, meta)` |
+| 删文件 / 目录 | `DELETE /v1/drives/:key/file` | `services/files.service.ts` | `FileService.deleteEntry(key, path, recursive)` |
+| 拒绝写入远端 drive | （断言） | `services/files.service.ts` | `if (this.registry.isRemote(driveKey)) throw ...` |
 
-drive 在 SDK 里出现三种姿势，**任何 drive 行为都要先回答属于哪一种**：
+### Drive 挂载
 
-### 姿势 A：本地 + 按名字（namespace）
+| 能力 | 文件 | 类 / 函数 |
+| --- | --- | --- |
+| 注册本地 drive（UUID → 实例） | `bootstrap/drive-registry.ts` | `InMemoryDriveRegistry.rememberLocal(uuid, drive)` |
+| 注册远端 drive（driveKey → 实例） | `bootstrap/drive-registry.ts` | `InMemoryDriveRegistry.rememberRemote(driveKey, drive)` |
+| 按 driveKey 找 drive | `bootstrap/drive-registry.ts` | `InMemoryDriveRegistry.byKey(driveKey)` |
+| 按 UUID 找 drive | `bootstrap/drive-registry.ts` | `InMemoryDriveRegistry.byNamespace(uuid)` |
+| 关闭远端 mount | `bootstrap/drive-registry.ts` | `InMemoryDriveRegistry.closeRemote(driveKey)` |
+| 忘记本地 drive | `bootstrap/drive-registry.ts` | `InMemoryDriveRegistry.forgetLocal(uuid)` |
+| 启动时恢复全部 drive | `bootstrap/bootstrap.ts` | `bootstrap()` 内部循环 `index.entries()` + `drives.openLocal(uuid)` |
+| 启动时挂 main drive | `bootstrap/bootstrap.ts` | `drives.openLocal(MAIN_NAMESPACE)` |
 
-```ts
-// runtime/corestore.ts:55
-async function mountByName(store: Store, name: string): Promise<HyperdriveInstance> {
-  const d = new HyperdriveCtor(store.namespace(name));
-  await d.ready();
-  return d;
-}
-```
+### Swarm / 网络
 
-- 用 `store.namespace(name)` 隔离存储
-- name 默认是 `crypto.randomUUID()`
-- 启动恢复时由 sidecar 用保存的 uuid 重新挂载
-- 这是"本地新建 + 本地挂载"的底层原语
+| 能力 | HTTP | 文件 | 类 / 函数 |
+| --- | --- | --- | --- |
+| 广播 announce | `POST /v1/swarm/announce` | `services/swarm.service.ts` | `SwarmService.announce(wait)` |
+| 列出已连接 peer | `GET /v1/swarm/peers` | `services/swarm.service.ts` | `SwarmService.getPeers()` |
+| 挂远端 drive | `POST /v1/swarm/mount/:pk` | `services/swarm.service.ts` | `SwarmService.mount(publicKey)` |
+| 卸载远端 drive | `POST /v1/swarm/unmount/:pk` | `services/swarm.service.ts` | `SwarmService.unmount(publicKey)` |
+| 节点身份 | `GET /v1/identity` | `services/swarm.service.ts` | `SwarmService.identity()` |
+| `sdk.connections` 数据源 | （内部） | `repositories/peer-connection.repository.ts` | `HyperdriveSwarmRepository.list()` |
+| 解析 swarm 端口 | （内部） | `bootstrap/bootstrap.ts` | `resolvedSwarmPort(sdk)` |
 
-### 姿势 B：远端 + 按公钥（session）
+### 身份 / 元数据
 
-```ts
-// runtime/corestore.ts:62
-async function mountByKey(store: Store, publicKey: Buffer): Promise<HyperdriveInstance> {
-  const d = new HyperdriveCtor(store.session(), publicKey);
-  await d.ready();
-  return d;
-}
-```
+| 能力 | 文件 | 类 / 函数 |
+| --- | --- | --- |
+| `IdentityInfo` DTO | `infrastructure/types/dto.ts` | `IdentityInfo` |
+| `PeerInfo` DTO | `infrastructure/types/dto.ts` | `PeerInfo` |
+| `peerCount` 计算 | `services/swarm.service.ts` | `SwarmService.identity()` → `connections.count()` |
+| `peerPublicKey` 计算 | `services/swarm.service.ts` | `SwarmService.identity()` → `toHexKey(sdk.publicKey)` |
+| `mainDriveKey` 计算 | `services/swarm.service.ts` | `SwarmService.identity()` → `mainDriveKey()` (由 bootstrap 注入) |
 
-- 用 `store.session()` + 显式 `publicKey` Buffer
-- key 必须经过 `normalizeAndValidateDriveKey` 校验（64-char hex，剥 `0x`）
-- 这是 `openDriveByKey` 的底层原语
+### 错误 / 边界
 
-### 姿势 C：复用（已挂载列表）
+| 能力 | 文件 | 类 / 函数 |
+| --- | --- | --- |
+| 抛出 `SidecarError` | `infrastructure/errors/index.ts` | `class SidecarError extends Error` |
+| 错误码枚举 | `infrastructure/errors/index.ts` | `ErrorCode.*` |
+| 错误 → HTTP 状态 | `infrastructure/errors/index.ts` | `httpStatusFor(code)` |
+| 错误 → wire body | `infrastructure/errors/index.ts` | `toErrorBody(err)` |
+| Drive 未挂载异常 | `services/files.service.ts` | `class DriveNotMountedError` |
+| HTTP 错误序列化 | `middlewares/error.middleware.ts` | `registerErrorHandler(app)` |
 
-- `drives: Map<name, HyperdriveInstance>` —— name 索引
-- `byKey: Map<hex, HyperdriveInstance>` —— driveKey 索引
-- `typesByName: Map<name, DriveType>` —— 业务类型索引
-- 任何"已挂载则复用"的行为都靠这三个 map
+### SDK 边界守护
 
----
-
-## ACL 边界："drive"走到哪一层突然不让业务侧碰？
-
-业务侧拿到的 `StoreRuntime` 是 public surface：
-
-```23:78:packages/hyper-sdk/src/runtime/corestore.ts
-export interface StoreRuntime {
-  main: Drive;
-  createDrive: (name?: string, type?: DriveType) => Promise<Drive>;
-  mountDrive: (name: string, type?: DriveType) => Promise<Drive>;
-  mountOrCreateDrive: (name: string, type?: DriveType) => Promise<Drive>;
-  getDrive: (name: string) => Drive | null;
-  listDrives: () => Drive[];
-  openDriveByKey: (driveKey: string) => Promise<Drive>;
-  closeDriveByKey: (driveKey: string) => Promise<void>;
-  close: () => Promise<void>;
-}
-```
-
-注意 **没有**：
-
-- 没有 `HyperdriveInstance`（业务不知道 hyper 类）
-- 没有 `store`（业务拿不到 corestore）
-- 没有 `__hyperByKey` / `__hyperByName`（双下划线前缀是 SDK 内部标记）
-- 没有 `driveKeyOf`（曾经导出过，已移除）
-
-三道 ACL（详见 [`hyper-sdk-acl.md`](./hyper-sdk-acl.md)）：
-
-1. **TypeScript 类型系统**：`index.ts` 不重导出 `HyperdriveInstance` / `InternalStoreRuntime` / `__hyper*`
-2. **模块物理隔离**：业务 TS 文件 `import { HyperdriveInstance } from '@cinereel/hyper-sdk'` 会编译失败
-3. **运行时栈检查**：`__hyperByKey` 入口会扫描 V8 栈，至少一帧必须落在 `@cinereel/hyper-sdk` 包根目录内
-
----
-
-## 业务侧用 drive 的"正确"姿势
-
-侧车（sidecar）和上层其它 app 的标准模式：
-
-```ts
-import { createStoreRuntime, type StoreRuntime } from '@cinereel/hyper-sdk';
-
-// 业务侧能且只能看到这一面
-const runtime: StoreRuntime = await createStoreRuntime(config.storeDir);
-
-// 想要新 drive → 走 SDK 的 createDrive
-const newDrive = await runtime.createDrive('blob', crypto.randomUUID());
-// newDrive 是 Drive 类型：{ publicKey, name, type, createdAt, updatedAt }
-// 注意：没有 .key Buffer、没有 hyper 实例
-
-// 想要拿文件 → 走 FileService，接收的是 driveKey 字符串
-const fileService = makeFileService(runtime as InternalStoreRuntime);
-//  ↑ 这次的 cast 只在 sidecar 内部；业务上游用 FileService 接口
-const tree = await fileService.getTree(newDrive.publicKey, '/');
-
-// 远端 drive
-const remote = await runtime.openDriveByKey(theirHex);
-const stream = await fileService.readStream(remote.publicKey, '/file.mp4');
-```
-
-**为什么这么绕：** 拿 driveKey 字符串作为业务侧唯一标识，而不是直接传 hyper 实例？
-因为拿实例 → 业务就能调 hyper 私有 API、绕过 SDK 的所有 invariant。
-driveKey 是 business-friendly 的最小信息单元。
-
----
-
-## 改 SDK 时去哪？
-
-| 我想… | 打开的文件 |
+| 能力 | 文件 |
 | --- | --- |
-| 改 drive 的存储姿势（namespace vs session） | `runtime/corestore.ts` 的 `mountByName` / `mountByKey` |
-| 改 drive 列表的输出 shape | `runtime/corestore.ts` 的 `toDrive` 函数 |
-| 加一个新的 drive-key 校验规则 | `utils/hyper.factory.ts` 的 `normalizeAndValidateDriveKey` |
-| 改文件层接口签名 | `services/file.ts` |
-| 加一个新的网络能力（比如主动 peer 搜索） | `runtime/hyperswarm.ts` 然后挂到 `services/swarm.ts` |
-| 收紧 ACL | `utils/acl.ts` |
-| 新增公开类型 | `types/types.ts`（慎重，公开面增长应有预算） |
+| 唯一允许 `import 'hyper-sdk'` 的地方 | `infrastructure/sdk/index.ts` |
+| 边界检查脚本 | `scripts/check-sdk-boundary.sh` |
 
-详细的设计决策（"为什么 drive 必须用 namespace 不能用 key"这类问题）见
-[`hyper-sdk-design.md`](./hyper-sdk-design.md)。
+---
 
-新增的运行时代码门禁（"为什么不让业务侧 import hyper 包"）见
-[`hyper-sdk-acl.md`](./hyper-sdk-acl.md)。
+## 关键不变量（invariants）
 
+读了上面表格之后，下面这些 invariant 是必须遵守的，否则边界会乱：
+
+1. **`HyperdriveLike` 不能跨过 `infrastructure/`**：在 `services/`、`repositories/` 里，drive 通过 `DriveRegistry.byKey(driveKey)` 取得，类型上看就是 `HyperdriveLike`。任何"在 services 里直接 `new Hyperdrive(...)`"的写法都违反分层。
+
+2. **`SwarmService` 的 `getPeers()` 只能读 `PeerConnectionRepository`**：不能读 `sdk.connections` 直接，因为合成连接注入的目标是底层 `Set`。两者在测试时表现不一致。
+
+3. **`DriveIndexRepository` 是真值源（source of truth）**：业务元数据（name / type / createdAt）在 `FileSystemDriveIndexRepository` 的 JSON 文件里，不在 `DriveRegistry`（registry 只是 in-memory cache）。重启后 `bootstrap()` 从 index 文件重新加载。
+
+4. **driveKey 永远是 64-char lowercase hex**：跨 `Buffer` / `string` 一律走 `infrastructure/types/key.ts::toHexKey` / `driveKeyOf`。schema 校验 (`Hex64`) 用同一个正则，保证 HTTP 边界也是这个格式。
+
+5. **`main` drive 不可 remove**：`FileSystemDriveIndexRepository.remove` 显式拒绝 `uuid === 'main'`，`DriveService.remove` 也再做一次检查。两层防御。
+
+6. **Repositories 不接触 fastify，业务规则不接触 SDK**：`repositories/` 只依赖 `infrastructure/`；`services/` 只依赖 `infrastructure/` + `repositories/`（接口）+ `bootstrap/drive-registry`。任何反向引用都是分层破坏。
+
+---
+
+## 修改某个能力时该打开哪个文件
+
+- 想改 **HTTP 路径 / 校验 / 响应 schema** → `controllers/<resource>.controller.ts` + `controllers/schemas.ts`
+- 想改 **drive 业务规则**（创建流程、UUID namespace、删除逻辑）→ `services/drives.service.ts`
+- 想改 **文件操作业务规则**（isRemote 拒绝、recursive 策略）→ `services/files.service.ts`
+- 想改 **swarm 业务规则**（announce 时机、peers 过滤）→ `services/swarm.service.ts`
+- 想改 **挂载表行为**（寻址 / 远端 vs 本地）→ `bootstrap/drive-registry.ts`
+- 想改 **Hyperdrive 调用方式**（多调一个方法、改错误处理）→ `repositories/drive.repository.ts` + `infrastructure/types/hyperdrive.ts`（同步加）
+- 想改 **数据访问技术**（JSON → RocksDB 等）→ `repositories/drive-index.repository.ts`
+- 想改 **DTO / 服务接口形状** → `infrastructure/types/dto.ts` + `services/*.service.ts`
+- 想改 **hex / driveKey 处理** → `infrastructure/types/key.ts`
+- 想改 **错误 → HTTP 状态映射** → `infrastructure/errors/index.ts`
+- 想改 **认证规则** → `auth/jwt.ts` + `auth/keys.ts` + `middlewares/auth.middleware.ts`
+- 想改 **新增依赖装配** → `bootstrap/bootstrap.ts`

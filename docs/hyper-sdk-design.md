@@ -1,414 +1,225 @@
-# Hyper SDK Design
+# Hyper SDK 设计
 
 ## 1. 架构设计
 
 ### 1.1 定位与目标
 
-`@cinereel/hyper-sdk` 是 Hyper 分布式存储系统的 TypeScript 封装层。它：
+Sidecar 通过官方 `hyper-sdk@^6.2.2`（[RangerMauve/hyper-sdk](https://github.com/RangerMauve/hyper-sdk)）
+访问 Hyper 分布式存储系统。Sidecar 不维护自建 SDK，而是在官方 SDK
+之上**叠加一个面向 HTTP 的薄服务层**，并按 CSR 五层严格分离
+（`controllers/` → `services/` → `repositories/` + `infrastructure/` + `middlewares/` + `bootstrap/`）。
 
-- **负责**：Hyperdrive/Corestore/Hyperswarm 的生命周期管理、API 适配、错误抽象
-- **不负责**：业务层元数据（drive 名称、类型、创建时间）、持久化索引、权限控制
+- **负责**：把官方 SDK 的 `Hyperdrive` 实例按 `driveKey`（hex）寻址，
+  把 Hyperdrive 文件操作包装成 `FileService`，把 Hyperswarm 连接状态
+  包装成 `SwarmService`；管理业务元数据（drive 名称 / 类型 / 创建时间）
+  和 UUID 命名空间恢复
+- **不负责**：HTTP 路由 / 认证 / 请求校验（由 `controllers/` + `middlewares/` 层负责）
 
-分层职责：
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│  Consumer (Sidecar / 其他上层应用)                           │
-│  - 业务层元数据管理（drive-index.json）                        │
-│  - HTTP 路由 / 认证 / 请求校验                               │
-└────────────────────────────┬─────────────────────────────────┘
-                             │  Hyper SDK API
-                             ▼
-┌──────────────────────────────────────────────────────────────┐
-│  @cinereel/hyper-sdk                                        │
-│  - Corestore 多租户 namespace 管理                          │
-│  - Hyperdrive CRUD 与文件操作                                 │
-│  - Hyperswarm P2P 发现与复制                                │
-│  - Hyper v13 API 适配与错误抽象                              │
-└────────────────────────────┬─────────────────────────────────┘
-                             │  Corestore / Hyperdrive / Hyperswarm
-                             ▼
-┌──────────────────────────────────────────────────────────────┐
-│  Hyper 底层库                                               │
-│  - hyperdrive v13.3.2                                       │
-│  - corestore v7                                            │
-│  - hyperswarm                                              │
-│  - hypercore / rocksdb-native                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
-
-
-### 1.2 核心设计决策
-
-
-
-#### 决策：每个 Drive 使用 UUID 作为 Corestore Namespace
+### 1.2 分层
 
 ```
-storeDir/
-├── db/
-│   ├── 000008.sst   ← Hypercore #1 (namespace 'main')
-│   ├── 000021.sst   ← Hypercore #2 (namespace '<uuid>')
-│   └── ...
-└── drive-index.json  ← 业务元数据（由 sidecar 管理，不在此 SDK 中）
+┌────────────────────────────────────────────────────────────────┐
+│  controllers 层  (apps/sidecar/src/controllers/**)              │
+│   - <resource>.controller.ts  — 每个资源一个 class             │
+│   - schemas.ts                — JSON Schema (draft-07)         │
+│   看不到 Hyperdrive 实例，只看得到 FileService / SwarmService  │
+└──────────────────────────┬─────────────────────────────────────┘
+                           │  consumes
+                           ▼
+┌────────────────────────────────────────────────────────────────┐
+│  services 层  (apps/sidecar/src/services/**)                    │
+│   - drives.service.ts          — class DriveService            │
+│   - files.service.ts           — class FileService             │
+│   - swarm.service.ts           — class SwarmService             │
+│   不接触 fastify / SDK 调用                                    │
+└──────────────────────────┬─────────────────────────────────────┘
+                           │  uses interfaces
+                           ▼
+┌────────────────────────────────────────────────────────────────┐
+│  repositories 层  (apps/sidecar/src/repositories/**)           │
+│   - drive.repository.ts        — DriveRepository               │
+│   - drive-index.repository.ts  — DriveIndexRepository           │
+│   - peer-connection.repository.ts — PeerConnectionRepository    │
+│   - in-memory/                 — 测试用 fake 实现              │
+└──────────────────────────┬─────────────────────────────────────┘
+                           │  imports
+                           ▼
+┌────────────────────────────────────────────────────────────────┐
+│  infrastructure 层  (apps/sidecar/src/infrastructure/**)       │
+│   - sdk/index.ts               — 唯一的 import 'hyper-sdk' 入口│
+│   - types/{dto,hyperdrive,key} — wire DTOs + HyperdriveLike    │
+│   - errors/index.ts            — SidecarError + 错误码         │
+└──────────────────────────┬─────────────────────────────────────┘
+                           │
+                           ▼
+                  hyper-sdk@^6.2.2
+                  (npm, 来自 RangerMauve/hyper-sdk)
 ```
 
-- **UUID 生成**：`crypto.randomUUID()`，保证跨重启的存储连续性
-- **固定 namespace**：`'main'` 用于主 drive
-- **Why not 用 driveKey 作为 namespace**：key 是公钥，namespace 是存储隔离机制，分离更清晰
-- **Why not 用 name 作为 namespace**：name 是业务层概念，存储层不应依赖业务语义
+还有：
+- `bootstrap/`（composition root + shared in-memory state `DriveRegistry`）
+- `middlewares/`（Fastify `preHandler` / `setErrorHandler`）
+- `auth/`（JWT + API key 加密原语）
 
+### 1.3 各层职责
 
+| 层 | 文件 | 职责 | 不允许 |
+| --- | --- | --- | --- |
+| `infrastructure/` | `sdk/index.ts` | 唯一 `import 'hyper-sdk'` | 业务逻辑、fastify |
+| `infrastructure/` | `types/{dto,hyperdrive,key}.ts` | wire 格式 + 结构类型 + 编解码 | 任何实现细节 |
+| `infrastructure/` | `errors/index.ts` | 跨层错误原语 (`SidecarError`) | 业务规则 |
+| `repositories/` | `drive.repository.ts` | Hyperdrive 数据访问（open / close） | fastify、业务规则 |
+| `repositories/` | `drive-index.repository.ts` | 业务元数据持久化（JSON 文件） | fastify、SDK 直接调用 |
+| `repositories/` | `peer-connection.repository.ts` | swarm 连接数据访问 | fastify、业务规则 |
+| `services/` | `drives.service.ts` | drive CRUD 业务规则 | fastify、SDK |
+| `services/` | `files.service.ts` | 文件操作业务规则（isRemote 拒绝） | fastify、SDK |
+| `services/` | `swarm.service.ts` | 网络 / swarm 业务规则 | fastify、SDK |
+| `bootstrap/` | `bootstrap.ts` | 一站式 composition root | fastify 业务路由 |
+| `bootstrap/` | `drive-registry.ts` | 共享 in-memory 状态（DriveRegistry） | SDK、HTTP |
+| `controllers/` | `<resource>.controller.ts` | HTTP 适配器，class + `register(app)` | 业务规则、SDK |
+| `controllers/` | `schemas.ts` | JSON Schema 校验 | 任何实现细节 |
+| `middlewares/` | `server.ts` | Fastify 装配 + CORS + Swagger | 业务规则 |
+| `middlewares/` | `auth.middleware.ts` | 认证 preHandler | 业务规则、SDK |
+| `middlewares/` | `error.middleware.ts` | SidecarError → wire body | 业务规则 |
+| `auth/` | `jwt.ts` `keys.ts` | JWT 签验 + API key 注册 | 业务规则、SDK |
+| `config/` | `schema.ts` `load.ts` | zod 配置 + env loader | 任何业务逻辑 |
 
-#### 决策：业务层元数据（name、createdAt）不进入 SDK
+### 1.4 边界守护
 
-- Corestore/Hyperdrive 是存储引擎，无业务语义
-- `DriveDescriptor.name`、`DriveDescriptor.createdAt` 等字段由 sidecar 层注入
-- SDK 的 `listDrives()` 仅返回 `{ uuid, driveKey, type }`
+`scripts/check-sdk-boundary.sh` 在 CI 中运行，强制：
 
+- `src/` 下只有 `infrastructure/sdk/index.ts` 能 `import 'hyper-sdk'`（重导出）
+- 任何其它文件直接导入 `hyper-sdk` 都会被拒绝
+- 任何文件直接导入 `hypercore*` / `hyperdrive*` / `hyperswarm*` / `corestore*` 都会被拒绝
 
+这条规则让 "services 不知道 `Hyperdrive` 类的存在" 这条架构约束有了**机械性**保证，而不是靠 code review。
 
-#### 决策：Remote Drive 用 `session() + key` 模式打开
+## 2. 关键决策
 
-```ts
-// ✅ 正确：session() + explicit key buffer
-const drive = new Hyperdrive(store.session(), Buffer.from(hexKey, 'hex'));
+### 2.1 为什么走「CSR」而不是「旧三层」
 
-// ❌ 错误：namespace 模式会忽略 key，生成随机 key
-const drive = new Hyperdrive(store.namespace(`remote:${hexKey}`));
+旧的方案是 `core/ + domain/ + http/`。`core/` 既是 SDK 适配器又定义服务接口；
+`domain/` 用工厂函数（`makeDriveService()`）返回对象字面量，难注入、难单测。
+
+新的 CSR：
+
+- `repositories/` 抽 `interface` + 默认 class + in-memory fake。Services 依赖
+  interface，单元测试用 fake 直接注入。
+- `services/` 改成 `class`，constructor 注入依赖。`this.keyToUuid` 这类内部状态
+  用 `private` 字段，告别 closure 黑魔法。
+- `controllers/` 改成 `class` + `register(app)` 方法，`registerControllers(app, deps)`
+  在一个地方集中装配所有 controller。
+- `bootstrap/` 拥有 `InMemoryDriveRegistry`——这是 composition 层独有的 in-process
+  状态，不属于数据访问层。
+
+### 2.2 UUID-as-namespace
+
+每个本地 drive 在 `repositories/drive-index.repository.ts` 的 JSON 文件里有一行：
+
+```json
+{ "<uuid>": { "name": "movies", "type": "blob", "createdAt": "..." } }
 ```
 
----
+UUID 就是官方 SDK 的 namespace。`sdk.getDrive(uuid)` 每次返回同一个 Corestore 子命名空间，所以**重启后 drive 内容不丢，driveKey 不变**。
 
+主 drive 用固定字符串 `"main"` 作为 namespace，便于在所有 sidecar 实例之间共享（"main drive" = 这个 sidecar 自己的索引盘）。
 
+### 2.3 `sdk.connections` vs `sdk.peers`
 
-## 2. API 能力
+官方 SDK 提供两个 swarm 状态视图：
 
+- `sdk.peers` — `PeerInfo[]`，由 SDK 包装过的元数据列表
+- `sdk.connections` — `Set<Connection>`，Hyperswarm 原始连接
 
+我们读 `sdk.connections`（而不是 `sdk.peers`）作为 `PeerConnectionRepository.list()` 的数据源，原因：
 
-### 2.1 类型系统
+- 测试时要把合成 connection 直接 push 进 `connections`，`peers` 是 SDK 内部派生的、不会反映手动注入
+- `connections` 上的 `remotePublicKey` 是权威源头（与真实 hyperswarm 行为一致）
 
-```ts
-// Drive 类型
-type DriveType = 'metadata' | 'blob';
+注意：官方 SDK 的 TS 类型声明 `sdk.connections: Connection[]`，但运行时是 `Set<Connection>`。`HyperdriveSwarmRepository` 用 `.size` 取大小（`.length` 是 `undefined`）。
 
-// Drive 描述符（业务层，由 sidecar 注入）
-interface DriveDescriptor {
-  driveKey: string;   // 64-char hex，公钥
-  name: string;       // 业务名称
-  type: DriveType;    // 类型
-  isLocal: boolean;
-  createdAt?: string; // ISO 8601
-}
+### 2.4 远端 mount 用 `HyperdriveLike` 而不是 `Hyperdrive`
 
-// 文件条目
-interface HyperdriveEntry {
-  key: string;        // 路径
-  seq: number;
-  value: {
-    type: 'file' | 'directory';
-    metadata: unknown;
-  } | null;
-}
+官方 SDK 没有重新导出 `Hyperdrive` 类，`hyperdrive` 也不是 sidecar 的直接依赖。
+为了在 `services/files.service.ts` 里写 `drive.entry(...)` 而不引入新依赖，
+我们定义了一个**结构类型** `HyperdriveLike`（在
+`infrastructure/types/hyperdrive.ts`），只列出 services 实际调用的方法。
 
-// 目录树节点
-interface TreeNode {
-  name: string;
-  type: 'file' | 'directory';
-  size?: number;
-  children?: TreeNode[];
-}
+这样：
 
-// 对等节点信息
-interface PeerInfo {
-  publicKey: string;
-  connectedAt: string;
-}
+- `hyper-sdk` 是 sidecar 唯一的 hyper 依赖
+- `HyperdriveLike` 是编译期接口，运行时就是真实 `Hyperdrive` 实例
+- 如果以后需要新方法，编辑 `hyperdrive.ts` 和 `repositories/drive.repository.ts` 同时加上即可
 
-// 节点身份信息
-interface IdentityInfo {
-  mainDriveKey: string;
-  swarmPort: number;
-  peerCount: number;
-}
+## 3. 关键路径
+
+### 3.1 启动：`pnpm dev`
+
+```text
+src/index.ts                          ← top-level entry
+  └─ loadConfig()                     ← config/load.ts (env)
+  └─ loadApiKeys()                    ← auth/keys.ts
+  └─ bootstrap(config)                ← bootstrap/bootstrap.ts
+       ├─ createSdk(...)              ← infrastructure/sdk/index.ts
+       ├─ new FileSystemDriveIndexRepository(config.storeDir)
+       ├─ new HyperdriveRepository(sdk)
+       ├─ new HyperdriveSwarmRepository(sdk.connections)
+       ├─ new InMemoryDriveRegistry()
+       ├─ drivesRepo.openLocal('main') + registry.rememberLocal
+       ├─ for each uuid in index: drivesRepo.openLocal(uuid)
+       ├─ new DriveService(...) + seed(keyToUuid)
+       ├─ new FileService(registry)
+       └─ new SwarmService(...)
+  └─ buildServer(config, services, sdk) ← middlewares/server.ts
+       ├─ registerControllers()        ← controllers/index.ts
+       ├─ registerAuthMiddleware()     ← middlewares/register-auth.ts
+       └─ registerErrorHandler()       ← middlewares/error.middleware.ts
+  └─ app.listen({ host, port })
 ```
 
----
+### 3.2 文件写：`PUT /v1/drives/:key/file`
 
-
-
-## 3. 接口设计
-
-
-
-### 3.1 CorestoreRuntime
-
-管理 Corestore 实例和所有 Hyperdrive 的生命周期。
-
-```ts
-export interface CorestoreRuntime {
-  /** 单例 Corestore 实例 */
-  store: CorestoreInstance;
-
-  /** 主 Drive（namespace 'main'）*/
-  main: HyperdriveInstance;
-
-  /**
-   * 创建新 Drive。
-   * - 生成随机 UUID 作为 Corestore namespace
-   * - 返回 { driveKey, uuid, type }
-   * - 重启后可用相同 UUID 重新打开
-   */
-  createDrive(type: DriveType): Promise<CreatedDrive>;
-
-  /**
-   * 用指定 UUID 挂载已有 Drive。
-   * - 用于启动恢复：用 drive-index 中的 UUID 重新挂载
-   * - 若已挂载则返回现有实例
-   */
-  mountDrive(uuid: string, type: DriveType): Promise<HyperdriveInstance>;
-
-  /**
-   * 挂载或创建（用于恢复场景）。
-   * - 优先挂载已有存储
-   * - 若 namespace 无数据则创建空 Drive
-   */
-  mountOrCreate(uuid: string, type: DriveType): Promise<HyperdriveInstance>;
-
-  /**
-   * 查询已挂载 Drive。
-   * - 返回 null 表示未挂载（不等于不存在）
-   */
-  getDrive(uuid: string): HyperdriveInstance | null;
-
-  /**
-   * 用 driveKey 打开一个 Drive（本地或远端）。
-   * - 本地挂载的 drive（按 namespace）会原样返回并保留本地 name
-   * - 否则通过 `store.session() + key buffer` 打开为远端 drive
-   * - 验证 key 格式（64-char hex）
-   * - 有缓存副作用：打开的 instance 会留在内部 `byKey` map 中
-   */
-  openDriveByKey(driveKey: string): Promise<Drive>;
-
-  /**
-   * 释放按 driveKey 打开的 Drive。
-   * - 命中缓存：从内部 map 摘除并 close 底层 hyperdrive
-   * - 未命中：no-op（幂等）
-   * - `main` drive 由 runtime 持有，仅随 `close()` 释放
-   * - 不删除本地数据
-   */
-  closeDriveByKey(driveKey: string): Promise<void>;
-
-  /**
-   * 列出所有已挂载 Drive（不含业务字段）。
-   */
-  listDrives(): DriveInfo[];
-
-  close(): Promise<void>;
-}
+```text
+PUT /v1/drives/:key/file
+  → auth preHandler                                   ← middlewares/auth.middleware.ts
+  → controller (controllers/drives.controller.ts)      → files.write(key, path, buf, meta)
+  → services/files.service.ts.write()
+       ├─ get(key) → registry.byKey(key)               ← bootstrap/drive-registry.ts
+       ├─ if registry.isRemote(key) → throw "cannot write to remote"
+       ├─ drive.createWriteStream(path) → end(buf)
+       └─ return { ok: true, byteLength }
+  → response: 200 { ok, byteLength }
 ```
 
-**关键实现细节**：
+### 3.3 远端 mount：`POST /v1/swarm/mount/:publicKey`
 
-- `named: Map<uuid, NamedDrive>` — 追踪所有已挂载 Drive
-- `byKey: Map<hexKey, Drive>` — DriveKey → Drive 快速查找
-- 每个 Drive 必须有唯一 namespace：`new Hyperdrive(store.namespace(uuid))`
-- Remote Drive：`new Hyperdrive(store.session(), keyBuffer)`
-
-
-
-### 3.2 FileService
-
-文件级 CRUD 操作，所有接口以 `driveKey` 定位 Drive。
-
-```ts
-export interface FileService {
-  /** 获取文件/目录元数据 */
-  getEntry(driveKey: string, path: string, wait?: boolean): Promise<HyperdriveEntry | null>;
-
-  /** 获取目录树（扁平化为一层子节点）*/
-  getTree(driveKey: string, prefix?: string, wait?: boolean): Promise<TreeNode>;
-
-  /** 读取文件内容（流式）*/
-  readStream(driveKey: string, path: string, wait?: boolean): Promise<Readable>;
-
-  /** 写入文件内容（原子性，writeStream → finish）*/
-  write(driveKey: string, path: string, body: Buffer, metadata?: unknown): Promise<{ ok: true; byteLength: number }>;
-
-  /** 删除文件/目录（recursive=true 递归删除）*/
-  deleteEntry(driveKey: string, path: string, recursive?: boolean): Promise<{ ok: true }>;
-}
+```text
+POST /v1/swarm/mount/<hex>
+  → auth preHandler
+  → controller (controllers/swarm.controller.ts)       → swarm.mount(publicKey)
+  → services/swarm.service.ts.mount()
+       ├─ HEX64 校验
+       ├─ drives.openRemote(publicKey)                 ← repositories/drive.repository.ts
+       ├─ registry.rememberRemote(driveKey, drive)     ← bootstrap/drive-registry.ts
+       └─ return { driveKey }
+  → response: 200 { driveKey }
 ```
 
-**Hyperdrive v13 适配层**：
+## 4. 约束与限制
 
-- v13 所有操作返回 `Promise` 或 `Readable`（无回调）
-- `adaptEntry()` 将 v13 内部结构 `{ key, seq, value: { blob, metadata } }` 映射到 `HyperdriveEntry`
-- `blob === null` → directory；否则 → file
-- `write` 使用 `createWriteStream`，通过 `finish` 事件确认写入完成
+- **写入只能 local**：远端 mount 是只读的（write 拒绝，delete 拒绝）。
+  理由：Hyperswarm 的 CRDT 语义下，写远端 drive 会绕过对方的发现流程，
+  造成数据分裂。
+- **`main` drive 不能 remove**：作为元数据索引盘，被 `index.json` 和
+  `swarm.identity()` 共同依赖。`FileSystemDriveIndexRepository.remove` 和
+  `DriveService.remove` 各拒一次，两层防御。
+- **driveKey 永远是 64-char lowercase hex**：跨 wire / on-disk / in-memory 一律用这个格式，
+  避免大小写或 base32 混淆。`infrastructure/types/key.ts::isHex64` 是唯一的格式校验。
+- **swarm port 0 表示未监听**：hyperswarm 还没绑定 UDP 时，`identity.swarmPort = 0`。
+  测试场景下（`autoJoin: false`）这很常见。
 
+## 5. 进一步阅读
 
-
-### 3.3 SwarmService
-
-P2P 网络层：发现、连接、广播。
-
-```ts
-export interface SwarmService {
-  /** 将主 Drive 广播到网络 */
-  announce(flush?: boolean): Promise<void>;
-
-  /** 获取当前连接的 Peer 列表 */
-  getPeers(): PeerInfo[];
-
-  /**
-   * 订阅远程 Drive（通过公钥）。
-   * - 调用 openDriveByKey 打开 Drive
-   * - 自动 join Hyperswarm DHT 发现
-   */
-  mount(publicKey: string): Promise<{ driveKey: string }>;
-
-  /** 取消订阅远程 Drive */
-  unmount(publicKey: string): Promise<void>;
-
-  /** 获取本节点身份信息 */
-  identity(): IdentityInfo;
-}
-```
-
-
-
-### 3.4 HyperswarmRuntime
-
-Hyperswarm 封装，底层 DHT 网络操作。
-
-```ts
-export interface HyperswarmRuntime {
-  swarm: Hyperswarm;
-  join(drive: HyperdriveInstance, flush?: boolean): Promise<void>;
-  leave(drive: HyperdriveInstance): Promise<void>;
-  destroy(): Promise<void>;
-}
-```
-
----
-
-
-
-## 4. 能力实现细节
-
-
-
-### 4.1 多租户存储隔离
-
-Corestore 的 `namespace()` 是隔离单元。每个 Drive 对应一个独立的 namespace：
-
-```ts
-// 本地 Drive（使用 namespace）
-const ns = store.namespace(uuid);
-const drive = new Hyperdrive(ns);
-
-// Remote Drive（使用 session + key）
-const session = store.session();
-const drive = new Hyperdrive(session, keyBuffer);
-```
-
-**不可混用**：同一 Corestore 实例不能对两个 Drive 使用相同的 namespace，否则第二个 `drive.ready()` 会永久阻塞。
-
-### 4.2 启动恢复流程
-
-```
-启动时：
-1. 读取 drive-index.json → { uuid: { name, type, createdAt } }
-2. 对每个 uuid（非 main）：
-   - runtime.getDrive(uuid) → 检查是否已挂载
-   - 若未挂载：runtime.mountOrCreate(uuid, entry.type)
-3. 重建 keyToUuid 反查表
-4. 所有 Drive 可用，list() 返回完整信息
-```
-
-
-
-### 4.3 Remote Drive 打开约束
-
-Hyperdrive v13 对构造函数参数有严格约束：
-
-
-| 调用方式                                              | 行为                          |
-| ------------------------------------------------- | --------------------------- |
-| `new Hyperdrive(store.namespace('x'))`            | 打开/创建 namespace 'x' 的 Drive |
-| `new Hyperdrive(store.session(), keyBuffer)`      | 打开已知公钥的 Remote Drive        |
-| `new Hyperdrive(store.session())`                 | 生成新随机 Drive（错误）             |
-| `new Hyperdrive(store.namespace('x'), keyBuffer)` | key 被忽略（opts vs positional） |
-
-
-SDK 在 `openDriveByKey()` 中强制使用正确的 `session() + key` 模式。
-
-### 4.4 文件路径规范化
-
-所有路径在传入 Hyperdrive 前规范化：
-
-```ts
-function normalizePath(p: string): string {
-  if (!p || p === '/') return '/';
-  return '/' + p.replace(/^\/+/, '');
-}
-```
-
-
-
-### 4.5 错误处理
-
-SDK 定义两类业务错误：
-
-```ts
-class InvalidDriveKeyError extends Error {
-  provided: string; // 出错的 key
-}
-
-class InvalidPublicKeyError extends Error {
-  provided: string; // 出错的公钥
-}
-```
-
-其他错误直接透传底层 Hyper 库的错误。
-
----
-
-
-
-## 5. 文件结构
-
-```
-packages/hyper-sdk/src/
-├── index.ts                    ← 统一导出
-├── types/types.ts              ← 共享类型定义
-├── runtime/
-│   ├── corestore.ts            ← 存储运行时（核心）
-│   └── hyperswarm.ts           ← P2P 网络运行时
-├── services/
-│   ├── drive.ts                ← Drive 工厂（@deprecated）
-│   ├── file.ts                 ← 文件操作服务
-│   └── swarm.ts               ← Swarm 服务
-├── utils/
-│   └── hyperdrive.factory.ts  ← Drive 解析工具
-└── hyper-sdk.d.ts              ← 第三方库类型声明
-```
-
----
-
-
-
-## 6. 已知约束
-
-
-| 约束                                    | 说明                            |
-| ------------------------------------- | ----------------------------- |
-| 每个 Corestore 只支持一个 `namespace()` 别名   | 重复 namespace 会导致 `ready()` 挂起 |
-| `key` 必须作为构造函数第二个位置参数传入               | 放入 `opts.key` 会被忽略            |
-| v13 `writeStream` 需监听 `finish` 事件确认完成 | `close` 事件不可靠                 |
-| v13 无原生递归删除                           | 需手动遍历子树逐个删除                   |
-| 业务层元数据不由 SDK 管理                       | 必须由上层（sidecar）单独持久化           |
-
-
+- `docs/hyper-sdk-capability-map.md` — drive 能力 → 文件 / 函数映射表
+- `docs/hyper-sdk-acl.md` — 现存边界守护（`check-sdk-boundary.sh`）
+- `apps/sidecar/README.md` — sidecar 本地使用文档

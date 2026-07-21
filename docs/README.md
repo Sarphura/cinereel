@@ -20,9 +20,9 @@
 | [调试案例索引](./cases/) | 单次排错实录：栈帧解读、定位思路、经验沉淀 |
 | &nbsp;&nbsp;&nbsp;↳ [三实例 Swarm 互不可见](./cases/2026-07-19-swarm-mutual-discovery.md) | dev / peer / bootstrap 启动后谁也找不到谁：`peerCount` 永远是 `1/1/0` |
 | &nbsp;&nbsp;&nbsp;↳ [TUN 代理把入站 UDP 砍掉后，Sidecar 在 DHT 里彻底失联](./cases/2026-07-19-warp-firewalled-swarm.md) | `firewalled: true` + `ephemeral: true` 的真正根因：QX / WARP / Surge / Tailscale 等 TUN 工具接管 default route |
-| [Hyper SDK 设计](./hyper-sdk-design.md) | `@cinereel/hyper-sdk` 架构设计、API 完整签名、决策细节、约束清单 |
-| [Hyper SDK 能力地图](./hyper-sdk-capability-map.md) | drive 能力在 SDK 哪些文件 / 函数里（业务侧读代码索引） |
-| [Hyper SDK 访问控制](./hyper-sdk-acl.md) | 三层 ACL（TS 类型、模块隔离、运行时栈检查）：谁能拿到 hyper 实例 |
+| [Hyper SDK 设计](./hyper-sdk-design.md) | sidecar 在官方 `hyper-sdk@^6.2.2` 之上的 CSR 分层架构（`controllers/ → services/ → repositories/ + infrastructure/ + middlewares/ + bootstrap/`）、API 完整签名、决策细节、约束清单 |
+| [Hyper SDK 能力地图](./hyper-sdk-capability-map.md) | drive 能力在新分层下哪些文件 / 函数里（业务侧读代码索引） |
+| [Hyper SDK 访问控制](./hyper-sdk-acl.md) | CSR 重组后的边界守护：`infrastructure/sdk/index.ts` 是 src/ 下唯一允许 `import 'hyper-sdk'` 的文件 |
 
 ## 术语
 
