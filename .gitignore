@@ -72,9 +72,13 @@ corestore/
 cache/
 test/
 
+# Unignore sidecar's own test/ and scripts/ — they live inside the
+# package, not at the repo root, and contain real test code and CI
+# guard scripts.
+!apps/sidecar/test/
+!apps/sidecar/scripts/
+
 .bootstrap-store
 .peer-sidecar-store
 .sidecar-store
 .demo
-
-scripts
