@@ -183,12 +183,22 @@ export interface CorestoreRuntime {
   getDrive(uuid: string): HyperdriveInstance | null;
 
   /**
-   * 用公钥解析 Remote Drive。
-   * - 优先从已挂载列表查找（O(1)）
-   * - 未挂载时通过 `store.session() + key buffer` 打开
+   * 用 driveKey 打开一个 Drive（本地或远端）。
+   * - 本地挂载的 drive（按 namespace）会原样返回并保留本地 name
+   * - 否则通过 `store.session() + key buffer` 打开为远端 drive
    * - 验证 key 格式（64-char hex）
+   * - 有缓存副作用：打开的 instance 会留在内部 `byKey` map 中
    */
-  resolveByKey(driveKey: string): Promise<HyperdriveInstance>;
+  openDriveByKey(driveKey: string): Promise<Drive>;
+
+  /**
+   * 释放按 driveKey 打开的 Drive。
+   * - 命中缓存：从内部 map 摘除并 close 底层 hyperdrive
+   * - 未命中：no-op（幂等）
+   * - `main` drive 由 runtime 持有，仅随 `close()` 释放
+   * - 不删除本地数据
+   */
+  closeDriveByKey(driveKey: string): Promise<void>;
 
   /**
    * 列出所有已挂载 Drive（不含业务字段）。
@@ -254,7 +264,7 @@ export interface SwarmService {
 
   /**
    * 订阅远程 Drive（通过公钥）。
-   * - 调用 resolveByKey 打开 Drive
+   * - 调用 openDriveByKey 打开 Drive
    * - 自动 join Hyperswarm DHT 发现
    */
   mount(publicKey: string): Promise<{ driveKey: string }>;
@@ -333,7 +343,7 @@ Hyperdrive v13 对构造函数参数有严格约束：
 | `new Hyperdrive(store.namespace('x'), keyBuffer)` | key 被忽略（opts vs positional） |
 
 
-SDK 在 `resolveByKey()` 中强制使用正确的 `session() + key` 模式。
+SDK 在 `openDriveByKey()` 中强制使用正确的 `session() + key` 模式。
 
 ### 4.4 文件路径规范化
 

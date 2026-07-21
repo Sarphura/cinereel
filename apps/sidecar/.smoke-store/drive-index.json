@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "entries": {
+    "main": {
+      "name": "main",
+      "type": "metadata",
+      "createdAt": "2024-01-01T00:00:00.000Z"
+    },
+    "8b4be436-dc75-4253-8915-c4f18f9dae34": {
+      "name": "movies",
+      "type": "metadata",
+      "createdAt": "2026-07-19T15:53:50.946Z"
+    }
+  }
+}

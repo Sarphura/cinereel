@@ -91,7 +91,7 @@ export function createSidecarDriveService(
     // resurrect a "removed" drive from runtime.listDrives().
     await index.remove(uuid);
     ktou.delete(driveKey);
-    await runtime.evictByKey(driveKey);
+    await runtime.closeDriveByKey(driveKey);
   }
 
   return { create, list, remove };
