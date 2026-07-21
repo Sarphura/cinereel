@@ -12,11 +12,7 @@
     "noEmit": true,
     "outDir": "dist",
     "strictPropertyInitialization": false,
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@cinereel/hyper-sdk": ["../../packages/hyper-sdk/dist/index.d.ts"]
-    }
+    "types": ["node"]
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
