@@ -4,15 +4,8 @@
  * Resolves `driveKey → HyperdriveLike` via `DriveRegistry`. Writes/deletes
  * are restricted to local drives; `isRemote(driveKey)` is the gate that
  * enforces that business rule.
- *
- * The CSR perspective:
- *   - `DriveRegistry` and the resolve-vs-close logic come from
- *     `repositories/` (data access).
- *   - `isRemote` policy + path normalization + recursive-delete policy
- *     live here (business rules).
- *   - Controllers translate HTTP ↔ service method calls; they own no
- *     logic of their own.
  */
+import { Inject, Injectable } from '@nestjs/common'
 import type { Readable } from 'node:stream'
 import type {
   HyperdriveEntry,
@@ -21,9 +14,8 @@ import type {
   TreeNode,
 } from '../infrastructure/index.js'
 import { HEX64 } from '../infrastructure/types/key.js'
-import type { DriveRegistry } from '../bootstrap/drive-registry.js'
+import { InMemoryDriveRegistry, type DriveRegistry } from '../bootstrap/drive-registry.js'
 
-/** Narrow the raw v13 `entry()` shape into our `HyperdriveEntry` DTO. */
 function adaptEntry(
   raw: { key: string; seq: number; value: unknown } | null,
 ): HyperdriveEntry | null {
@@ -58,10 +50,10 @@ export class DriveNotMountedError extends Error {
   }
 }
 
+@Injectable()
 export class FileService {
-  constructor(private readonly registry: DriveRegistry) {}
+  constructor(@Inject(InMemoryDriveRegistry) private readonly registry: DriveRegistry) {}
 
-  /** Resolve a driveKey to its mounted `HyperdriveLike`. */
   private get(driveKey: string): HyperdriveLike {
     if (!HEX64.test(driveKey)) {
       throw new Error(`invalid driveKey: ${driveKey.slice(0, 80)}`)

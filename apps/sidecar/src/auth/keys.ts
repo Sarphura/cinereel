@@ -10,7 +10,7 @@
  * In production (NODE_ENV=production) only SIDECAR_API_KEYS is accepted.
  */
 import { timingSafeEqual } from './jwt.js';
-import type { Config } from '../config/index.js';
+import type { Config } from '../core/config/env.schema.js';
 
 export interface ApiKey {
   id: string;

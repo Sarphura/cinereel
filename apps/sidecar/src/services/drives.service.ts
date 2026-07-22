@@ -7,31 +7,48 @@
  * look up a UUID by driveKey — bootstrap seeds it from the recovered
  * registry so first-remove after restart works.
  *
- * Mount bookkeeping (which drives are open) lives in `DriveRegistry`, not
- * here; this service only persists the business metadata.
+ * NestJS: marked @Injectable so it can be consumed via constructor
+ * injection from any feature controller. We annotate every constructor
+ * parameter with `@Inject(<token>)` because the parameter types are
+ * interfaces (which TypeScript's emit-decorator-metadata cannot resolve
+ * to a runtime value), and we want the resolution to work without
+ * relying on `import` rewriting.
  */
+import { Inject, Injectable } from '@nestjs/common'
 import type {
   DriveDescriptor,
   DriveType,
   HyperdriveLike,
 } from '../infrastructure/index.js'
-import { MAIN_INDEX_ENTRY } from '../repositories/drive-index.repository.js'
-import type { DriveRepository } from '../repositories/drive.repository.js'
-import type { DriveIndexRepository } from '../repositories/drive-index.repository.js'
-import type { DriveRegistry } from '../bootstrap/drive-registry.js'
+import {
+  MAIN_INDEX_ENTRY,
+  HyperdriveRepository,
+  FileSystemDriveIndexRepository,
+  InMemoryDriveIndexRepository,
+  InMemoryDriveRepository,
+  type DriveRepository,
+  type DriveIndexRepository,
+} from '../repositories/index.js'
+import { InMemoryDriveRegistry, type DriveRegistry } from '../bootstrap/drive-registry.js'
 import { driveKeyOf } from '../infrastructure/types/key.js'
 
 /** The "main" drive namespace — fixed across restarts. */
 export const MAIN_NAMESPACE = 'main'
 
+@Injectable()
 export class DriveService {
   private keyToUuid: Map<string, string> = new Map()
 
   constructor(
-    private readonly drives: DriveRepository,
-    private readonly index: DriveIndexRepository,
-    private readonly registry: DriveRegistry,
+    @Inject(HyperdriveRepository) private readonly drives: DriveRepository,
+    @Inject(FileSystemDriveIndexRepository) private readonly index: DriveIndexRepository,
+    @Inject(InMemoryDriveRegistry) private readonly registry: DriveRegistry,
   ) {}
+
+  // Touch the imports so tree-shaking doesn't drop them — they're used as
+  // tokens above via `@Inject(...)`. The class identities themselves matter,
+  // not values.
+  private static readonly _tok = [InMemoryDriveIndexRepository, InMemoryDriveRepository] as const
 
   /**
    * Bootstrap helper: inject the `keyToUuid` reverse map derived from

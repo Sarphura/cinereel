@@ -9,34 +9,34 @@
  *     remote-mount bookkeeping: `openRemote` + `registry.rememberRemote`
  *     (mount) and `registry.closeRemote` (unmount).
  *   - `identity()` bundles `sdk.publicKey`, the swarm's bound UDP port,
- *     the main drive's hex key, and the current peer count.
- *
- * Peer connection timestamps are stamped on first sight and cached.
+ *     the main drive's hex key (resolved lazily from registry), and the
+ *     current peer count.
  */
-import type { SDK, PeerInfo, IdentityInfo } from '../infrastructure/index.js'
+import { Inject, Injectable } from '@nestjs/common'
+import { SDK_TOKEN } from '../core/sdk/sdk.module.js'
+import type { SDK, PeerInfo, IdentityInfo, HyperdriveLike } from '../infrastructure/index.js'
 import { MAIN_NAMESPACE } from './drives.service.js'
-import { HEX64, toHexKey } from '../infrastructure/types/key.js'
-import type { DriveRegistry } from '../bootstrap/drive-registry.js'
-import type { DriveRepository } from '../repositories/drive.repository.js'
-import type {
-  PeerConnectionRepository,
-} from '../repositories/peer-connection.repository.js'
+import { HEX64, toHexKey, driveKeyOf } from '../infrastructure/types/key.js'
+import { InMemoryDriveRegistry, type DriveRegistry } from '../bootstrap/drive-registry.js'
+import {
+  HyperdriveRepository,
+  HyperdriveSwarmRepository,
+  type DriveRepository,
+  type PeerConnectionRepository,
+} from '../repositories/index.js'
 
+@Injectable()
 export class SwarmService {
   private readonly connectedAt = new Map<string, number>()
 
   constructor(
-    private readonly sdk: SDK,
-    private readonly connections: PeerConnectionRepository,
-    private readonly drives: DriveRepository,
-    private readonly registry: DriveRegistry,
-    private readonly mainDriveKey: () => string,
-    private readonly resolvedSwarmPort: () => number,
+    @Inject(SDK_TOKEN) private readonly sdk: SDK,
+    @Inject(HyperdriveSwarmRepository) private readonly connections: PeerConnectionRepository,
+    @Inject(HyperdriveRepository) private readonly drives: DriveRepository,
+    @Inject(InMemoryDriveRegistry) private readonly registry: DriveRegistry,
   ) {}
 
   async announce(wait: boolean = true): Promise<void> {
-    // The official SDK's `join` takes a topic (Buffer / string). The main
-    // drive's discovery key is what hyperswarm peers actually look up.
     const mainDrive = await this.drives.openLocal(MAIN_NAMESPACE)
     const discovery = this.sdk.join(mainDrive.core.discoveryKey, {
       server: true,
@@ -48,8 +48,6 @@ export class SwarmService {
       } catch {
         /* the underlying hyperswarm may already have flushed; not fatal */
       }
-      // Belt-and-suspenders: also flush the swarm so any in-flight announces
-      // are pushed. Matches the historical sidecar behavior.
       try {
         await this.sdk.swarm.flush()
       } catch {
@@ -89,6 +87,29 @@ export class SwarmService {
       throw new Error(`invalid publicKey: ${publicKey.slice(0, 80)}`)
     }
     await this.registry.closeRemote(publicKey)
+  }
+
+  /**
+   * Lazy lookup — main drive may not be mounted at construction time
+   * (the bootstrap service mounts it later in onModuleInit). Resolving
+   * here means identity() works from the first HTTP request after
+   * bootstrap completes.
+   */
+  private mainDriveKey(): string {
+    const main = this.registry.byNamespace(MAIN_NAMESPACE) as HyperdriveLike | null
+    return main ? driveKeyOf(main) : ''
+  }
+
+  private resolvedSwarmPort(): number {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dht = (this.sdk.swarm as any).dht as
+      | { address?: () => { port: number } }
+      | undefined
+    if (dht && typeof dht.address === 'function') {
+      const addr = dht.address()
+      return typeof addr.port === 'number' ? addr.port : 0
+    }
+    return 0
   }
 
   identity(): IdentityInfo {
