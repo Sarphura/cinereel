@@ -87,12 +87,14 @@ Subs / Extras 是 `/疯狂动物城 2（2026）` 内部组织，**不会被识�
 
 一个 drive 根直接子目录要被识别为电影目录，**必须**至少满足以下条件之一：
 
-1. 直接子项中含**视频文件**——`.mkv` / `.mp4` / `.avi` / `.mov` / `.wmv`
-   / `.flv` / `.webm` / `.m4v` / `.iso`
-2. 直接子项中含**种子文件**——`.torrent`
+1. 直接子项中含**种子文件**——`.torrent`（参考 ADR 0003：资源 Drive 不含视频字节，只含元数据与种子）
+2. 直接子项中含**遗留视频文件**（兼容旧发布者误上传的情况）——`.mkv` / `.mp4` / `.avi` / `.mov` / `.wmv` / `.flv` / `.webm` / `.m4v` / `.iso`
 
 判定**只看 drive 根直接子目录**的子项，电影目录再深的层级一律忽略。
 这是为了避免 `subs/track.srt` 这类素材被错误地归类成新电影。
+
+> 详见 ADR 0003：Reference-metadata-only resource drives；视频字节通过 BitTorrent 拉取。
+> 推荐的做法是仅依赖 `.torrent`；视频文件判定是为兼容旧 drive 而保留的兜底。
 
 ## 元数据匹配
 
@@ -124,6 +126,20 @@ Subs / Extras 是 `/疯狂动物城 2（2026）` 内部组织，**不会被识�
 > `scanMovieFolder` 收到的 `folderPath`（即 drive 根的直接子目录
 > 名，例如 `疯狂动物城 2（2026）`）。NFO 的搜索范围是该电影目录的**直接子项**
 > ——也就是说 `<foldername>.nfo` 期望放在电影文件夹根下，不会跨层级匹配。
+
+### Trailer 文件名优先级
+
+参考 ADR 0015。trailer 在电影目录下识别顺序：
+
+1. `trailer.<ext>`（`<ext>` ∈ `{mp4, webm, mkv, mov}`）
+2. `trailer-trailer.<ext>`（某些工具的命名残留）
+3. `<foldername>-trailer.<ext>`（下载站点的命名习惯）
+
+匹配大小写不敏感。仅扫描电影目录的**直接子项**，不递归进 `Extras/` 等子目录。
+
+> 说明：trailer 通过 Sidecar HTTP Range 流式提供（ADR 0005、0006），并以原始文件名
+> 写入 Jellyfin staging 目录的 `<Title> (<Year>) {imdb-<id>}/trailer.<ext>`。
+> Jellyfin 自身的 scanner 会自动将其识别为该电影的 trailer。
 
 ### 视频文件 / 种子文件不参与元数据匹配
 
