@@ -5,6 +5,7 @@ using CineReel.Service.Features.Bt;
 using CineReel.Service.Features.Health;
 using CineReel.Service.Features.Jellyfin;
 using CineReel.Service.Features.Metadata;
+using CineReel.Service.Features.Publish;
 using CineReel.Service.Features.Subscription;
 using CineReel.Service.Features.Metadata.Events;
 using CineReel.Service.Features.Subscription.Events;
@@ -156,6 +157,12 @@ builder.Services.TryAddSingleton<ITrailerFileSystem, LocalTrailerFileSystem>();
 builder.Services.AddSingleton<ITrailerCache, TrailerCache>();
 builder.Services.AddHostedService<TrailerCacheMaintainer>();
 
+// Auto-Pack (ticket 29). POST /api/publish/pack wraps local videos into
+// a fresh resource drive. Failure rolls back the drive via the Hyper
+// Agent write client.
+builder.Services.AddSingleton<ITorrentFactory, FileSystemTorrentFactory>();
+builder.Services.AddSingleton<IAutoPackService, AutoPackService>();
+
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 
@@ -215,6 +222,9 @@ app.MapBtEndpoints();
 
 // Trailer cache endpoints (ticket 27).
 app.MapTrailerEndpoints();
+
+// Publish endpoints (ticket 29).
+app.MapPublishEndpoints();
 
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();
