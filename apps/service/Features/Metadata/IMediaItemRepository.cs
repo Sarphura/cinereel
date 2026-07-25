@@ -7,6 +7,7 @@ public interface IMediaItemRepository
 {
     Task<MediaItemEntity?> FindByIdAsync(MediaItemId id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<MediaItemEntity>> ListBySubscriptionAsync(SubscriptionId subscriptionId, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<MediaItemEntity>> ListAllAsync(CancellationToken cancellationToken = default);
     Task<MediaItemEntity> UpsertAsync(MediaItemEntity mediaItem, CancellationToken cancellationToken = default);
     Task RemoveAsync(MediaItemId id, CancellationToken cancellationToken = default);
 }
@@ -24,6 +25,10 @@ public sealed class InMemoryMediaItemRepository : IMediaItemRepository
     public Task<IReadOnlyList<MediaItemEntity>> ListBySubscriptionAsync(SubscriptionId subscriptionId, CancellationToken cancellationToken = default)
     {
         lock (_gate) return Task.FromResult<IReadOnlyList<MediaItemEntity>>(_items.Values.Where(item => item.SubscriptionId == subscriptionId.Value).ToList());
+    }
+    public Task<IReadOnlyList<MediaItemEntity>> ListAllAsync(CancellationToken cancellationToken = default)
+    {
+        lock (_gate) return Task.FromResult<IReadOnlyList<MediaItemEntity>>(_items.Values.ToList());
     }
     public Task<MediaItemEntity> UpsertAsync(MediaItemEntity mediaItem, CancellationToken cancellationToken = default)
     {

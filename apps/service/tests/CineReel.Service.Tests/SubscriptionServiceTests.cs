@@ -29,7 +29,7 @@ public sealed class SubscriptionServiceTests
 
         Assert.Equal(Key, sub.DriveKey);
         Assert.Equal(SubscriptionState.Pending, sub.State);
-        Assert.True(repo.All().Any(s => s.DriveKey == Key));
+        Assert.Contains(repo.All(), s => s.DriveKey == Key);
         Assert.NotNull(bus.LastCreated);
         Assert.Equal(Key, bus.LastCreated!.DriveKey.Value);
     }

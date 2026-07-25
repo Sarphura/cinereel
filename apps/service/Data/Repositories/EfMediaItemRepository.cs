@@ -9,6 +9,7 @@ public sealed class EfMediaItemRepository(CinereelDbContext db) : IMediaItemRepo
 {
     public Task<MediaItemEntity?> FindByIdAsync(MediaItemId id, CancellationToken cancellationToken = default) => db.MediaItems.FindAsync([id.Value], cancellationToken).AsTask();
     public async Task<IReadOnlyList<MediaItemEntity>> ListBySubscriptionAsync(SubscriptionId subscriptionId, CancellationToken cancellationToken = default) => await db.MediaItems.AsNoTracking().Where(item => item.SubscriptionId == subscriptionId.Value).ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<MediaItemEntity>> ListAllAsync(CancellationToken cancellationToken = default) => await db.MediaItems.AsNoTracking().ToListAsync(cancellationToken);
     public async Task<MediaItemEntity> UpsertAsync(MediaItemEntity mediaItem, CancellationToken cancellationToken = default)
     {
         var existing = await db.MediaItems.SingleOrDefaultAsync(item => item.SubscriptionId == mediaItem.SubscriptionId && item.DrivePath == mediaItem.DrivePath, cancellationToken);
