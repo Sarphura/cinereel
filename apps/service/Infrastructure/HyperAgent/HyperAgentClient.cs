@@ -6,7 +6,7 @@ using CineReel.Service.Infrastructure.HyperAgent.Generated;
 
 namespace CineReel.Service.Infrastructure.HyperAgent;
 
-public sealed class HyperAgentClient : IHyperAgentClient
+public sealed class HyperAgentClient : IHyperAgentReadClient, IHyperAgentWriteClient
 {
     private readonly HttpClient _http;
     private readonly ILogger<HyperAgentClient> _logger;

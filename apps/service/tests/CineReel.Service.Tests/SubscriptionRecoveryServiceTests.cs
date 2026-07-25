@@ -108,8 +108,7 @@ public class SubscriptionRecoveryServiceTests
 
     private static SubscriptionRecoveryService NewService(InMemorySubscriptionRepository repo, StubHyperAgentWriteClient client)
     {
-        var provider = new StubServiceProviderWithWriter(client);
-        return new SubscriptionRecoveryService(repo, provider, new TestLogger(), FakeTimeProvider.Instance);
+        return new SubscriptionRecoveryService(repo, client, new TestLogger(), FakeTimeProvider.Instance);
     }
 
     private sealed class StubHyperAgentWriteClient : IHyperAgentWriteClient
@@ -136,13 +135,6 @@ public class SubscriptionRecoveryServiceTests
             Task.FromResult(new UnmountResponse(true));
         public Task<AnnounceResponse> AnnounceAsync(bool wait = true, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
-    }
-
-    private sealed class StubServiceProviderWithWriter : IServiceProvider
-    {
-        private readonly StubHyperAgentWriteClient _writer;
-        public StubServiceProviderWithWriter(StubHyperAgentWriteClient writer) { _writer = writer; }
-        public object? GetService(Type serviceType) => serviceType == typeof(IHyperAgentWriteClient) ? _writer : null;
     }
 
     private sealed class FakeTimeProvider : TimeProvider

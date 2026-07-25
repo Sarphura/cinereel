@@ -17,8 +17,8 @@ public sealed class PublishServiceTests
     {
         var subs = new InMemorySubscriptionRepository();
         var writer = new SpyPublishWriter();
-        var services = new SpyPublishProvider(writer);
-        var service = new PublishService(services, subs, NullLogger<PublishService>.Instance);
+        var reader = new SpyPublishReader();
+        var service = new PublishService(reader, writer, subs, NullLogger<PublishService>.Instance);
 
         var response = await service.CreateDriveAsync("My Drive", "metadata", MainDriveKey);
 
@@ -31,8 +31,7 @@ public sealed class PublishServiceTests
     public async Task CreateDrive_rejects_invalid_type()
     {
         var subs = new InMemorySubscriptionRepository();
-        var services = new SpyPublishProvider(new SpyPublishWriter());
-        var service = new PublishService(services, subs, NullLogger<PublishService>.Instance);
+        var service = new PublishService(new SpyPublishReader(), new SpyPublishWriter(), subs, NullLogger<PublishService>.Instance);
 
         await Assert.ThrowsAsync<PublishValidationException>(() => service.CreateDriveAsync("X", "weird-type", MainDriveKey));
     }
@@ -41,8 +40,7 @@ public sealed class PublishServiceTests
     public async Task DeleteDrive_refuses_main_drive()
     {
         var subs = new InMemorySubscriptionRepository();
-        var services = new SpyPublishProvider(new SpyPublishWriter());
-        var service = new PublishService(services, subs, NullLogger<PublishService>.Instance);
+        var service = new PublishService(new SpyPublishReader(), new SpyPublishWriter(), subs, NullLogger<PublishService>.Instance);
 
         await Assert.ThrowsAsync<PublishConflictException>(() => service.DeleteDriveAsync(MainDriveKey, MainDriveKey));
     }
@@ -54,8 +52,7 @@ public sealed class PublishServiceTests
         var otherKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde0";
         await subs.AddAsync(new Data.Entities.SubscriptionEntity { Id = 1, DriveKey = otherKey, State = Data.Entities.SubscriptionState.Active, SubscribedAt = DateTimeOffset.UtcNow });
         var writer = new SpyPublishWriter();
-        var services = new SpyPublishProvider(writer);
-        var service = new PublishService(services, subs, NullLogger<PublishService>.Instance);
+        var service = new PublishService(new SpyPublishReader(), writer, subs, NullLogger<PublishService>.Instance);
 
         await service.DeleteDriveAsync(otherKey, MainDriveKey);
 
@@ -67,14 +64,25 @@ public sealed class PublishServiceTests
     public async Task Announce_forwards_to_writer()
     {
         var writer = new SpyPublishWriter();
-        var services = new SpyPublishProvider(writer);
         var subs = new InMemorySubscriptionRepository();
-        var service = new PublishService(services, subs, NullLogger<PublishService>.Instance);
+        var service = new PublishService(new SpyPublishReader(), writer, subs, NullLogger<PublishService>.Instance);
 
         await service.AnnounceAsync("k", wait: true);
 
         Assert.Equal(1, writer.Announces);
     }
+}
+
+internal sealed class SpyPublishReader : IHyperAgentReadClient
+{
+    public Task<HyperAgentFileResponse> ReadFileAsync(string driveKey, string path, long? rangeStart = null, long? rangeEnd = null, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<HealthResponse> GetHealthAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<HyperAgentVersionResponse> GetVersionAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<IReadOnlyList<DriveDescriptor>> ListDrivesAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<DriveDescriptor>>(Array.Empty<DriveDescriptor>());
+    public Task<HyperdriveEntry?> GetEntryAsync(string driveKey, string path, bool wait = true, CancellationToken cancellationToken = default) => Task.FromResult<HyperdriveEntry?>(null);
+    public Task<TreeNode> GetTreeAsync(string driveKey, string prefix = "/", bool wait = true, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    public Task<IReadOnlyList<PeerInfo>> GetPeersAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<PeerInfo>>(Array.Empty<PeerInfo>());
+    public Task<IdentityInfo> GetIdentityAsync(CancellationToken cancellationToken = default) => Task.FromResult(new IdentityInfo("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "test", 0, 0));
 }
 
 internal sealed class SpyPublishWriter : IHyperAgentWriteClient
@@ -97,12 +105,4 @@ internal sealed class SpyPublishWriter : IHyperAgentWriteClient
         return Task.FromResult(new UnmountResponse(true));
     }
     public Task<AnnounceResponse> AnnounceAsync(bool wait = true, CancellationToken cancellationToken = default) { Announces++; return Task.FromResult(new AnnounceResponse(true)); }
-}
-
-internal sealed class SpyPublishProvider : IServiceProvider
-{
-    private readonly IHyperAgentWriteClient _writer;
-    public SpyPublishProvider(IHyperAgentWriteClient writer) { _writer = writer; }
-    public object? GetService(Type serviceType) => serviceType == typeof(IHyperAgentWriteClient) ? _writer : null;
-    public IHyperAgentWriteClient GetWriter() => _writer;
 }

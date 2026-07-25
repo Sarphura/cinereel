@@ -57,8 +57,7 @@ public sealed class MetadataScannerTests
         var client = new ScannerStubHyperAgent();
         var parser = new ScannerStubNfoParser();
         var resolver = new ScannerStubIMDbResolver();
-        var services = new ScannerStubProvider(client);
-        var scanner = new MetadataScanner(subsRepo, mediaRepo, services, parser, resolver, bus, NullLogger<MetadataScanner>.Instance, ScannerFakeTimeProvider.Instance);
+        var scanner = new MetadataScanner(subsRepo, mediaRepo, client, parser, resolver, bus, NullLogger<MetadataScanner>.Instance, ScannerFakeTimeProvider.Instance);
         return (scanner, subscribers, mediaRepo, client);
     }
 }
@@ -138,13 +137,6 @@ internal sealed class CollectingHandler
     }
     public List<MediaItemAdded> Added { get; }
     public List<SubscriptionDescriptorChanged> Changes { get; }
-}
-
-internal sealed class ScannerStubProvider : IServiceProvider
-{
-    private readonly ScannerStubHyperAgent _client;
-    public ScannerStubProvider(ScannerStubHyperAgent client) { _client = client; }
-    public object? GetService(Type serviceType) => serviceType == typeof(IHyperAgentReadClient) ? _client : null;
 }
 
 internal sealed class ScannerFakeTimeProvider : TimeProvider

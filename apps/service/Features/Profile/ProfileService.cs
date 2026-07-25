@@ -16,26 +16,25 @@ public interface IProfileService
 
 public sealed class ProfileService : IProfileService
 {
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentReadClient _reader;
+    private readonly IHyperAgentWriteClient _writer;
     private readonly IDomainEventBus _bus;
     private readonly ILogger<ProfileService> _logger;
     private readonly TimeProvider _clock;
 
-    public ProfileService(IServiceProvider services, IDomainEventBus bus, ILogger<ProfileService> logger, TimeProvider? clock = null)
+    public ProfileService(
+        IHyperAgentReadClient reader,
+        IHyperAgentWriteClient writer,
+        IDomainEventBus bus,
+        ILogger<ProfileService> logger,
+        TimeProvider? clock = null)
     {
-        _services = services;
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
+        _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         _bus = bus;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
-
-    private IHyperAgentReadClient Reader =>
-        _services.GetService(typeof(IHyperAgentReadClient)) as IHyperAgentReadClient
-            ?? throw new InvalidOperationException("IHyperAgentReadClient not registered");
-
-    private IHyperAgentWriteClient Writer =>
-        _services.GetService(typeof(IHyperAgentWriteClient)) as IHyperAgentWriteClient
-            ?? throw new InvalidOperationException("IHyperAgentWriteClient not registered");
 
     public async Task<ProfileDto> GetAsync(string mainDriveKey, CancellationToken cancellationToken = default)
     {
@@ -51,7 +50,7 @@ public sealed class ProfileService : IProfileService
         var now = _clock.GetUtcNow();
         var raw = new ProfileJson(request.Name, request.Bio, existing.AvatarPath, now);
         var body = JsonSerializer.SerializeToUtf8Bytes(raw, JsonOpts);
-        await Writer.WriteFileAsync(mainDriveKey, "/profile.json", body, cancellationToken: cancellationToken);
+        await _writer.WriteFileAsync(mainDriveKey, "/profile.json", body, cancellationToken: cancellationToken);
         await _bus.PublishAsync(new ProfileUpdated(now), cancellationToken);
         var collections = await ComputeCollectionsAsync(cancellationToken);
         return new ProfileDto(raw.Name, raw.Bio, raw.AvatarPath, raw.UpdatedAt, collections);
@@ -70,10 +69,10 @@ public sealed class ProfileService : IProfileService
         var existing = await TryReadProfileAsync(mainDriveKey, cancellationToken);
         var now = _clock.GetUtcNow();
         var avatarPath = $"/avatar.{ext}";
-        await Writer.WriteFileAsync(mainDriveKey, avatarPath, body, cancellationToken: cancellationToken);
+        await _writer.WriteFileAsync(mainDriveKey, avatarPath, body, cancellationToken: cancellationToken);
         var raw = new ProfileJson(existing.Name, existing.Bio, avatarPath, now);
         var profileBody = JsonSerializer.SerializeToUtf8Bytes(raw, JsonOpts);
-        await Writer.WriteFileAsync(mainDriveKey, "/profile.json", profileBody, cancellationToken: cancellationToken);
+        await _writer.WriteFileAsync(mainDriveKey, "/profile.json", profileBody, cancellationToken: cancellationToken);
         await _bus.PublishAsync(new ProfileUpdated(now), cancellationToken);
         var collections = await ComputeCollectionsAsync(cancellationToken);
         return new ProfileDto(raw.Name, raw.Bio, raw.AvatarPath, raw.UpdatedAt, collections);
@@ -83,7 +82,7 @@ public sealed class ProfileService : IProfileService
     {
         try
         {
-            var resp = await Reader.ReadFileAsync(mainDriveKey, "/profile.json", cancellationToken: cancellationToken);
+            var resp = await _reader.ReadFileAsync(mainDriveKey, "/profile.json", cancellationToken: cancellationToken);
             var json = JsonSerializer.Deserialize<ProfileJson>(resp.Body, JsonOpts);
             return json ?? new ProfileJson("", null, null, null);
         }
@@ -99,13 +98,13 @@ public sealed class ProfileService : IProfileService
 
     private async Task<IReadOnlyList<CollectionDto>> ComputeCollectionsAsync(CancellationToken cancellationToken)
     {
-        var drives = await Reader.ListDrivesAsync(cancellationToken);
+        var drives = await _reader.ListDrivesAsync(cancellationToken);
         var collections = new List<CollectionDto>();
         foreach (var drive in drives)
         {
             try
             {
-                var resp = await Reader.ReadFileAsync(drive.DriveKey, "/descriptor.json", cancellationToken: cancellationToken);
+                var resp = await _reader.ReadFileAsync(drive.DriveKey, "/descriptor.json", cancellationToken: cancellationToken);
                 using var doc = JsonDocument.Parse(resp.Body);
                 var type = doc.RootElement.TryGetProperty("type", out var t) ? t.GetString() : null;
                 if (type != "resource") continue;

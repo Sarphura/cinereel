@@ -16,18 +16,18 @@ namespace CineReel.Service.Infrastructure.HyperAgent;
 /// </summary>
 public sealed class HyperAgentReadinessWatcher : IHostedService
 {
-    private readonly IHyperAgentClient _client;
+    private readonly IHyperAgentReadClient _reader;
     private readonly string _expectedVersion;
     private readonly SubscriptionRecoveryService _recovery;
     private readonly ILogger<HyperAgentReadinessWatcher> _logger;
 
     public HyperAgentReadinessWatcher(
-        IHyperAgentClient client,
+        IHyperAgentReadClient reader,
         string expectedVersion,
         SubscriptionRecoveryService recovery,
         ILogger<HyperAgentReadinessWatcher> logger)
     {
-        _client = client ?? throw new ArgumentNullException(nameof(client));
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _expectedVersion = expectedVersion ?? throw new ArgumentNullException(nameof(expectedVersion));
         _recovery = recovery ?? throw new ArgumentNullException(nameof(recovery));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -35,12 +35,16 @@ public sealed class HyperAgentReadinessWatcher : IHostedService
 
     public async Task StartAsync(CancellationToken ct)
     {
-        if (!await _client.HealthAsync(ct))
+        try
         {
-            _logger.LogWarning("[ready] Hyper Agent not yet healthy; skipping recovery");
+            await _reader.GetHealthAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[ready] Hyper Agent not yet healthy; skipping recovery");
             return;
         }
-        var version = await _client.GetVersionAsync(ct);
+        var version = await _reader.GetVersionAsync(ct);
         if (!string.Equals(version.Version, _expectedVersion, StringComparison.Ordinal))
         {
             _logger.LogWarning(

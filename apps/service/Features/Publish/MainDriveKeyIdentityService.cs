@@ -12,13 +12,11 @@ namespace CineReel.Service.Features.Publish;
 /// </summary>
 public sealed class MainDriveKeyIdentityService : IIdentityService
 {
-    private readonly IServiceProvider _services;
-    public MainDriveKeyIdentityService(IServiceProvider services) { _services = services; }
+    private readonly IHyperAgentReadClient _reader;
+    public MainDriveKeyIdentityService(IHyperAgentReadClient reader) { _reader = reader ?? throw new ArgumentNullException(nameof(reader)); }
 
     public string GetMainDriveKey()
     {
-        var client = _services.GetService(typeof(IHyperAgentReadClient)) as IHyperAgentReadClient;
-        if (client is null) return string.Empty;
-        return client.GetIdentityAsync().GetAwaiter().GetResult().MainDriveKey ?? string.Empty;
+        return _reader.GetIdentityAsync().GetAwaiter().GetResult().MainDriveKey ?? string.Empty;
     }
 }

@@ -25,26 +25,25 @@ public interface IPublishService
 public sealed class PublishService : IPublishService
 {
     private static readonly HashSet<string> AllowedTypes = new(StringComparer.Ordinal) { "metadata", "resource", "blob" };
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentReadClient _reader;
+    private readonly IHyperAgentWriteClient _writer;
     private readonly ISubscriptionRepository _subscriptions;
     private readonly ILogger<PublishService> _logger;
     private readonly TimeProvider _clock;
 
-    public PublishService(IServiceProvider services, ISubscriptionRepository subscriptions, ILogger<PublishService> logger, TimeProvider? clock = null)
+    public PublishService(
+        IHyperAgentReadClient reader,
+        IHyperAgentWriteClient writer,
+        ISubscriptionRepository subscriptions,
+        ILogger<PublishService> logger,
+        TimeProvider? clock = null)
     {
-        _services = services;
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
+        _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         _subscriptions = subscriptions;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
-
-    private IHyperAgentWriteClient Writer =>
-        _services.GetService(typeof(IHyperAgentWriteClient)) as IHyperAgentWriteClient
-            ?? throw new InvalidOperationException("IHyperAgentWriteClient not registered");
-
-    private IHyperAgentReadClient Reader =>
-        _services.GetService(typeof(IHyperAgentReadClient)) as IHyperAgentReadClient
-            ?? throw new InvalidOperationException("IHyperAgentReadClient not registered");
 
     public async Task<CreateDriveResponseDto> CreateDriveAsync(string name, string type, string mainDriveKey, CancellationToken cancellationToken = default)
     {
@@ -53,7 +52,7 @@ public sealed class PublishService : IPublishService
         if (!AllowedTypes.Contains(type))
             throw new PublishValidationException("invalid-input", $"type must be one of {string.Join(',', AllowedTypes)}");
 
-        var drive = await Writer.CreateDriveAsync(name, type, cancellationToken);
+        var drive = await _writer.CreateDriveAsync(name, type, cancellationToken);
         var createdAt = _clock.GetUtcNow();
         var descriptor = JsonSerializer.SerializeToUtf8Bytes(new
         {
@@ -64,7 +63,7 @@ public sealed class PublishService : IPublishService
         }, JsonOpts);
         try
         {
-            await Writer.WriteFileAsync(drive.DriveKey, "descriptor.json", descriptor, cancellationToken: cancellationToken);
+            await _writer.WriteFileAsync(drive.DriveKey, "descriptor.json", descriptor, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
@@ -95,23 +94,23 @@ public sealed class PublishService : IPublishService
         if (string.Equals(driveKey, mainDriveKey, StringComparison.Ordinal))
             throw new PublishConflictException("cannot-delete-main-drive", "refusing to delete the main drive");
         var existing = await _subscriptions.FindByDriveKeyAsync(new DriveKey(driveKey), cancellationToken);
-        await Writer.UnmountRemoteDriveAsync(driveKey, cancellationToken);
+        await _writer.UnmountRemoteDriveAsync(driveKey, cancellationToken);
         if (existing is not null)
             await _subscriptions.RemoveAsync(new SubscriptionId(existing.Id), cancellationToken);
     }
 
     public Task AnnounceAsync(string driveKey, bool wait, CancellationToken cancellationToken = default) =>
-        Writer.AnnounceAsync(wait, cancellationToken);
+        _writer.AnnounceAsync(wait, cancellationToken);
 
     public async Task<IReadOnlyList<PeerInfoResponseDto>> GetPeersAsync(CancellationToken cancellationToken = default)
     {
-        var peers = await Reader.GetPeersAsync(cancellationToken);
+        var peers = await _reader.GetPeersAsync(cancellationToken);
         return peers.Select(p => new PeerInfoResponseDto(p.PublicKey ?? string.Empty, p.ConnectedAt, p.RemoteAddress)).ToList();
     }
 
     public async Task<IdentityResponseDto> GetIdentityAsync(string mainDriveKey, CancellationToken cancellationToken = default)
     {
-        var info = await Reader.GetIdentityAsync(cancellationToken);
+        var info = await _reader.GetIdentityAsync(cancellationToken);
         var peers = await GetPeersAsync(cancellationToken);
         return new IdentityResponseDto(mainDriveKey, info.MainDriveKey ?? string.Empty, info.SwarmPort, peers.Count);
     }

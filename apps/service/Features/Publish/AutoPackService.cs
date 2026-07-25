@@ -13,21 +13,17 @@ public interface IAutoPackService
 public sealed class AutoPackService : IAutoPackService
 {
     private readonly ITorrentFactory _torrentFactory;
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentWriteClient _writer;
     private readonly ILogger<AutoPackService> _logger;
     private readonly TimeProvider _clock;
 
-    public AutoPackService(ITorrentFactory torrentFactory, IServiceProvider services, ILogger<AutoPackService> logger, TimeProvider? clock = null)
+    public AutoPackService(ITorrentFactory torrentFactory, IHyperAgentWriteClient writer, ILogger<AutoPackService> logger, TimeProvider? clock = null)
     {
         _torrentFactory = torrentFactory;
-        _services = services;
+        _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
-
-    private IHyperAgentWriteClient Writer =>
-        _services.GetService(typeof(IHyperAgentWriteClient)) as IHyperAgentWriteClient
-            ?? throw new InvalidOperationException("IHyperAgentWriteClient not registered");
 
     public async Task<AutoPackResponse> PackAsync(AutoPackRequest request, CancellationToken cancellationToken = default)
     {
@@ -51,23 +47,23 @@ public sealed class AutoPackService : IAutoPackService
             throw new AutoPackUnavailableException("bt-engine-unavailable", "torrent creation failed");
         }
 
-        var drive = await Writer.CreateDriveAsync(request.DriveName, "metadata", cancellationToken);
+        var drive = await _writer.CreateDriveAsync(request.DriveName, "metadata", cancellationToken);
         var createdAt = _clock.GetUtcNow();
         try
         {
-            await Writer.WriteFileAsync(drive.DriveKey, "descriptor.json", BuildDescriptor(request, createdAt), cancellationToken: cancellationToken);
-            await Writer.WriteFileAsync(drive.DriveKey, "movie.nfo", BuildNfo(request), cancellationToken: cancellationToken);
+            await _writer.WriteFileAsync(drive.DriveKey, "descriptor.json", BuildDescriptor(request, createdAt), cancellationToken: cancellationToken);
+            await _writer.WriteFileAsync(drive.DriveKey, "movie.nfo", BuildNfo(request), cancellationToken: cancellationToken);
             if (!string.IsNullOrEmpty(request.PosterPath) && File.Exists(request.PosterPath))
             {
                 var poster = await File.ReadAllBytesAsync(request.PosterPath, cancellationToken);
-                await Writer.WriteFileAsync(drive.DriveKey, "poster.jpg", poster, cancellationToken: cancellationToken);
+                await _writer.WriteFileAsync(drive.DriveKey, "poster.jpg", poster, cancellationToken: cancellationToken);
             }
-            await Writer.WriteFileAsync(drive.DriveKey, "movie.torrent", torrent.Bytes, cancellationToken: cancellationToken);
+            await _writer.WriteFileAsync(drive.DriveKey, "movie.torrent", torrent.Bytes, cancellationToken: cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "auto-pack partial failure; rolling back drive {DriveKey}", drive.DriveKey);
-            try { await Writer.DeleteFileAsync(drive.DriveKey, "/", recursive: true, cancellationToken: cancellationToken); } catch { /* best effort */ }
+            try { await _writer.DeleteFileAsync(drive.DriveKey, "/", recursive: true, cancellationToken: cancellationToken); } catch { /* best effort */ }
             throw;
         }
 

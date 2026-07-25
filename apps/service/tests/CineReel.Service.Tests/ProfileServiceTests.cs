@@ -20,8 +20,7 @@ public sealed class ProfileServiceTests
         reader.Files["/profile.json"] = """{"name":"Main","bio":"hi","avatarPath":"/avatar.png","updatedAt":"2026-01-01T00:00:00Z"}""";
         reader.Drives.Add(new DriveDescriptor("resource-key", "My Resource", "resource", true, DateTimeOffset.UtcNow));
         reader.FilesForDrive["resource-key"] = new() { ["/descriptor.json"] = """{"name":"My Resource","type":"resource","createdAt":"2026-01-01T00:00:00Z"}""" };
-        var services = new ProfileStubProvider(reader, new ProfileStubWriter());
-        var service = new ProfileService(services, new SimpleBus(), NullLogger<ProfileService>.Instance);
+        var service = new ProfileService(reader, new ProfileStubWriter(), new SimpleBus(), NullLogger<ProfileService>.Instance);
 
         var dto = await service.GetAsync(MainDriveKey);
 
@@ -36,9 +35,8 @@ public sealed class ProfileServiceTests
     {
         var reader = new ProfileStubReader();
         var writer = new ProfileStubWriter();
-        var services = new ProfileStubProvider(reader, writer);
         var bus = new SimpleBus();
-        var service = new ProfileService(services, bus, NullLogger<ProfileService>.Instance);
+        var service = new ProfileService(reader, writer, bus, NullLogger<ProfileService>.Instance);
 
         await service.UpdateAsync(MainDriveKey, new ProfileUpdateRequest("New", "Hello"));
 
@@ -87,19 +85,6 @@ internal sealed class ProfileStubWriter : IHyperAgentWriteClient
     public Task<DeleteResponse> DeleteFileAsync(string driveKey, string path, bool recursive = false, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public Task<MountResponse> MountRemoteDriveAsync(string publicKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public Task<UnmountResponse> UnmountRemoteDriveAsync(string publicKey, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-}
-
-internal sealed class ProfileStubProvider : IServiceProvider
-{
-    private readonly IHyperAgentReadClient _reader;
-    private readonly IHyperAgentWriteClient _writer;
-    public ProfileStubProvider(IHyperAgentReadClient reader, IHyperAgentWriteClient writer) { _reader = reader; _writer = writer; }
-    public object? GetService(Type serviceType) => serviceType switch
-    {
-        var t when t == typeof(IHyperAgentReadClient) => _reader,
-        var t when t == typeof(IHyperAgentWriteClient) => _writer,
-        _ => null,
-    };
 }
 
 internal sealed class SimpleBus : IDomainEventBus

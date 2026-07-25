@@ -70,7 +70,9 @@ if (!string.IsNullOrWhiteSpace(hyperAgentOptions.ExpectedVersion)
             .CreateLogger<HyperAgentClient>();
         return new HyperAgentClient(http, logger);
     });
-    builder.Services.AddTransient<IHyperAgentClient>(sp =>
+    builder.Services.AddTransient<IHyperAgentReadClient>(sp =>
+        sp.GetRequiredService<HyperAgentClient>());
+    builder.Services.AddTransient<IHyperAgentWriteClient>(sp =>
         sp.GetRequiredService<HyperAgentClient>());
 
     // Subscription recovery (ticket 19): the App Server replays every
@@ -80,12 +82,22 @@ if (!string.IsNullOrWhiteSpace(hyperAgentOptions.ExpectedVersion)
     builder.Services.AddSingleton<CineReel.Service.Features.Subscription.SubscriptionRecoveryService>();
     builder.Services.AddHostedService<HyperAgentReadinessWatcher>(sp =>
     {
-        var client = sp.GetRequiredService<IHyperAgentClient>();
+        var reader = sp.GetRequiredService<IHyperAgentReadClient>();
         var recovery = sp.GetRequiredService<CineReel.Service.Features.Subscription.SubscriptionRecoveryService>();
         var logger = sp.GetRequiredService<ILoggerFactory>()
             .CreateLogger<HyperAgentReadinessWatcher>();
-        return new HyperAgentReadinessWatcher(client, hyperAgentOptions.ExpectedVersion, recovery, logger);
+        return new HyperAgentReadinessWatcher(reader, hyperAgentOptions.ExpectedVersion, recovery, logger);
     });
+}
+else
+{
+    // No Hyper Agent configured (integration tests, smoke-only hosts):
+    // register null implementations of the typed halves so feature
+    // services can be constructed without a real sidecar. Calls still
+    // fail loudly with a documented not-mounted exception so callers
+    // don't silently corrupt state. (ADR 0055, ticket 33.)
+    builder.Services.AddSingleton<IHyperAgentReadClient, NullHyperAgentReadClient>();
+    builder.Services.AddSingleton<IHyperAgentWriteClient, NullHyperAgentWriteClient>();
 }
 
 // ── Health checks (ADR 0040) ─────────────────────────────────────────────────

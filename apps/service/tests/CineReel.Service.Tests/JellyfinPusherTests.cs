@@ -129,7 +129,7 @@ public sealed class JellyfinPusherTests
 
     private static JellyfinPusher NewPusher(IJellyfinHttpClient http, InMemoryMediaItemRepository repo)
     {
-        return new JellyfinPusher(http, repo, new StubReaderProvider(), NullLogger<JellyfinPusher>.Instance, StubPusherTime.Instance);
+        return new JellyfinPusher(http, repo, new StubPusherHyperAgent(), NullLogger<JellyfinPusher>.Instance, StubPusherTime.Instance);
     }
 }
 
@@ -150,15 +150,6 @@ internal sealed class FakeJellyfinHttpClient : IJellyfinHttpClient
     {
         RemoveCalls.Add(folder);
         return Task.CompletedTask;
-    }
-}
-
-internal sealed class StubReaderProvider : IServiceProvider
-{
-    public object? GetService(Type serviceType)
-    {
-        if (serviceType == typeof(IHyperAgentReadClient)) return new StubPusherHyperAgent();
-        return null;
     }
 }
 

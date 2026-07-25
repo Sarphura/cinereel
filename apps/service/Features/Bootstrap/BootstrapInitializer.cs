@@ -23,7 +23,7 @@ public sealed class BootstrapInitializer : IHostedService
 {
     private readonly IAccountRepository _accounts;
     private readonly ISubscriptionRepository _subscriptions;
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentWriteClient? _writer;
     private readonly CinereelBootstrapOptions _options;
     private readonly IPasswordHasher _hasher;
     private readonly ILogger<BootstrapInitializer> _logger;
@@ -33,7 +33,7 @@ public sealed class BootstrapInitializer : IHostedService
     public BootstrapInitializer(
         IAccountRepository accounts,
         ISubscriptionRepository subscriptions,
-        IServiceProvider services,
+        IHyperAgentWriteClient? writer,
         CinereelBootstrapOptions options,
         IPasswordHasher hasher,
         ILogger<BootstrapInitializer> logger,
@@ -42,16 +42,13 @@ public sealed class BootstrapInitializer : IHostedService
     {
         _accounts = accounts;
         _subscriptions = subscriptions;
-        _services = services;
+        _writer = writer;
         _options = options;
         _hasher = hasher;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
         _passwordFileOverride = passwordFileOverride;
     }
-
-    private IHyperAgentWriteClient? TryGetWriter()
-        => _services.GetService(typeof(IHyperAgentWriteClient)) as IHyperAgentWriteClient;
 
     public async Task StartAsync(CancellationToken cancellationToken)
     {
@@ -89,8 +86,7 @@ public sealed class BootstrapInitializer : IHostedService
         };
         await _accounts.AddAsync(admin, cancellationToken);
 
-        var writer = TryGetWriter();
-        if (writer is null)
+        if (_writer is null)
         {
             _logger.LogWarning("IHyperAgentWriteClient not registered; skipping demo drive bootstrap");
             _logger.LogInformation("Bootstrap complete. Admin password at {Path}", passwordFile);
@@ -99,7 +95,7 @@ public sealed class BootstrapInitializer : IHostedService
 
         try
         {
-            var drive = await writer.CreateDriveAsync("demo", "metadata", cancellationToken);
+            var drive = await _writer.CreateDriveAsync("demo", "metadata", cancellationToken);
             var subscription = new SubscriptionEntity
             {
                 DriveKey = drive.DriveKey,

@@ -14,18 +14,17 @@ public sealed class HyperAgentProbe : IHealthProbe
     public string Name => "hyper-agent";
     public bool Required => true;
 
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentReadClient? _reader;
 
-    public HyperAgentProbe(IServiceProvider services)
+    public HyperAgentProbe(IHyperAgentReadClient? reader)
     {
-        _services = services;
+        _reader = reader;
     }
 
     public async Task<HealthCheckResult> CheckAsync(CancellationToken cancellationToken)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
-        var client = _services.GetService(typeof(IHyperAgentReadClient)) as IHyperAgentReadClient;
-        if (client is null)
+        if (_reader is null)
         {
             sw.Stop();
             return HealthCheckResult.Degraded(Name, sw.ElapsedMilliseconds, "no Hyper Agent client registered");
@@ -33,7 +32,7 @@ public sealed class HyperAgentProbe : IHealthProbe
 
         try
         {
-            await client.GetVersionAsync(cancellationToken);
+            await _reader.GetVersionAsync(cancellationToken);
             sw.Stop();
             return HealthCheckResult.Healthy(Name, sw.ElapsedMilliseconds);
         }

@@ -15,16 +15,16 @@ public interface ITrailerCache
 public sealed class TrailerCache : ITrailerCache
 {
     private readonly ITrailerFileSystem _fs;
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentReadClient _reader;
     private readonly TrailerCacheOptions _options;
     private readonly ILogger<TrailerCache> _logger;
     private readonly TimeProvider _clock;
     private readonly object _gate = new();
 
-    public TrailerCache(ITrailerFileSystem fs, IServiceProvider services, TrailerCacheOptions options, ILogger<TrailerCache> logger, TimeProvider? clock = null)
+    public TrailerCache(ITrailerFileSystem fs, IHyperAgentReadClient reader, TrailerCacheOptions options, ILogger<TrailerCache> logger, TimeProvider? clock = null)
     {
         _fs = fs;
-        _services = services;
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _options = options;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
@@ -66,23 +66,24 @@ public sealed class TrailerCache : ITrailerCache
     public async Task<bool> StoreAsync(string id, string driveKey, CancellationToken cancellationToken = default)
     {
         var path = PathFor(id);
-        var reader = _services.GetService(typeof(IHyperAgentReadClientSurface)) as IHyperAgentReadClientSurface
-            ?? throw new InvalidOperationException("IHyperAgentReadClientSurface not registered");
-        HyperAgentFileResponse resp;
         try
         {
-            resp = await reader.ReadFileAsync(driveKey, "trailer.mp4", cancellationToken: cancellationToken);
+            var resp = await _reader.ReadFileAsync(driveKey, "trailer.mp4", cancellationToken: cancellationToken);
+            return await TryStoreAsync(id, path, resp, cancellationToken);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "trailer fetch failed for {Id}", id);
             return false;
         }
+    }
 
+    private async Task<bool> TryStoreAsync(string id, string path, HyperAgentFileResponse resp, CancellationToken cancellationToken)
+    {
         if (_fs.Exists(path) && resp.ContentLength.HasValue && _fs.Size(path) != resp.ContentLength.Value)
         {
             _fs.Delete(path);
-            return await StoreAsync(id, driveKey, cancellationToken);
+            return false;
         }
 
         try

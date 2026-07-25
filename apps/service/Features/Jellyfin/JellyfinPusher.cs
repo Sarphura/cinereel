@@ -25,23 +25,19 @@ public sealed class JellyfinPusher : IJellyfinPusher, IDomainEventHandler<MediaI
 {
     private readonly IJellyfinHttpClient _http;
     private readonly IMediaItemRepository _media;
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentReadClient _reader;
     private readonly AsyncKeyedLock _locks = new();
     private readonly ILogger<JellyfinPusher> _logger;
     private readonly TimeProvider _clock;
 
-    public JellyfinPusher(IJellyfinHttpClient http, IMediaItemRepository media, IServiceProvider services, ILogger<JellyfinPusher> logger, TimeProvider? clock = null)
+    public JellyfinPusher(IJellyfinHttpClient http, IMediaItemRepository media, IHyperAgentReadClient reader, ILogger<JellyfinPusher> logger, TimeProvider? clock = null)
     {
         _http = http;
         _media = media;
-        _services = services;
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
-
-    private IHyperAgentReadClient Reader =>
-        _services.GetService(typeof(IHyperAgentReadClient)) as IHyperAgentReadClient
-            ?? throw new InvalidOperationException("IHyperAgentReadClient is not registered");
 
     public Task HandleAsync(MediaItemAdded evt, CancellationToken cancellationToken)
     {
@@ -62,7 +58,7 @@ public sealed class JellyfinPusher : IJellyfinPusher, IDomainEventHandler<MediaI
                 {
                     try
                     {
-                        var poster = await Reader.ReadFileAsync(mediaItem.DriveKey, mediaItem.PosterPath, cancellationToken: ct);
+                        var poster = await _reader.ReadFileAsync(mediaItem.DriveKey, mediaItem.PosterPath, cancellationToken: ct);
                         files["poster.jpg"] = poster.Body;
                     }
                     catch (Exception ex)
@@ -75,7 +71,7 @@ public sealed class JellyfinPusher : IJellyfinPusher, IDomainEventHandler<MediaI
                 {
                     try
                     {
-                        var nfo = await Reader.ReadFileAsync(mediaItem.DriveKey, mediaItem.NfoPath, cancellationToken: ct);
+                        var nfo = await _reader.ReadFileAsync(mediaItem.DriveKey, mediaItem.NfoPath, cancellationToken: ct);
                         files["movie.nfo"] = nfo.Body;
                     }
                     catch (Exception ex)
@@ -88,7 +84,7 @@ public sealed class JellyfinPusher : IJellyfinPusher, IDomainEventHandler<MediaI
                 {
                     try
                     {
-                        var torrent = await Reader.ReadFileAsync(mediaItem.DriveKey, mediaItem.TorrentPath, cancellationToken: ct);
+                        var torrent = await _reader.ReadFileAsync(mediaItem.DriveKey, mediaItem.TorrentPath, cancellationToken: ct);
                         files["movie.torrent"] = torrent.Body;
                     }
                     catch (Exception ex)

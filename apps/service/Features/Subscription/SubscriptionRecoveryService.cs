@@ -26,25 +26,21 @@ public sealed record HyperAgentRecovered(DateTimeOffset ObservedAt, string Repor
 public sealed class SubscriptionRecoveryService : IDomainEventHandler<HyperAgentRecovered>
 {
     private readonly ISubscriptionRepository _repository;
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentWriteClient _writer;
     private readonly ILogger<SubscriptionRecoveryService> _logger;
     private readonly TimeProvider _clock;
 
     public SubscriptionRecoveryService(
         ISubscriptionRepository repository,
-        IServiceProvider services,
+        IHyperAgentWriteClient writer,
         ILogger<SubscriptionRecoveryService> logger,
         TimeProvider? clock = null)
     {
         _repository = repository;
-        _services = services;
+        _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
-
-    private IHyperAgentWriteClient Writer =>
-        _services.GetService(typeof(IHyperAgentWriteClient)) as IHyperAgentWriteClient
-            ?? throw new InvalidOperationException("IHyperAgentWriteClient is not registered");
 
     public async Task HandleAsync(HyperAgentRecovered evt, CancellationToken cancellationToken = default)
     {
@@ -80,7 +76,7 @@ public sealed class SubscriptionRecoveryService : IDomainEventHandler<HyperAgent
             cancellationToken.ThrowIfCancellationRequested();
             try
             {
-                await Writer.MountRemoteDriveAsync(sub.DriveKey, cancellationToken);
+                await _writer.MountRemoteDriveAsync(sub.DriveKey, cancellationToken);
                 await _repository.MarkRemountedAsync(new DriveKey(sub.DriveKey), evt.ObservedAt, cancellationToken);
                 ok++;
             }

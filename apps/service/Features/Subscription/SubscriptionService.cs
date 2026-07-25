@@ -20,7 +20,8 @@ namespace CineReel.Service.Features.Subscription;
 public sealed class SubscriptionService : ISubscriptionService
 {
     private readonly ISubscriptionRepository _repository;
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentReadClient _reader;
+    private readonly IHyperAgentWriteClient _writer;
     private readonly IDomainEventBus _bus;
     private readonly Func<DriveKey, bool> _isSelfDriveKey;
     private readonly ILogger<SubscriptionService> _logger;
@@ -28,27 +29,21 @@ public sealed class SubscriptionService : ISubscriptionService
 
     public SubscriptionService(
         ISubscriptionRepository repository,
-        IServiceProvider services,
+        IHyperAgentReadClient reader,
+        IHyperAgentWriteClient writer,
         IDomainEventBus bus,
         Func<DriveKey, bool> isSelfDriveKey,
         ILogger<SubscriptionService> logger,
         TimeProvider? clock = null)
     {
         _repository = repository;
-        _services = services;
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
+        _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         _bus = bus;
         _isSelfDriveKey = isSelfDriveKey;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
-
-    private IHyperAgentWriteClient Writer =>
-        _services.GetService(typeof(IHyperAgentWriteClient)) as IHyperAgentWriteClient
-            ?? throw new InvalidOperationException("IHyperAgentWriteClient is not registered");
-
-    private IHyperAgentReadClient Reader =>
-        _services.GetService(typeof(IHyperAgentReadClient)) as IHyperAgentReadClient
-            ?? throw new InvalidOperationException("IHyperAgentReadClient is not registered");
 
     public async Task<SubscriptionEntity> CreateFromDriveKeyAsync(string driveKeyRaw, string? alias, CancellationToken cancellationToken = default)
     {
@@ -66,7 +61,7 @@ public sealed class SubscriptionService : ISubscriptionService
         MountResponse mount;
         try
         {
-            mount = await Writer.MountRemoteDriveAsync(driveKey.Value, cancellationToken);
+            mount = await _writer.MountRemoteDriveAsync(driveKey.Value, cancellationToken);
         }
         catch (HyperAgentDriveNotMountedException ex)
         {
@@ -95,7 +90,7 @@ public sealed class SubscriptionService : ISubscriptionService
         EnsureValidKey(profileKeyRaw);
         try
         {
-            await Reader.GetEntryAsync(profileKeyRaw, "/profile.json", cancellationToken: cancellationToken);
+            await _reader.GetEntryAsync(profileKeyRaw, "/profile.json", cancellationToken: cancellationToken);
         }
         catch (HyperAgentDriveNotMountedException ex)
         {
@@ -138,7 +133,7 @@ public sealed class SubscriptionService : ISubscriptionService
 
         try
         {
-            await Writer.UnmountRemoteDriveAsync(existing.DriveKey, cancellationToken);
+            await _writer.UnmountRemoteDriveAsync(existing.DriveKey, cancellationToken);
         }
         catch (Exception ex)
         {

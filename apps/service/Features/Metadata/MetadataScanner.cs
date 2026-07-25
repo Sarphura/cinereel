@@ -23,7 +23,7 @@ public sealed class MetadataScanner : IMetadataScanner
 {
     private readonly ISubscriptionRepository _subscriptions;
     private readonly IMediaItemRepository _media;
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentReadClient _reader;
     private readonly INfoParser _parser;
     private readonly IIMDBResolver _resolver;
     private readonly IDomainEventBus _bus;
@@ -33,7 +33,7 @@ public sealed class MetadataScanner : IMetadataScanner
     public MetadataScanner(
         ISubscriptionRepository subscriptions,
         IMediaItemRepository media,
-        IServiceProvider services,
+        IHyperAgentReadClient reader,
         INfoParser parser,
         IIMDBResolver resolver,
         IDomainEventBus bus,
@@ -42,17 +42,13 @@ public sealed class MetadataScanner : IMetadataScanner
     {
         _subscriptions = subscriptions;
         _media = media;
-        _services = services;
+        _reader = reader ?? throw new ArgumentNullException(nameof(reader));
         _parser = parser;
         _resolver = resolver;
         _bus = bus;
         _logger = logger;
         _clock = clock ?? TimeProvider.System;
     }
-
-    private IHyperAgentReadClient Reader =>
-        _services.GetService(typeof(IHyperAgentReadClient)) as IHyperAgentReadClient
-            ?? throw new InvalidOperationException("IHyperAgentReadClient is not registered");
 
     public async Task ScanAsync(SubscriptionId subscriptionId, CancellationToken cancellationToken = default)
     {
@@ -66,7 +62,7 @@ public sealed class MetadataScanner : IMetadataScanner
         HyperAgentFileResponse descriptor;
         try
         {
-            descriptor = await Reader.ReadFileAsync(driveKey, "/descriptor.json", cancellationToken: cancellationToken);
+            descriptor = await _reader.ReadFileAsync(driveKey, "/descriptor.json", cancellationToken: cancellationToken);
         }
         catch (HyperAgentException ex)
         {
@@ -99,7 +95,7 @@ public sealed class MetadataScanner : IMetadataScanner
         }
 
         // Walk the drive tree and parse every movie.nfo we find.
-        var tree = await Reader.GetTreeAsync(driveKey, "/", cancellationToken: cancellationToken);
+        var tree = await _reader.GetTreeAsync(driveKey, "/", cancellationToken: cancellationToken);
         var folders = EnumerateFolders(tree).ToList();
 
         foreach (var folder in folders)
@@ -109,7 +105,7 @@ public sealed class MetadataScanner : IMetadataScanner
             HyperAgentFileResponse nfoFile;
             try
             {
-                nfoFile = await Reader.ReadFileAsync(driveKey, drivePath, cancellationToken: cancellationToken);
+                nfoFile = await _reader.ReadFileAsync(driveKey, drivePath, cancellationToken: cancellationToken);
             }
             catch (HyperAgentException)
             {

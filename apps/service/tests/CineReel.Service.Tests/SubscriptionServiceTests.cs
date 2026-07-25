@@ -124,7 +124,7 @@ public sealed class SubscriptionServiceTests
         // Override the isSelf closure manually (NewService defaulted to always false)
         var field = typeof(SubscriptionService).GetField("_isSelfDriveKey", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
         // Reflection trick to swap — easier: replace service with a direct ctor using `mainDrive`.
-        var service2 = new SubscriptionService(repo, new StubServiceProvider(new StubHyperAgentWriteClient(), new StubHyperAgentReadClient()), bus, mainDrive, NullLogger<SubscriptionService>.Instance);
+        var service2 = new SubscriptionService(repo, new StubHyperAgentReadClient(), new StubHyperAgentWriteClient(), bus, mainDrive, NullLogger<SubscriptionService>.Instance);
 
         var sub = await service2.CreateFromDriveKeyAsync(Key, alias: null);
         var response = await service2.ToResponseAsync(sub);
@@ -143,26 +143,7 @@ public sealed class SubscriptionServiceTests
         bool isSelf = false)
     {
         Func<DriveKey, bool> isSelfFn = _ => isSelf;
-        return new SubscriptionService(repo, new StubServiceProvider(writer, reader), bus, isSelfFn, NullLogger<SubscriptionService>.Instance);
-    }
-}
-
-internal sealed class StubServiceProvider : IServiceProvider
-{
-    private readonly StubHyperAgentWriteClient _writer;
-    private readonly StubHyperAgentReadClient _reader;
-
-    public StubServiceProvider(StubHyperAgentWriteClient writer, StubHyperAgentReadClient reader)
-    {
-        _writer = writer;
-        _reader = reader;
-    }
-
-    public object? GetService(Type serviceType)
-    {
-        if (serviceType == typeof(IHyperAgentWriteClient)) return _writer;
-        if (serviceType == typeof(IHyperAgentReadClient)) return _reader;
-        return null;
+        return new SubscriptionService(repo, reader, writer, bus, isSelfFn, NullLogger<SubscriptionService>.Instance);
     }
 }
 

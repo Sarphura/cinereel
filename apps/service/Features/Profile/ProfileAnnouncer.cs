@@ -12,29 +12,26 @@ namespace CineReel.Service.Features.Profile;
 /// </summary>
 public sealed class ProfileAnnouncer : IDomainEventHandler<ProfileUpdated>
 {
-    private readonly IServiceProvider _services;
+    private readonly IHyperAgentWriteClient? _writer;
+    private readonly IHyperAgentReadClient? _reader;
     private readonly ILogger<ProfileAnnouncer> _logger;
 
-    public ProfileAnnouncer(IServiceProvider services, ILogger<ProfileAnnouncer> logger)
+    public ProfileAnnouncer(IHyperAgentWriteClient? writer, IHyperAgentReadClient? reader, ILogger<ProfileAnnouncer> logger)
     {
-        _services = services;
+        _writer = writer;
+        _reader = reader;
         _logger = logger;
     }
 
-    private IHyperAgentWriteClient? TryGetWriter() => _services.GetService(typeof(IHyperAgentWriteClient)) as IHyperAgentWriteClient;
-    private IHyperAgentReadClient? TryGetReader() => _services.GetService(typeof(IHyperAgentReadClient)) as IHyperAgentReadClient;
-
     public async Task HandleAsync(ProfileUpdated evt, CancellationToken cancellationToken)
     {
-        var writer = TryGetWriter();
-        var reader = TryGetReader();
-        if (writer is null || reader is null) return;
+        if (_writer is null || _reader is null) return;
         try
         {
-            var drives = await reader.ListDrivesAsync(cancellationToken);
+            var drives = await _reader.ListDrivesAsync(cancellationToken);
             foreach (var drive in drives)
             {
-                try { await writer.AnnounceAsync(wait: true, cancellationToken); }
+                try { await _writer.AnnounceAsync(wait: true, cancellationToken); }
                 catch (Exception ex) { _logger.LogWarning(ex, "announce failed for {DriveKey}", drive.DriveKey); }
             }
         }

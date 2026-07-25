@@ -25,8 +25,7 @@ public sealed class BootstrapInitializerTests
             var writer = new StubBootstrapWriter();
             var hasher = new Argon2idPasswordHasher();
             var passwordFile = Path.Combine(tmp, "bootstrap-admin.txt");
-            var provider = new StubBootstrapProvider(writer);
-            var init = new BootstrapInitializer(accounts, subscriptions, provider,
+            var init = new BootstrapInitializer(accounts, subscriptions, writer,
                 new CinereelBootstrapOptions { DataDir = tmp }, hasher,
                 NullLogger<BootstrapInitializer>.Instance,
                 StubBootstrapTime.Instance,
@@ -64,8 +63,7 @@ public sealed class BootstrapInitializerTests
             var subscriptions = new InMemorySubscriptionRepository();
             var writer = new StubBootstrapWriter();
             var hasher = new Argon2idPasswordHasher();
-            var provider = new StubBootstrapProvider(writer);
-            var init = new BootstrapInitializer(accounts, subscriptions, provider,
+            var init = new BootstrapInitializer(accounts, subscriptions, writer,
                 new CinereelBootstrapOptions { DataDir = tmp }, hasher,
                 NullLogger<BootstrapInitializer>.Instance,
                 StubBootstrapTime.Instance,
@@ -100,13 +98,6 @@ internal sealed class StubBootstrapWriter : IHyperAgentWriteClient
         Task.FromResult(new UnmountResponse(true));
     public Task<AnnounceResponse> AnnounceAsync(bool wait = true, CancellationToken cancellationToken = default) =>
         Task.FromResult(new AnnounceResponse(true));
-}
-
-internal sealed class StubBootstrapProvider : IServiceProvider
-{
-    private readonly IHyperAgentWriteClient _writer;
-    public StubBootstrapProvider(IHyperAgentWriteClient writer) { _writer = writer; }
-    public object? GetService(Type serviceType) => serviceType == typeof(IHyperAgentWriteClient) ? _writer : null;
 }
 
 internal sealed class StubBootstrapTime : TimeProvider

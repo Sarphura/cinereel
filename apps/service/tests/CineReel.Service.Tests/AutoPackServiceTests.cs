@@ -18,9 +18,8 @@ public sealed class AutoPackServiceTests
         try
         {
             var writer = new SpyHyperAgentWriter();
-            var services = new StubPackProvider(writer);
             var factory = new FileSystemTorrentFactory();
-            var service = new AutoPackService(factory, services, NullLogger<AutoPackService>.Instance);
+            var service = new AutoPackService(factory, writer, NullLogger<AutoPackService>.Instance);
 
             var response = await service.PackAsync(new AutoPackRequest(tmpVideo, "test-drive", "Test", 2024, "tt0000001", tmpPoster));
 
@@ -37,8 +36,7 @@ public sealed class AutoPackServiceTests
     [Fact]
     public async Task Missing_local_file_throws_validation()
     {
-        var services = new StubPackProvider(new SpyHyperAgentWriter());
-        var service = new AutoPackService(new FileSystemTorrentFactory(), services, NullLogger<AutoPackService>.Instance);
+        var service = new AutoPackService(new FileSystemTorrentFactory(), new SpyHyperAgentWriter(), NullLogger<AutoPackService>.Instance);
 
         await Assert.ThrowsAsync<AutoPackValidationException>(() =>
             service.PackAsync(new AutoPackRequest("/nonexistent.mp4", "x", "T", 2024, null, null)));
@@ -65,11 +63,4 @@ internal sealed class SpyHyperAgentWriter : IHyperAgentWriteClient
     public Task<MountResponse> MountRemoteDriveAsync(string publicKey, CancellationToken cancellationToken = default) => Task.FromResult(new MountResponse(publicKey));
     public Task<UnmountResponse> UnmountRemoteDriveAsync(string publicKey, CancellationToken cancellationToken = default) => Task.FromResult(new UnmountResponse(true));
     public Task<AnnounceResponse> AnnounceAsync(bool wait = true, CancellationToken cancellationToken = default) => Task.FromResult(new AnnounceResponse(true));
-}
-
-internal sealed class StubPackProvider : IServiceProvider
-{
-    private readonly IHyperAgentWriteClient _writer;
-    public StubPackProvider(IHyperAgentWriteClient writer) { _writer = writer; }
-    public object? GetService(Type serviceType) => serviceType == typeof(IHyperAgentWriteClient) ? _writer : null;
 }

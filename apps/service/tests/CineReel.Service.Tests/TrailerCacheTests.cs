@@ -1,5 +1,4 @@
 using System.Text;
-using CineReel.Service.Features.Metadata;
 using CineReel.Service.Features.Trailers;
 using CineReel.Service.Infrastructure.HyperAgent;
 using CineReel.Service.Infrastructure.HyperAgent.Generated;
@@ -65,8 +64,7 @@ public sealed class TrailerCacheTests
 
     private static TrailerCache NewCache(InMemoryTrailerFileSystem fs, StubTrailerReader? reader = null, TrailerCacheOptions? options = null)
     {
-        var services = new StubTrailerProvider(reader ?? new StubTrailerReader([]));
-        return new TrailerCache(fs, services, options ?? new TrailerCacheOptions(), NullLogger<TrailerCache>.Instance, FixedClock);
+        return new TrailerCache(fs, reader ?? new StubTrailerReader([]), options ?? new TrailerCacheOptions(), NullLogger<TrailerCache>.Instance, FixedClock);
     }
 }
 
@@ -99,7 +97,7 @@ internal sealed class InMemoryTrailerFileSystem : ITrailerFileSystem
     }
 }
 
-internal sealed class StubTrailerReader : IHyperAgentReadClientSurface
+internal sealed class StubTrailerReader : IHyperAgentReadClient
 {
     private readonly byte[] _body;
     public StubTrailerReader(byte[] body) { _body = body; }
@@ -112,13 +110,6 @@ internal sealed class StubTrailerReader : IHyperAgentReadClientSurface
     public Task<TreeNode> GetTreeAsync(string driveKey, string prefix = "/", bool wait = true, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public Task<IReadOnlyList<PeerInfo>> GetPeersAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
     public Task<IdentityInfo> GetIdentityAsync(CancellationToken cancellationToken = default) => throw new NotSupportedException();
-}
-
-internal sealed class StubTrailerProvider : IServiceProvider
-{
-    private readonly IHyperAgentReadClientSurface _reader;
-    public StubTrailerProvider(StubTrailerReader reader) { _reader = reader; }
-    public object? GetService(Type serviceType) => serviceType == typeof(IHyperAgentReadClientSurface) ? _reader : null;
 }
 
 internal sealed class FixedTimeProvider : TimeProvider
