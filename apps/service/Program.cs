@@ -1,4 +1,6 @@
 using CineReel.Service.Events;
+using CineReel.Service.Features.Accounts;
+using CineReel.Service.Features.Bootstrap;
 using CineReel.Service.Features.Health;
 using CineReel.Service.Features.Jellyfin;
 using CineReel.Service.Features.Metadata;
@@ -122,6 +124,14 @@ builder.Services.AddTransient<IDomainEventHandler<SubscriptionDescriptorChanged>
 
 // Jellyfin pusher + cleaner (ticket 23).
 builder.Services.AddCinereelJellyfin();
+
+// Bootstrap admin + demo drive (ticket 24). Runs on first launch and is
+// idempotent on every subsequent startup while the password file exists.
+builder.Services.AddSingleton(new CinereelBootstrapOptions { DataDir = "./" });
+builder.Services.TryAddSingleton<InMemoryAccountRepository>();
+builder.Services.TryAddSingleton<IAccountRepository>(sp => sp.GetRequiredService<InMemoryAccountRepository>());
+builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
+builder.Services.AddHostedService<BootstrapInitializer>();
 
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
