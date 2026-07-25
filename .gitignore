@@ -72,9 +72,11 @@ corestore/
 cache/
 test/
 
-# Unignore sidecar's own test/ and scripts/ — they live inside the
-# package, not at the repo root, and contain real test code and CI
-# guard scripts.
+# Unignore hyper-agent's and sidecar's own test/ and scripts/ — they
+# live inside the package, not at the repo root, and contain real test
+# code and CI guard scripts.
+!apps/hyper-agent/test/
+!apps/hyper-agent/scripts/
 !apps/sidecar/test/
 !apps/sidecar/scripts/
 
