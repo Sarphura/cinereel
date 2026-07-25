@@ -12,4 +12,14 @@ public sealed class DomainValidationException : Exception
 
     public static DomainValidationException For(string field, string message) =>
         new(new Dictionary<string, string[]>(StringComparer.Ordinal) { [field] = [message] });
+
+    public static DomainValidationException WithFields(params (string Field, string Message)[] fields)
+    {
+        var dict = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        foreach (var (field, message) in fields)
+        {
+            dict[field] = [message];
+        }
+        return new DomainValidationException(dict);
+    }
 }

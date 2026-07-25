@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<movie>
+  <title>Unknown Fields Movie</title>
+  <year>2020</year>
+  <imdbid>tt9999999</imdbid>
+  <genre>Drama</genre>
+  <customsection>arbitrary-value</customsection>
+  <scrapeurl>https://example.com/raw</scrapeurl>
+</movie>
