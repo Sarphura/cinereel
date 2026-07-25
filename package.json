@@ -7,10 +7,10 @@
     "dev": "concurrently -n hyper-agent,bootstrap,ui,service \"pnpm run dev:hyper-agent\" \"pnpm run dev:bootstrap\" \"pnpm run dev:ui\" \"pnpm run dev:service\"",
     "dev:peer": "concurrently \"pnpm run dev:ui:peer\" \"pnpm run dev:service:peer\" \"pnpm run dev:hyper-agent:peer\"",
 
-    "dev:hyper-agent": "pnpm --filter @cinereel/hyper-agent dev",
-    "dev:hyper-agent:build": "pnpm --filter @cinereel/hyper-agent build && pnpm --filter @cinereel/hyper-agent start",
-    "dev:hyper-agent:peer": "pnpm --filter @cinereel/hyper-agent dev:peer",
-    "dev:hyper-agent:peer:build": "pnpm --filter @cinereel/hyper-agent build && pnpm --filter @cinereel/hyper-agent dev:peer",
+    "dev:hyper": "pnpm --filter @cinereel/hyper-agent dev",
+    "dev:hyper:build": "pnpm --filter @cinereel/hyper-agent build && pnpm --filter @cinereel/hyper-agent start",
+    "dev:hyper:peer": "pnpm --filter @cinereel/hyper-agent dev:peer",
+    "dev:hyper:peer:build": "pnpm --filter @cinereel/hyper-agent build && pnpm --filter @cinereel/hyper-agent dev:peer",
 
     "build:start": "pnpm run build && pnpm run start",
     "test": "pnpm run test:service",
@@ -25,7 +25,9 @@
     "test:service": "pnpm --filter @cinereel/service test",
     "check:sdk-boundary": "node scripts/check-sdk-boundary.mjs",
     "check:nswag-drift": "node scripts/check-nswag-drift.mjs",
-    "regen:hyper-agent-client": "node scripts/gen-hyper-agent-client.mjs"
+    "check:openapi-drift": "node scripts/check-openapi-drift.mjs",
+    "regen:hyper-agent-client": "node scripts/gen-hyper-agent-client.mjs",
+    "regen:openapi-fixture": "node scripts/regen-openapi-fixture.mjs"
   },
   "author": "Sarphura",
   "license": "AGPL-3.0-only",

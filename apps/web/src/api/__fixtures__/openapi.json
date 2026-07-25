@@ -1,0 +1,622 @@
+{
+  "openapi": "3.0.4",
+  "info": {
+    "title": "CineReel.Service | v1",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost/"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "CineReel.Service"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/version": {
+      "get": {
+        "tags": [
+          "Meta"
+        ],
+        "operationId": "GetVersion",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/subscriptions": {
+      "post": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSubscriptionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/subscriptions/{id}": {
+      "get": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/subscriptions/from-profile": {
+      "post": {
+        "tags": [
+          "Subscriptions"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscriptionService_ProfilePickerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/media-items/{id}/push": {
+      "post": {
+        "tags": [
+          "Jellyfin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/media-items/{id}/jellyfin": {
+      "delete": {
+        "tags": [
+          "Jellyfin"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/media-items/{id}/pause-seeding": {
+      "post": {
+        "tags": [
+          "BT"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/media-items/{id}/resume-seeding": {
+      "post": {
+        "tags": [
+          "BT"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "pattern": "^-?(?:0|[1-9]\\d*)$",
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/trailers/{id}": {
+      "get": {
+        "tags": [
+          "Trailers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Trailers"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/publish/pack": {
+      "post": {
+        "tags": [
+          "Publish"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoPackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/publish/drives": {
+      "post": {
+        "tags": [
+          "Publish"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDriveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/publish/drives/{key}": {
+      "delete": {
+        "tags": [
+          "Publish"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/publish/drives/{key}/announce": {
+      "post": {
+        "tags": [
+          "Publish"
+        ],
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnnounceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/profile": {
+      "get": {
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Profile"
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProfileUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/profile/avatar": {
+      "post": {
+        "tags": [
+          "Profile"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/swarm/peers": {
+      "get": {
+        "tags": [
+          "Swarm"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/api/identity": {
+      "get": {
+        "tags": [
+          "Swarm"
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnnounceRequest": {
+        "required": [
+          "wait"
+        ],
+        "type": "object",
+        "properties": {
+          "wait": {
+            "type": "boolean"
+          }
+        }
+      },
+      "AutoPackRequest": {
+        "required": [
+          "localVideoPath",
+          "driveName",
+          "nfoTitle",
+          "nfoYear",
+          "imdbId",
+          "posterPath"
+        ],
+        "type": "object",
+        "properties": {
+          "localVideoPath": {
+            "type": "string"
+          },
+          "driveName": {
+            "type": "string"
+          },
+          "nfoTitle": {
+            "type": "string"
+          },
+          "nfoYear": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "format": "int32",
+            "nullable": true
+          },
+          "imdbId": {
+            "type": "string",
+            "nullable": true
+          },
+          "posterPath": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "CreateDriveRequest": {
+        "required": [
+          "name",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateSubscriptionRequest": {
+        "required": [
+          "key",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          }
+        }
+      },
+      "ProfileUpdateRequest": {
+        "required": [
+          "name",
+          "bio"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "bio": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "SubscriptionService_ProfilePickerRequest": {
+        "required": [
+          "profileKey",
+          "driveKey"
+        ],
+        "type": "object",
+        "properties": {
+          "profileKey": {
+            "type": "string"
+          },
+          "driveKey": {
+            "type": "string"
+          }
+        }
+      },
+      "VersionResponse": {
+        "required": [
+          "service",
+          "version",
+          "apiVersion",
+          "runtime",
+          "builtAt",
+          "commit"
+        ],
+        "type": "object",
+        "properties": {
+          "service": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          },
+          "apiVersion": {
+            "type": "string"
+          },
+          "runtime": {
+            "type": "string"
+          },
+          "builtAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "commit": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "tags": [
+    {
+      "name": "CineReel.Service"
+    },
+    {
+      "name": "Meta"
+    },
+    {
+      "name": "Subscriptions"
+    },
+    {
+      "name": "Jellyfin"
+    },
+    {
+      "name": "BT"
+    },
+    {
+      "name": "Trailers"
+    },
+    {
+      "name": "Publish"
+    },
+    {
+      "name": "Profile"
+    },
+    {
+      "name": "Swarm"
+    }
+  ]
+}

@@ -7,8 +7,10 @@
   "type": "module",
   "scripts": {
     "typecheck": "tsc --noEmit",
+    "predev": "echo '[predev] run pnpm regen:openapi-fixture when the App Server OpenAPI document changes'",
     "dev": "vite --port=3010 --mode development",
     "dev:peer": "vite --port=3011 --mode peer",
+    "prebuild": "echo '[prebuild] run pnpm regen:openapi-fixture when the App Server OpenAPI document changes'",
     "build": "vite build",
     "test": "vitest run",
     "serve": "vite preview",
