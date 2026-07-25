@@ -101,6 +101,11 @@ builder.Services
 // `/api/openapi/ui` (Development environment only).
 builder.Services.AddCinereelOpenApi();
 
+// Health aggregator (ADR 0040, ticket 15). The custom probes register
+// alongside the framework's required `SelfHealthCheck` so the legacy
+// `/health` endpoint keeps working unchanged.
+builder.Services.AddCinereelHealth();
+
 var port = builder.Configuration["Web:ListenPort"] ?? "8090";
 var host = builder.Configuration["Web:ListenHost"] ?? "127.0.0.1";
 builder.WebHost.UseUrls($"http://{host}:{port}");
@@ -137,6 +142,9 @@ app.MapHealthChecks("/health", new HealthCheckOptions
     Predicate = check => check.Tags.Contains("required"),
     AllowCachingResponses = false
 });
+
+// Full health aggregator (ticket 15) — lists every probe.
+app.MapHealthEndpoints();
 
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();

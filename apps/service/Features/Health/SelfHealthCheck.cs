@@ -1,20 +1,22 @@
-using Microsoft.Extensions.Diagnostics.HealthChecks;
+using HealthCheckResultAlias = Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult;
+using HealthCheckContextAlias = Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckContext;
+using IHealthCheckAlias = Microsoft.Extensions.Diagnostics.HealthChecks.IHealthCheck;
 
 namespace CineReel.Service.Features.Health;
 
 /// <summary>
-/// Required health check: the Application Server is reachable and responsive.
-/// Per ADR 0040 this is a "required" check — a 200 means the service can accept requests,
-/// a 503 means an operator should investigate before the Sidecar / MonoTorrent sessions
-/// attempt to talk to it.
+/// Trivial required probe used by the legacy `/health` endpoint that the
+/// infrastructure's `AddHealthChecks()` call wires up. Returns `Healthy`
+/// when the App Server's request loop is responsive — i.e. the App
+/// Server itself is alive. The full aggregator lives at `/api/health`.
 /// </summary>
-public sealed class SelfHealthCheck : IHealthCheck
+public sealed class SelfHealthCheck : IHealthCheckAlias
 {
-    public Task<HealthCheckResult> CheckHealthAsync(
-        HealthCheckContext context,
+    public Task<HealthCheckResultAlias> CheckHealthAsync(
+        HealthCheckContextAlias context,
         CancellationToken cancellationToken = default)
     {
-        return Task.FromResult(HealthCheckResult.Healthy(
+        return Task.FromResult(HealthCheckResultAlias.Healthy(
             description: "Application Server is responsive."));
     }
 }
