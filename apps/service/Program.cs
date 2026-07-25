@@ -1,6 +1,7 @@
 using CineReel.Service.Features.Health;
 using CineReel.Service.Features.Version;
 using CineReel.Service.Infrastructure.HyperAgent;
+using CineReel.Service.Infrastructure.OpenApi;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -90,11 +91,13 @@ builder.Services
         failureStatus: HealthStatus.Unhealthy,
         tags: ["required"]);
 
-// ── OpenAPI (ADR 0034, supersede pending → ADR 0064) ─────────────────────────
-// Microsoft.AspNetCore.OpenApi 10.x emits OpenAPI 3.x JSON at the route
-// `/openapi/v1.json` by default; we remap it to `/api/openapi/v1.json`
-// to keep the route stable for NSwag / openapi-typescript codegen consumers.
-builder.Services.AddOpenApi();
+// ── OpenAPI (ADR 0064) ─────────────────────────────────────────────────────────
+// Microsoft.AspNetCore.OpenApi 10.x emits OpenAPI 3.x JSON. The default
+// route is `/openapi/v1.json`; we re-register it as `/api/openapi/v1.json`
+// to keep the URL family consistent with `/api/*` and to give the codegen
+// consumer (ticket 14) a stable URL. Dev-only Swagger UI lives at
+// `/api/openapi/ui` (Development environment only).
+builder.Services.AddCinereelOpenApi();
 
 var port = builder.Configuration["Web:ListenPort"] ?? "8090";
 var host = builder.Configuration["Web:ListenHost"] ?? "127.0.0.1";
@@ -136,12 +139,10 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();
 
-// OpenAPI: emitted at the default route `/openapi/v1.json`.
-// ADR 0034 originally specified `/api/swagger/v1.json` on Swashbuckle.
-// ADR 0064 supersedes 0034: .NET 10 ships `Microsoft.AspNetCore.OpenApi`
-// as the canonical OpenAPI surface, so we use its default route rather
-// than re-implement path rewriting.
-app.MapOpenApi();
+// OpenAPI: emitted at the documented stable route `/api/openapi/v1.json`.
+// The default framework route (`/openapi/v1.json`) is suppressed; the web
+// codegen consumer in ticket 14 reads from the remapped URL.
+app.MapCinereelOpenApi();
 
 app.Run();
 

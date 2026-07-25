@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using CineReel.Service.Infrastructure.OpenApi;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
@@ -58,7 +59,7 @@ public sealed class SkeletonEndpointsTests : IClassFixture<WebApplicationFactory
     {
         var client = _factory.CreateClient();
 
-        var openapi = await client.GetFromJsonAsync<OpenApiPayload>("/openapi/v1.json");
+        var openapi = await client.GetFromJsonAsync<OpenApiPayload>(OpenApiSetup.OpenApiRoute);
 
         Assert.NotNull(openapi);
         Assert.StartsWith("3.", openapi!.Openapi);
