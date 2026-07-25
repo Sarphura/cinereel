@@ -5,6 +5,7 @@ using CineReel.Service.Features.Bt;
 using CineReel.Service.Features.Health;
 using CineReel.Service.Features.Jellyfin;
 using CineReel.Service.Features.Metadata;
+using CineReel.Service.Features.Profile;
 using CineReel.Service.Features.Publish;
 using CineReel.Service.Features.Subscription;
 using CineReel.Service.Features.Metadata.Events;
@@ -163,6 +164,10 @@ builder.Services.AddHostedService<TrailerCacheMaintainer>();
 builder.Services.AddSingleton<ITorrentFactory, FileSystemTorrentFactory>();
 builder.Services.AddSingleton<IAutoPackService, AutoPackService>();
 
+// Profile (ticket 30). Reads/writes /profile.json on the local main drive.
+builder.Services.AddSingleton<IProfileService, ProfileService>();
+builder.Services.AddTransient<IDomainEventHandler<ProfileUpdated>, ProfileAnnouncer>();
+
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 
@@ -225,6 +230,9 @@ app.MapTrailerEndpoints();
 
 // Publish endpoints (ticket 29).
 app.MapPublishEndpoints();
+
+// Profile endpoints (ticket 30).
+app.MapProfileEndpoints();
 
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();
