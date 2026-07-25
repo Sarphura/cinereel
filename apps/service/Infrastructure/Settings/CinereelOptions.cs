@@ -21,6 +21,13 @@ public sealed class WebOptions
 {
     [Required] public string ListenHost { get; set; } = "127.0.0.1";
     [Range(1, 65535)] public int ListenPort { get; set; } = 8090;
+    /// <summary>SPA bundle path. Relative to <see cref="AppContext.BaseDirectory"/>
+    /// unless absolute. Default `<c>apps/web/dist</c>` matches the App Server's
+    /// publish layout.</summary>
+    public string StaticRoot { get; set; } = "apps/web/dist";
+    /// <summary>SPA entry point; served as the fallback for unknown routes
+    /// to enable client-side routing (ticket 14).</summary>
+    public string SpaIndex { get; set; } = "index.html";
 }
 
 public sealed class HyperAgentOptions

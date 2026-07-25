@@ -40,4 +40,24 @@
     <EmbeddedResource Remove="tests/**" />
   </ItemGroup>
 
+  <!--
+    Bundle the SPA from `apps/web/dist/**` into the publish output so the
+    App Server can serve it via ticket 14's StaticSiteSetup. The include
+    pattern uses a wildcard glob so the build succeeds even before the SPA
+    bundle exists — the wildcard simply matches zero files. Set
+    `CopyToOutputDirectory=Always` for development to drop a freshly-built
+    SPA into `bin/`; for production `CopyToPublishDirectory=PreserveNewest`
+    suffices.
+  -->
+  <PropertyGroup>
+    <_CineReelSpaGlob>apps/web/dist/**/*</_CineReelSpaGlob>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Remove="apps/web/dist/**" />
+    <None Include="$(_CineReelSpaGlob)">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

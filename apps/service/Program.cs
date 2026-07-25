@@ -2,6 +2,8 @@ using CineReel.Service.Features.Health;
 using CineReel.Service.Features.Version;
 using CineReel.Service.Infrastructure.HyperAgent;
 using CineReel.Service.Infrastructure.OpenApi;
+using CineReel.Service.Infrastructure.Settings;
+using CineReel.Service.Infrastructure.Web;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 
@@ -23,7 +25,7 @@ builder.Logging.AddSimpleConsole(o =>
 // fake `HttpMessageHandler`. The probe is only invoked below when the
 // App Server is configured to talk to a Hyper Agent (i.e.
 // `HyperAgent:ExpectedVersion` is set).
-var hyperAgentOptions = HyperAgentOptions.Bind(builder.Configuration);
+var hyperAgentOptions = CineReel.Service.Infrastructure.HyperAgent.HyperAgentOptions.Bind(builder.Configuration);
 if (!string.IsNullOrWhiteSpace(hyperAgentOptions.ExpectedVersion)
     && hyperAgentOptions.ExpectedVersion != "0.0.0")
 {
@@ -143,6 +145,14 @@ app.MapVersion();
 // The default framework route (`/openapi/v1.json`) is suppressed; the web
 // codegen consumer in ticket 14 reads from the remapped URL.
 app.MapCinereelOpenApi();
+
+// ── SPA host (ADR 0022, ticket 14) ────────────────────────────────────────────
+// Static files from `Web:StaticRoot` are served at `/`; unknown routes
+// fall back to `Web:SpaIndex` for client-side routing. The path root
+// resolved from `CinereelOptions` after `AddCinereelOptions` validated
+// startup configuration.
+var webOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<CinereelOptions>>().Value.Web;
+app.UseCinereelStaticSite(new StaticSiteOptions(webOptions.StaticRoot, webOptions.SpaIndex));
 
 app.Run();
 
