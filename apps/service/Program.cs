@@ -168,6 +168,10 @@ builder.Services.AddSingleton<IAutoPackService, AutoPackService>();
 builder.Services.AddSingleton<IProfileService, ProfileService>();
 builder.Services.AddTransient<IDomainEventHandler<ProfileUpdated>, ProfileAnnouncer>();
 
+// Publish service + identity (ticket 31).
+builder.Services.AddSingleton<IIdentityService, MainDriveKeyIdentityService>();
+builder.Services.AddSingleton<IPublishService, PublishService>();
+
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 
@@ -233,6 +237,9 @@ app.MapPublishEndpoints();
 
 // Profile endpoints (ticket 30).
 app.MapProfileEndpoints();
+
+// Swarm + identity endpoints (ticket 31).
+app.MapSwarmEndpoints();
 
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();
