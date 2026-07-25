@@ -2,25 +2,34 @@
 /**
  * check-sdk-boundary.mjs — replaces the old bash `scripts/check-sdk-boundary.sh`.
  *
- * Walks `apps/sidecar/src/**.ts` and enforces:
+ * Walks every TypeScript source under the apps/* packages and enforces:
  *   1. No business file imports `hypercore` / `hyperdrive` / `hyperswarm` /
  *      `corestore` directly. Always go through `hyper-sdk`.
- *   2. Only `src/infrastructure/sdk/index.ts` may `import 'hyper-sdk'`.
+ *   2. Only `src/infrastructure/sdk/index.ts` of an allowlisted package may
+ *      `import 'hyper-sdk'`. The allowlist (see `ALLOWED_PACKAGES`) carries
+ *      both `apps/sidecar` and `apps/hyper-agent` during the rename
+ *      transition; ticket 03 will shrink the list to `apps/hyper-agent`.
  *
  * Exits non-zero on the first violation (CI-friendly).
  */
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const HERE = join(__dirname, '..')
-const SRC_DIRS = [
-  join(HERE, 'apps/sidecar/src'),
-  join(HERE, 'apps/sidecar/test'),
-]
+
+const ALLOWED_PACKAGES = ['apps/sidecar', 'apps/hyper-agent']
+const SRC_DIRS = ALLOWED_PACKAGES.flatMap((p) => {
+  const src = join(HERE, p, 'src')
+  const test = join(HERE, p, 'test')
+  return [existsSync(src) ? src : null, existsSync(test) ? test : null].filter(Boolean)
+})
+
 const FORBIDDEN_PKGS = ['hypercore', 'hyperdrive', 'hyperswarm', 'corestore']
-const ALLOWED_HYPER_SDK_PATH = join('apps/sidecar/src/infrastructure/sdk/index.ts')
+const ALLOWED_HYPER_SDK_PATH = ALLOWED_PACKAGES.map((p) =>
+  join(p, 'src/infrastructure/sdk/index.ts'),
+)
 
 const IMPORT_RE = /(?:from\s+['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\))/
 
@@ -53,7 +62,7 @@ for (const dir of SRC_DIRS) {
         )
         violations++
       } else if (modName === 'hyper-sdk') {
-        if (rel !== ALLOWED_HYPER_SDK_PATH) {
+        if (!ALLOWED_HYPER_SDK_PATH.includes(rel)) {
           console.error(
             `\u2716 'hyper-sdk' imported outside infrastructure/sdk/index.ts: ${rel}`,
           )

@@ -12,6 +12,11 @@
     "dev:sidecar:peer": "pnpm --filter @cinereel/sidecar dev:peer",
     "dev:sidecar:peer:build": "pnpm --filter @cinereel/sidecar build && pnpm --filter @cinereel/sidecar dev:peer",
 
+    "dev:hyper-agent": "pnpm --filter @cinereel/hyper-agent dev",
+    "dev:hyper-agent:build": "pnpm --filter @cinereel/hyper-agent build && pnpm --filter @cinereel/hyper-agent start",
+    "dev:hyper-agent:peer": "pnpm --filter @cinereel/hyper-agent dev:peer",
+    "dev:hyper-agent:peer:build": "pnpm --filter @cinereel/hyper-agent build && pnpm --filter @cinereel/hyper-agent dev:peer",
+
     "build:start": "pnpm run build && pnpm run start",
     "test": "pnpm run test:service",
     
