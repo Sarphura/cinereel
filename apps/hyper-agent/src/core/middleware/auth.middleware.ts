@@ -1,24 +1,30 @@
 /**
- * AuthMiddleware — preserves the legacy `Authorization: Bearer <JWT>` and
- * `X-Sidecar-Token` paths so dev tooling keeps working.
+ * AuthMiddleware — single shared-secret bearer (ticket 09).
  *
- * On success, stamps `req.apiKeyId = kid`. On failure, the response is
- * an RFC 9457 ProblemDetails envelope (see HttpExceptionFilter); the
- * middleware writes it directly because it short-circuits before the
- * filter runs.
+ * The Hyper Agent authenticates every HTTP request with the shared
+ * secret loaded from `<CINEREEL_DATA_DIR>/sidecar.token` at startup.
+ * The middleware accepts either header form for operator curl
+ * convenience:
  *
- * Ticket 09 collapses this to a single shared-secret bearer; the JWT
- * path remains a compatibility shim until the deprecation window
- * closes.
+ *   - `Authorization: Bearer <token>`
+ *   - `X-Sidecar-Token: <token>`
+ *
+ * No JWT, no per-key registry, no `SIDECAR_API_KEYS` — the loopback
+ * shared secret is sufficient because the Application Server is the
+ * only legitimate client. The token is injected via the `SHARED_TOKEN`
+ * provider; tests override that provider with a deterministic value.
+ *
+ * On failure the middleware emits an RFC 9457 ProblemDetails response
+ * directly. It writes the body itself because it short-circuits before
+ * the global HttpExceptionFilter runs.
  */
-import { Injectable, Logger, type NestMiddleware } from '@nestjs/common'
+import { Inject, Injectable, Logger, type NestMiddleware } from '@nestjs/common'
 import type { Request, Response } from 'express'
-import { verifyJwt, JwtError } from '../../auth/jwt.js'
 import {
-  verifyApiKey,
-  getSigningSecret,
-  registeredKeyIds,
-} from '../../auth/keys.js'
+  SHARED_TOKEN,
+  type SharedTokenPort,
+} from '../../infrastructure/security/security.tokens.js'
+import { verifySharedToken } from '../../infrastructure/security/shared-token.js'
 import {
   MISSING_TOKEN,
   INVALID_TOKEN,
@@ -48,90 +54,60 @@ function sendProblem(
 export class AuthMiddleware implements NestMiddleware {
   private readonly logger = new Logger(AuthMiddleware.name)
 
+  constructor(@Inject(SHARED_TOKEN) private readonly expected: SharedTokenPort) {}
+
   use(req: Request, res: Response, next: () => void): void {
     const instance = req.originalUrl ?? req.url
-    const authHeader = req.headers['authorization']
-    const legacyHeader = req.headers['x-sidecar-token']
+    const presented = extractToken(
+      req.headers['authorization'],
+      req.headers['x-sidecar-token'],
+    )
 
-    // ── Path 1: Authorization: Bearer <JWT> ───────────────────────────
-    if (typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-      const jwt = authHeader.slice(7).trim()
-      if (jwt.length === 0) {
-        sendProblem(res, MISSING_TOKEN, 'Empty Bearer token', instance)
-        return
-      }
-
-      let verified = false
-      for (const kid of registeredKeyIds()) {
-        const secret = getSigningSecret(kid)
-        if (!secret) continue
-        try {
-          const result = verifyJwt(jwt, secret)
-          ;(req as unknown as { apiKeyId: string }).apiKeyId = result.kid
-          verified = true
-          break
-        } catch (err) {
-          if (err instanceof JwtError && err.code === 'SIGNATURE_MISMATCH') continue
-          const msg = err instanceof Error ? err.message : String(err)
-          sendProblem(res, INVALID_TOKEN, `JWT verification failed: ${msg}`, instance)
-          return
-        }
-      }
-
-      if (verified) {
-        next()
-        return
-      }
-
-      sendProblem(
-        res,
-        INVALID_TOKEN,
-        'JWT signed by an unknown key',
-        instance,
-        'hint: request a new token via POST /v1/auth/token',
-      )
-      return
-    }
-
-    // ── Path 2: X-Sidecar-Token (legacy, dev only) ────────────────────
-    if (process.env.NODE_ENV === 'production') {
-      if (typeof legacyHeader === 'string') {
-        sendProblem(
-          res,
-          INVALID_TOKEN,
-          'X-Sidecar-Token is not accepted in production. ' +
-            'Use POST /v1/auth/token to obtain a JWT.',
-          instance,
-        )
-        return
-      }
+    if (!presented) {
       sendProblem(
         res,
         MISSING_TOKEN,
-        'Missing Authorization header. Obtain a JWT via POST /v1/auth/token.',
+        'Missing Authorization: Bearer <token> or X-Sidecar-Token header',
         instance,
       )
       return
     }
 
-    if (typeof legacyHeader !== 'string' || legacyHeader.length === 0) {
-      sendProblem(res, MISSING_TOKEN, 'Missing X-Sidecar-Token header', instance)
-      return
-    }
-
-    const kid = verifyApiKey(legacyHeader)
-    if (!kid) {
+    if (!verifySharedToken(this.expected, presented)) {
       sendProblem(
         res,
         INVALID_TOKEN,
-        'Invalid X-Sidecar-Token',
+        'Token does not match this Hyper Agent instance',
         instance,
-        'hint: token does not match this Hyper Agent instance',
+        'hint: read <CINEREEL_DATA_DIR>/sidecar.token',
       )
       return
     }
 
-    ;(req as unknown as { apiKeyId: string }).apiKeyId = kid
     next()
   }
+}
+
+function extractToken(
+  authHeader: string | string[] | undefined,
+  legacyHeader: string | string[] | undefined,
+): string | null {
+  const auth =
+    typeof authHeader === 'string'
+      ? authHeader
+      : Array.isArray(authHeader)
+        ? authHeader[0]
+        : undefined
+  if (typeof auth === 'string' && auth.startsWith('Bearer ')) {
+    const slice = auth.slice(7).trim()
+    if (slice.length > 0) return slice
+  }
+  const legacy =
+    typeof legacyHeader === 'string'
+      ? legacyHeader
+      : Array.isArray(legacyHeader)
+        ? legacyHeader[0]
+        : undefined
+  if (typeof legacy === 'string' && legacy.length > 0) return legacy
+  return null
 }

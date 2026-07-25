@@ -2,51 +2,43 @@
  * Shared test fixtures for NestJS e2e tests.
  *
  * Provides `createTestApp()` that:
- *   1. Resets the API key registry (loadApiKeys → dev fallback)
- *   2. Configures ConfigService with a tmp storeDir (so the SDK doesn't
- *      trash the dev's .sidecar-store)
- *   3. Replaces the SDK provider with `InMemoryHyperdriveLike` —
- *      production hyper-sdk requires real IO and is slow in tests
+ *   1. Sets `SHARED_TOKEN` to a deterministic test value (overrides
+ *      the file-system loader used in `main.ts`)
+ *   2. Configures ConfigService with a tmp storeDir (so the SDK
+ *      doesn't trash the dev's .sidecar-store)
+ *   3. Replaces the SDK provider with `TestSdk` — production hyper-sdk
+ *      requires real IO and is slow in tests
  *   4. Creates a NestApplication (no actual port binding)
  *   5. Initialises it (Nest startup)
  *
- * All e2e suites should use this to avoid boot the real SDK.
+ * Ticket 09: the AuthMiddleware now expects a shared-secret token via
+ * DI. The constant is injected through `SecurityModule.forRoot(token)`
+ * in `AppModule.forRoot(token)`. Tests call this with the deterministic
+ * `TEST_API_KEY` below and use `authHeaders()` / `bearerHeaders()` to
+ * present it to the middleware.
+ *
+ * All e2e suites should use this to avoid booting the real SDK.
  */
 import { Test, type TestingModule } from '@nestjs/testing'
 import type { INestApplication } from '@nestjs/common'
 import type { SDK, HyperdriveLike } from '../src/infrastructure/index.js'
 import { SDK_TOKEN } from '../src/core/sdk/sdk.module.js'
 import { AppModule } from '../src/app.module.js'
-import { loadApiKeys } from '../src/auth/keys.js'
-import { getSigningSecret } from '../src/auth/keys.js'
-import { signJwt } from '../src/auth/jwt.js'
 import { HttpExceptionFilter } from '../src/core/common/filters/http-exception.filter.js'
 import { mkdtempSync, rmSync } from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import express from 'express'
 
-export const TEST_API_KEY = 'a'.repeat(32)
+/** Stable test token. 32 chars minimum, matches the 64-hex format produced by `loadOrMintSharedToken` (truncated for readability). */
+export const TEST_API_KEY = 'a'.repeat(64)
 
 export function authHeaders(): Record<string, string> {
   return { 'x-sidecar-token': TEST_API_KEY }
 }
 
 export function bearerHeaders(): Record<string, string> {
-  loadApiKeys({
-    port: 0,
-    host: '127.0.0.1',
-    token: TEST_API_KEY,
-    storeDir: '/tmp',
-    swarmPort: 0,
-    bootstrap: undefined,
-    logLevel: 'silent',
-    shutdownTimeoutMs: 5_000,
-    envFile: undefined,
-  })
-  const secret = getSigningSecret('__legacy__')!
-  const jwt = signJwt({ sub: '__legacy__' }, secret)
-  return { authorization: `Bearer ${jwt}` }
+  return { authorization: `Bearer ${TEST_API_KEY}` }
 }
 
 /**
@@ -109,23 +101,10 @@ export interface TestContext {
 }
 
 export async function createTestApp(): Promise<TestContext> {
-  process.env.SIDECAR_TOKEN = TEST_API_KEY
   const tmpDir = mkdtempSync(path.join(os.tmpdir(), 'cinereel-nest-'))
 
-  loadApiKeys({
-    port: 0,
-    host: '127.0.0.1',
-    token: TEST_API_KEY,
-    storeDir: tmpDir,
-    swarmPort: 0,
-    bootstrap: undefined,
-    logLevel: 'silent',
-    shutdownTimeoutMs: 5_000,
-    envFile: undefined,
-  })
-
   const moduleRef = await Test.createTestingModule({
-    imports: [AppModule],
+    imports: [AppModule.forRoot(TEST_API_KEY)],
   })
     .overrideProvider(SDK_TOKEN)
     .useValue(new TestSdk() as unknown as SDK)
