@@ -212,32 +212,6 @@
       }
     },
     "/v1/drives/{key}/file": {
-      "get": {
-        "operationId": "driveReadFile",
-        "parameters": [
-          {
-            "name": "key",
-            "required": true,
-            "in": "path",
-            "description": "Hex64 drive key",
-            "schema": {}
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": ""
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "summary": "",
-        "tags": [
-          "drives"
-        ]
-      },
       "put": {
         "operationId": "driveWriteFile",
         "parameters": [

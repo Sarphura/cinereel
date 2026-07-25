@@ -28,26 +28,15 @@ public interface IHyperAgentClient
 
     /// <summary>
     /// <c>GET /v1/files/:driveKey/*</c> with optional Range header.
-    /// Replaces <c>driveReadFile</c> for trailer-byte ranged reads
-    /// (ADR 0047). The response carries the requested byte slice and
-    /// the trailing <c>Content-Range</c> header.
+    /// The single read path in the API (ADR 0047). The response
+    /// carries the requested byte slice and the trailing
+    /// <c>Content-Range</c> header.
     /// </summary>
     Task<HyperAgentFileResponse> FilesRangeReadAsync(
         string driveKey,
         string path,
         long? rangeStart = null,
         long? rangeEnd = null,
-        CancellationToken ct = default);
-
-    /// <summary>
-    /// Legacy <c>GET /v1/drives/:key/file?path=</c>. Used by poster /
-    /// NFO / <c>.torrent</c> reads that do not need Range. Will be
-    /// deleted in ticket 13 once the migration to
-    /// <see cref="FilesRangeReadAsync"/> completes for all read paths.
-    /// </summary>
-    Task<byte[]> DriveReadFileAsync(
-        string driveKey,
-        string path,
         CancellationToken ct = default);
 }
 

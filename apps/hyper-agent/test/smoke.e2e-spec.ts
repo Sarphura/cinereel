@@ -59,6 +59,19 @@ describe('hyper-agent smoke (NestJS + Express)', () => {
     expect(res.status).toBe(404)
   })
 
+  it('GET /v1/drives/:key/file (legacy read path) is removed in ticket 13', async () => {
+    // Use a well-formed hex64 key + path so any 401/404 we see is the
+    // route being gone, not an authn or authz check.
+    const key = 'a'.repeat(64)
+    const res = await request(ctx.app.getHttpServer())
+      .get(`/v1/drives/${key}/file`)
+      .query({ path: '/trailer.mp4' })
+      .set(authHeaders())
+    // Reads moved to /v1/files/:driveKey/* in ticket 11; the old route
+    // is gone, so Nest's default 404 handler returns 404.
+    expect(res.status).toBe(404)
+  })
+
   it('GET /v1/identity returns 200 with correct token', async () => {
     const res = await request(ctx.app.getHttpServer())
       .get('/v1/identity')

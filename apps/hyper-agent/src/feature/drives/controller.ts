@@ -1,5 +1,11 @@
 /**
  * DrivesController — `/v1/drives*` HTTP routes.
+ *
+ * The legacy `GET /v1/drives/:key/file?path=` read route was removed
+ * in ticket 13. Reads now go through `/v1/files/:driveKey/*` (ADR
+ * 0047). Writes and deletes remain on this controller because their
+ * semantics (binary PUT body, recursive DELETE) still match the
+ * file-shaped path.
  */
 import {
   Body,
@@ -12,7 +18,6 @@ import {
   Post,
   Put,
   Query,
-  StreamableFile,
 } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -20,7 +25,6 @@ import {
   ApiOkResponse,
   ApiOperation,
   ApiParam,
-  ApiProduces,
   ApiTags,
 } from '@nestjs/swagger'
 import { ZodValidationPipe } from 'nestjs-zod'
@@ -102,19 +106,8 @@ export class DrivesController {
     return (out ?? null) as HyperdriveEntryDto | null
   }
 
-  // ── drive/:key/file ──────────────────────────────────────────────
-
-  @Get(':key/file')
-  @ApiOperation({ operationId: 'driveReadFile' })
-  @ApiProduces('application/octet-stream')
-  @ApiParam({ name: 'key', description: 'Hex64 drive key' })
-  async readFile(
-    @Param('key') key: string,
-    @Query(new ZodValidationPipe(PathQueryDto.schema)) q: PathQueryDto,
-  ): Promise<StreamableFile> {
-    const stream = await this.files.readStream(key, q.path, q.wait ?? true)
-    return new StreamableFile(stream, { type: 'application/octet-stream' })
-  }
+  // ── drive/:key/file (write / delete only) ───────────────────────
+  // Reads live at /v1/files/:driveKey/* (ticket 11).
 
   @Put(':key/file')
   @ApiOperation({ operationId: 'driveWriteFile' })

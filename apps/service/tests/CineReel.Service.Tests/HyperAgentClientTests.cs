@@ -114,23 +114,6 @@ public sealed class HyperAgentClientTests
     }
 
     [Fact]
-    public async Task DriveReadFileAsync_HitsLegacyEndpoint()
-    {
-        var (client, handler) = MakeClient();
-        handler.Map["GET /v1/drives/" + DriveKey + "/file?path=" + Uri.EscapeDataString("/poster.jpg")] =
-            new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new ByteArrayContent(new byte[] { 1, 2, 3 }),
-            };
-
-        var bytes = await client.DriveReadFileAsync(DriveKey, "/poster.jpg");
-
-        Assert.Equal(new byte[] { 1, 2, 3 }, bytes);
-        var request = handler.Requests.Single();
-        Assert.Equal($"/v1/drives/{DriveKey}/file?path={Uri.EscapeDataString("/poster.jpg")}", request.RequestUri!.AbsolutePath + request.RequestUri!.Query);
-    }
-
-    [Fact]
     public async Task GetVersionAsync_ReturnsVersion()
     {
         var (client, handler) = MakeClient();

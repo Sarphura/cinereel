@@ -7,8 +7,8 @@
  * for full bodies, 206 for partial, 416 for unsatisfiable / multi-range,
  * and 400 for malformed input. ProblemDetails is RFC 9457 throughout.
  *
- * The legacy `GET /v1/drives/:key/file?path=` route stays live for one
- * release cycle (ticket 13 deletes it after the App Server migrates).
+ * This is the only read path on the Hyper Agent. Writes and deletes
+ * remain on `DrivesController` (`PUT`/`DELETE /v1/drives/:key/file`).
  */
 import {
   Controller,
@@ -151,7 +151,8 @@ export class FilesController {
   ): Promise<{ size: number; mounted: boolean }> {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const svc = this.files as any
-    let drive: unknown
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let drive: any
     try {
       drive = svc.get(driveKey)
     } catch (err) {

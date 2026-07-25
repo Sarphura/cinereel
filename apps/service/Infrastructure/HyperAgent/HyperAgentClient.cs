@@ -49,7 +49,7 @@ public sealed class HyperAgentClient : IHyperAgentClient
         long? rangeEnd = null,
         CancellationToken ct = default)
     {
-        // The new endpoint is path-parameter style: the catch-all
+        // The endpoint is path-parameter style: the catch-all
         // segment is the file path. We pass `path` as-is; the client
         // does not URL-encode it because Hyperdrive paths use `/`
         // (no spaces / special chars at this layer).
@@ -82,17 +82,6 @@ public sealed class HyperAgentClient : IHyperAgentClient
             ContentLength: resp.Content.Headers.ContentLength,
             ContentRange: contentRange,
             Body: body);
-    }
-
-    public async Task<byte[]> DriveReadFileAsync(
-        string driveKey,
-        string path,
-        CancellationToken ct = default)
-    {
-        var url = $"/v1/drives/{driveKey}/file?path={Uri.EscapeDataString(path)}";
-        using var resp = await _http.GetAsync(url, ct);
-        resp.EnsureSuccessStatusCode();
-        return await resp.Content.ReadAsByteArrayAsync(ct);
     }
 
     private static string NormalizePath(string path)

@@ -25,7 +25,7 @@ describe('OpenAPI contract snapshot', () => {
     await ctx.cleanup()
   })
 
-  it('emits a stable OpenAPI document for the 9 HTTP routes', () => {
+  it('emits a stable OpenAPI document for the 8 HTTP routes', () => {
     // Skip nestjs-zod swagger patch under vitest (its subpath require hits
     // the ESM exports wall). We still get a valid OpenAPI doc; Zod-derived
     // shapes are validated via wire-equivalence.spec.ts instead.
