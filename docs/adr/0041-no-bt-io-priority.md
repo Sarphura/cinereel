@@ -20,7 +20,7 @@ The App Server hosts:
 - EF Core (SQLite reads/writes).
 - The Jellyfin push pipeline (file copies to the Jellyfin library root).
 - The MonoTorrent BT engine (disk reads/writes for pieces).
-- The Sidecar HTTP client (outbound calls).
+- The Hyper Agent HTTP client (outbound calls).
 
 `nice`ing the whole process would slow all five equally — the opposite of what we want (we want BT slow, others fast).
 

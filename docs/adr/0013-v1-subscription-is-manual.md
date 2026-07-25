@@ -14,7 +14,7 @@ A "discover" mechanism — a search box over public publishers — implies eithe
 
 V1 has these subscription entry points only:
 
-- **Subscribe by driveKey** — the user pastes a 64-hex driveKey. The Application Server calls `POST /v1/swarm/mount/:publicKey` on the Hyper Sidecar.
+- **Subscribe by driveKey** — the user pastes a 64-hex driveKey. The Application Server calls `POST /v1/swarm/mount/:publicKey` on the Hyper Agent.
 - **Subscribe by profileKey** — the user pastes a 64-hex profileKey. The Application Server first mounts the Profile Drive and reads `/profile.json`, then lists the publisher's `collections[]`. The user picks one or more resource drives from that list, each becoming a separate subscription.
 
 The Application Server exposes a "Subscribe" UI in `apps/web` that supports both flows. No search, no recommendations, no "trending publishers".

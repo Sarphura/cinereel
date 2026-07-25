@@ -1,6 +1,6 @@
-# Sidecar emits RFC 9457 ProblemDetails on all 4xx/5xx responses
+# Hyper Agent emits RFC 9457 ProblemDetails on all 4xx/5xx responses
 
-The Hyper Sidecar's HTTP responses on error use the same RFC 9457 ProblemDetails format as the .NET App Server (ADR 0032):
+The Hyper Agent's HTTP responses on error use the same RFC 9457 ProblemDetails format as the .NET App Server (ADR 0032):
 
 ```json
 {
@@ -16,7 +16,7 @@ The custom `HttpExceptionFilter` at `apps/sidecar/src/core/common/filters/http-e
 
 ## Context
 
-After ADR 0032 fixed the App Server's error response format, the Sidecar should use the same shape. The two services share an error contract with the App Server as the consumer.
+After ADR 0032 fixed the App Server's error response format, the Hyper Agent should use the same shape. The two services share an error contract with the App Server as the consumer.
 
 ## Decision
 

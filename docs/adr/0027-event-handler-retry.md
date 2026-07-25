@@ -8,7 +8,7 @@ Domain Event handlers may fail in three classes: (1) transient recoverable, (2) 
 
 ## Context
 
-A grilling question asked about retry semantics for `SubscriptionCreated`, `MediaItemScanned`, and other in-process events. The Application Server's handlers are short and idempotent, so a retry mechanism is mostly to ride out transient failures (Sidecar RPC timeouts during heavy I/O, Jellyfin HTTP unavailability, BT tracker hiccups). Permanent failures (NFO corruption, schema mismatch) need a different path: surface to the user and let them decide.
+A grilling question asked about retry semantics for `SubscriptionCreated`, `MediaItemScanned`, and other in-process events. The Application Server's handlers are short and idempotent, so a retry mechanism is mostly to ride out transient failures (Hyper Agent RPC timeouts during heavy I/O, Jellyfin HTTP unavailability, BT tracker hiccups). Permanent failures (NFO corruption, schema mismatch) need a different path: surface to the user and let them decide.
 
 ## Decision
 

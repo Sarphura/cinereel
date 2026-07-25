@@ -1,8 +1,8 @@
-# `/health` aggregates required checks (Sidecar + SQLite) and reports optional checks without affecting overall status
+# `/health` aggregates required checks (Hyper Agent + SQLite) and reports optional checks without affecting overall status
 
 The App Server exposes `GET /health` (and `GET /api/health` for the SPA). The endpoint returns a JSON object with two categories:
 
-- **Required checks** — Sidecar `/v1/health` and SQLite `SELECT 1`. If either fails, HTTP 503; otherwise HTTP 200.
+- **Required checks** — Hyper Agent `/v1/health` and SQLite `SELECT 1`. If either fails, HTTP 503; otherwise HTTP 200.
 - **Optional checks** — Jellyfin reachability, MonoTorrent engine state, disk space, last subscription scan time. Reported in the JSON body but do not affect HTTP status.
 
 ```json
@@ -10,7 +10,7 @@ The App Server exposes `GET /health` (and `GET /api/health` for the SPA). The en
   "status": "healthy",
   "version": "0.4.3",
   "checks": {
-    "sidecar": { "required": true, "status": "healthy", "latencyMs": 12 },
+    "hyper-agent": { "required": true, "status": "healthy", "latencyMs": 12 },
     "database": { "required": true, "status": "healthy", "latencyMs": 3 },
     "jellyfin": { "required": false, "status": "healthy", "latencyMs": 45 },
     "bt_engine": { "required": false, "status": "healthy", "active_torrents": 14 },
@@ -23,7 +23,7 @@ The App Server exposes `GET /health` (and `GET /api/health` for the SPA). The en
 
 Cinereel has multiple dependencies. A `/health` endpoint must help operators and end users answer "is the system working?" Three plausible scopes:
 
-- **Required only** — Sidecar + SQLite. Fast and unambiguous. But ignores real-world issues (Jellyfin unreachable, disk full).
+- **Required only** — Hyper Agent + SQLite. Fast and unambiguous. But ignores real-world issues (Jellyfin unreachable, disk full).
 - **Required + Optional (aggregated)** — overall status follows the required checks; optional checks are reported but don't trip 503.
 - **All required** — every dependency must be healthy. Too strict: a Jellyfin outage would mark the whole system unhealthy even though subscriptions still work.
 
@@ -35,7 +35,7 @@ Required + Optional (aggregated).
 
 ```csharp
 app.MapGet("/health", async (
-    ISidecarReadClient sidecar,
+    IHyper AgentReadClient hyper-agent,
     CinereelDbContext db,
     JellyfinHealthProbe jellyfinProbe,
     BtEngineHealthProbe btProbe,
@@ -47,12 +47,12 @@ app.MapGet("/health", async (
     try
     {
         var sw = Stopwatch.StartNew();
-        await sidecar.GetHealthAsync();
-        required.Add(new("sidecar", "healthy", sw.ElapsedMilliseconds));
+        await hyper-agent.GetHealthAsync();
+        required.Add(new("hyper-agent", "healthy", sw.ElapsedMilliseconds));
     }
     catch (Exception ex)
     {
-        required.Add(new("sidecar", "unhealthy", ex.Message));
+        required.Add(new("hyper-agent", "unhealthy", ex.Message));
     }
 
     try
@@ -84,7 +84,7 @@ app.MapGet("/health", async (
 ### Why required-only drives 503
 
 - The two required checks are the actual functional dependencies.
-- If Sidecar is unreachable, no Drive operations work.
+- If Hyper Agent is unreachable, no Drive operations work.
 - If SQLite is broken, no state can be persisted.
 - Everything else can degrade gracefully.
 

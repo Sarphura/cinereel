@@ -1,6 +1,6 @@
 # Corestore data directory is `<CINEREEL_DATA_DIR>/corestore/`
 
-The Hyper Sidecar's underlying hyper-sdk Corestore lives at `<CINEREEL_DATA_DIR>/corestore/`. `CINEREEL_DATA_DIR` defaults to `~/.cinereel/` and is configurable via the `CINEREEL_DATA_DIR` environment variable.
+The Hyper Agent's underlying hyper-sdk Corestore lives at `<CINEREEL_DATA_DIR>/corestore/`. `CINEREEL_DATA_DIR` defaults to `~/.cinereel/` and is configurable via the `CINEREEL_DATA_DIR` environment variable.
 
 ## Context
 
@@ -8,7 +8,7 @@ The hyper-sdk's Corestore is the SQLite-backed store that holds all Hyperdrive c
 
 - Backup/restore procedures (the user backs up everything under `CINEREEL_DATA_DIR`).
 - Migration paths (moving to a new machine = move the data dir).
-- Multiple-instance deployment (two Sidecars pointing at the same Corestore would conflict).
+- Multiple-instance deployment (two Hyper Agents pointing at the same Corestore would conflict).
 
 ## Decision
 
@@ -20,13 +20,13 @@ const sdk = await create({
 })
 ```
 
-The `CINEREEL_DATA_DIR` is a single env var that controls all Cinereel data (App Server SQLite, Sidecar's Corestore, drive-index.json, logs). This gives the user one data directory to back up.
+The `CINEREEL_DATA_DIR` is a single env var that controls all Cinereel data (App Server SQLite, Hyper Agent's Corestore, drive-index.json, logs). This gives the user one data directory to back up.
 
 ## Failure modes
 
-- The directory doesn't exist or is unwritable: Sidecar exits 77 (`EX_DATAERR`) with a clear error.
-- The directory is full: hyper-sdk writes will fail; Sidecar logs the failure and exits 78.
-- Two Sidecars point at the same dir: SQLite locks; the second Sidecar fails to start.
+- The directory doesn't exist or is unwritable: Hyper Agent exits 77 (`EX_DATAERR`) with a clear error.
+- The directory is full: hyper-sdk writes will fail; Hyper Agent logs the failure and exits 78.
+- Two Hyper Agents point at the same dir: SQLite locks; the second Hyper Agent fails to start.
 
 ## What's NOT in V1
 

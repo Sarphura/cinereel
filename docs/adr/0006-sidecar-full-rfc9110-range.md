@@ -1,10 +1,10 @@
-# Sidecar HTTP Range parsing conforms to RFC 9110 in full
+# Hyper Agent HTTP Range parsing conforms to RFC 9110 in full
 
 `GET /v1/drives/:key/file` parses the `Range` request header per RFC 9110 §14.1.2 (and the obsolete §14.16 semantics preserved for backward compatibility) and serves `multipart/byteranges` when the request asks for multiple ranges. This covers trailer preview use cases — including random-access seeking in `<video>` players, MP4 atom probing, and progressive download tools.
 
 ## Context
 
-Earlier ADR 0005 declared that the Sidecar would implement HTTP Range "for trailers". A further grilling round established that the implementation must cover the full RFC, not a hand-rolled subset, because:
+Earlier ADR 0005 declared that the Hyper Agent would implement HTTP Range "for trailers". A further grilling round established that the implementation must cover the full RFC, not a hand-rolled subset, because:
 
 - MP4 demuxers probe arbitrary byte ranges (`moov` atom location requires seeking; players seek forward to load mid-roll chapters; transcoders read specific byte windows for fast start).
 - Some CLI tools (curl, wget) issue `Range: bytes=-N` suffix requests against unknown-length endpoints.
@@ -12,7 +12,7 @@ Earlier ADR 0005 declared that the Sidecar would implement HTTP Range "for trail
 
 ## Decision
 
-Implementations of the Sidecar's file route must:
+Implementations of the Hyper Agent's file route must:
 
 - Parse `Range: bytes=A-B` (single closed)
 - Parse `Range: bytes=A-` (single open-ended)
@@ -25,7 +25,7 @@ Implementations of the Sidecar's file route must:
 - Return `416 Range Not Satisfiable` with a `Content-Range: bytes */Total` body when the requested range exceeds file size
 - Emit `Content-Length` accurately for both single and multi-range responses
 
-ETag is the SHA-256 of the drive's `(key, path)` tuple truncated to 16 hex chars — stable across replicas since both are deterministic. The Sidecar sets `ETag: "<16-hex>"` on every file response. `If-Range` with an ETag match serves the ranged body; mismatch returns the full body.
+ETag is the SHA-256 of the drive's `(key, path)` tuple truncated to 16 hex chars — stable across replicas since both are deterministic. The Hyper Agent sets `ETag: "<16-hex>"` on every file response. `If-Range` with an ETag match serves the ranged body; mismatch returns the full body.
 
 ## Why not just `bytes=A-`
 

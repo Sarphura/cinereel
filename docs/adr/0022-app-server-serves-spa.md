@@ -1,6 +1,6 @@
 # The .NET Application Server serves the SPA as static files at its root
 
-The C# Application Server's Kestrel is the only HTTP listener exposed to the network. It serves the .NET Application Server's JSON API at `/api/*` and the built SPA bundle at `/*` (with a fallback to `index.html` for SPA client-side routing). The Sidecar continues to bind `127.0.0.1` only (ADR 0010). The SPA bundle is built into `apps/web/dist` and copied into the App Server's content root at build time.
+The C# Application Server's Kestrel is the only HTTP listener exposed to the network. It serves the .NET Application Server's JSON API at `/api/*` and the built SPA bundle at `/*` (with a fallback to `index.html` for SPA client-side routing). The Hyper Agent continues to bind `127.0.0.1` only (ADR 0010). The SPA bundle is built into `apps/web/dist` and copied into the App Server's content root at build time.
 
 ## Context
 
@@ -17,7 +17,7 @@ ASP.NET Core hosts the SPA. Specifically:
 1. The `apps/web` Vite build output (`apps/web/dist`) is copied into the App Server's `wwwroot/` directory at build time.
 2. Kestrel serves files from `wwwroot/` at the root path. SPA client-side routes (e.g. `/subscriptions/123`) fall back to `index.html` via a `MapFallback` policy.
 3. The App Server's API routes are mounted at `/api/*` (e.g. `/api/subscriptions`, `/api/media-items/:id/jellyfin-state`).
-4. Sidecar's HTTP port is never reachable from outside (ADR 0010). The Sidecar is bound to `127.0.0.1:<random>` or a Unix socket.
+4. Hyper Agent's HTTP port is never reachable from outside (ADR 0010). The Hyper Agent is bound to `127.0.0.1:<random>` or a Unix socket.
 5. The single exposed port is configured via `appsettings.json`'s `Web:ListenPort` (default `8090`).
 
 For users who want TLS termination, an external Nginx / Caddy / Cloudflare Tunnel is acceptable. The App Server does not ship TLS itself (consistent with most self-hosted apps).

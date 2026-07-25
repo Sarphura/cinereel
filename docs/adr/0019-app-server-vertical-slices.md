@@ -2,7 +2,7 @@
 
 **Status: superseded by ADR 0020.** This ADR describes the high-level folder shape; ADR 0020 layers DDD patterns on top.
 
-The C# Application Server is organised by business feature (`subscription/`, `metadata/`, `bt/`, `jellyfin/`, `search/`, `profile/`, `publish/`, `accounts/`, `rbac/`, `sidecar/`, `health/`). Each feature owns its service, HTTP endpoints, and DTOs. Cross-cutting concerns (EF Core DbContext, settings, logging, clock) live in `data/` and `infrastructure/` shared directories. HTTP endpoints are Minimal API style (`MapPost` / `MapGet`) registered in each feature's `*Endpoints.cs` file.
+The C# Application Server is organised by business feature (`subscription/`, `metadata/`, `bt/`, `jellyfin/`, `search/`, `profile/`, `publish/`, `accounts/`, `rbac/`, `hyper-agent/`, `health/`). Each feature owns its service, HTTP endpoints, and DTOs. Cross-cutting concerns (EF Core DbContext, settings, logging, clock) live in `data/` and `infrastructure/` shared directories. HTTP endpoints are Minimal API style (`MapPost` / `MapGet`) registered in each feature's `*Endpoints.cs` file.
 
 ## Context
 
@@ -29,7 +29,7 @@ src/
     publish/                      ← drive creation, Auto-Pack
     accounts/                     ← auth, sessions
     rbac/                         ← permission enum + attribute
-    sidecar/                      ← OpenAPI client + process lifecycle
+    hyper-agent/                      ← OpenAPI client + process lifecycle
     health/                       ← aggregator
   data/
     CinereelDbContext.cs

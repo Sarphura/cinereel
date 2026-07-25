@@ -13,8 +13,8 @@ After the Q25 decision to put the application domain in C# (ADR 0002), the quest
 - `apps/service/` becomes the C# Application Server.
 - Upgrade from .NET 6 to .NET 10 LTS.
 - Delete `WeatherForecast.cs`.
-- Rewrite `Program.cs` to host the real composition root: SQLite via EF Core, MonoTorrent `ClientEngine`, Hyper Sidecar OpenAPI client, Jellyfin push scheduler.
-- `appsettings.json` becomes the source of truth for: `Sidecar:BaseUrl`, `Sidecar:TokenPath`, `Jellyfin:LibraryRoot`, `Jellyfin:BaseUrl`, `Jellyfin:ApiKey`, `Bt:ListenPort`, `Bt:DhtPort`, `Database:Path`, `Web:StaticRoot`.
+- Rewrite `Program.cs` to host the real composition root: SQLite via EF Core, MonoTorrent `ClientEngine`, Hyper Agent OpenAPI client, Jellyfin push scheduler.
+- `appsettings.json` becomes the source of truth for: `Hyper Agent:BaseUrl`, `Hyper Agent:TokenPath`, `Jellyfin:LibraryRoot`, `Jellyfin:BaseUrl`, `Jellyfin:ApiKey`, `Bt:ListenPort`, `Bt:DhtPort`, `Database:Path`, `Web:StaticRoot`.
 - The project is renamed in spirit but the .csproj filename stays `CineReel.Service.csproj` to keep git history coherent.
 - The legacy NestJS service (whatever fragments still exist outside `apps/service/`) is removed; the Search / Aggregation / Publication / Subscription modules it used to host now live in C#.
 

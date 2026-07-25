@@ -4,7 +4,7 @@ Trailers stored inside a Resource Drive are recognised by the .NET Application S
 
 ## Context
 
-`08-movie-scanning.md` did not specify a trailer naming rule. After the Q15 decision that trailers go over Sidecar HTTP Range (ADR 0005) and the ADR 0007 Jellyfin folder layout, the trailer's location and filename became a missing piece.
+`08-movie-scanning.md` did not specify a trailer naming rule. After the Q15 decision that trailers go over Hyper Agent HTTP Range (ADR 0005) and the ADR 0007 Jellyfin folder layout, the trailer's location and filename became a missing piece.
 
 Two precedents are useful:
 

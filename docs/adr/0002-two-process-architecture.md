@@ -1,6 +1,6 @@
-# Two-process architecture: .NET Application Server + Node Hyper Sidecar
+# Two-process architecture: .NET Application Server + Node Hyper Agent
 
-The Cinereel node is split into two cooperating processes across a stable HTTP boundary. The Node Hyper Sidecar is the only process that touches Hyperdrive, Hyperswarm, Corestore, or `hyper-sdk`. The .NET Application Server owns the application domain — subscription registry, metadata cache, poster wall, search, Jellyfin bridge, and all MonoTorrent orchestration — and calls the Hyper Sidecar over HTTP for every drive operation.
+The Cinereel node is split into two cooperating processes across a stable HTTP boundary. The Node Hyper Agent is the only process that touches Hyperdrive, Hyperswarm, Corestore, or `hyper-sdk`. The .NET Application Server owns the application domain — subscription registry, metadata cache, poster wall, search, Jellyfin bridge, and all MonoTorrent orchestration — and calls the Hyper Agent over HTTP for every drive operation.
 
 ## Context
 
@@ -15,8 +15,8 @@ Earlier design had a single NestJS process covering both Hyper-protocol plumbing
 
 Two-process model.
 
-- **Node Hyper Sidecar** (`apps/sidecar`): wraps `hyper-sdk`. Mounts drives, joins swarms, reads/writes files in drives, exposes drive and swarm operations over HTTP. Owns no application logic. Single boundary enforced by `apps/sidecar/.eslintrc.cjs` `no-restricted-imports`.
-- **.NET Application Server** (new): owns subscription registry, metadata cache, poster wall, search, Jellyfin bridge, and MonoTorrent. Talks to the Hyper Sidecar over HTTP. Talks to Jellyfin over its own API. Hosts MonoTorrent as an embedded client.
+- **Node Hyper Agent** (`apps/sidecar`): wraps `hyper-sdk`. Mounts drives, joins swarms, reads/writes files in drives, exposes drive and swarm operations over HTTP. Owns no application logic. Single boundary enforced by `apps/sidecar/.eslintrc.cjs` `no-restricted-imports`.
+- **.NET Application Server** (new): owns subscription registry, metadata cache, poster wall, search, Jellyfin bridge, and MonoTorrent. Talks to the Hyper Agent over HTTP. Talks to Jellyfin over its own API. Hosts MonoTorrent as an embedded client.
 
 ## Boundaries
 
@@ -26,17 +26,17 @@ The Application Server must NOT:
 - Open a Corestore
 - Run its own Hyperswarm
 
-The Hyper Sidecar must NOT:
+The Hyper Agent must NOT:
 
 - Touch MonoTorrent
 - Talk to Jellyfin
 - Own subscription tables, user state, or metadata caches
 
-The Hyper Sidecar's HTTP API is the contract. It is generated via OpenAPI (NestJS Swagger already emits `/v1/swagger`) and consumed by the Application Server via a generated client.
+The Hyper Agent's HTTP API is the contract. It is generated via OpenAPI (NestJS Swagger already emits `/v1/swagger`) and consumed by the Application Server via a generated client.
 
-## Capabilities routed through the Hyper Sidecar
+## Capabilities routed through the Hyper Agent
 
-Anything that reads or writes drive bytes, opens or closes a drive, or announces/joins a discovery topic goes through the sidecar's HTTP API. At minimum:
+Anything that reads or writes drive bytes, opens or closes a drive, or announces/joins a discovery topic goes through the hyper-agent's HTTP API. At minimum:
 
 - `GET /v1/drives` — list mounted drives
 - `POST /v1/drives` — create a local resource drive
@@ -49,7 +49,7 @@ Anything that reads or writes drive bytes, opens or closes a drive, or announces
 - `GET /v1/swarm/identity` — own peer identity + main drive key
 - `POST /v1/swarm/announce` — trigger an announce on demand
 
-These already exist in `apps/sidecar/src/feature/`. The split does not require new sidecar endpoints yet.
+These already exist in `apps/sidecar/src/feature/`. The split does not require new hyper-agent endpoints yet.
 
 ## Capabilities owned by the .NET Application Server
 
@@ -58,9 +58,9 @@ These already exist in `apps/sidecar/src/feature/`. The split does not require n
 - Jellyfin push (writes NFO / poster files into Jellyfin's library root; registers library path)
 - MonoTorrent session pool (one client per active playback; lifecycle tied to user actions)
 - Cinereel-Peer Seed scheduler (re-seed finished downloads so publishers can go offline)
-- Auto-Pack (given a local video file, generate a `.torrent` and stage descriptor + NFO + poster in a fresh resource drive via the Hyper Sidecar)
+- Auto-Pack (given a local video file, generate a `.torrent` and stage descriptor + NFO + poster in a fresh resource drive via the Hyper Agent)
 - Poster wall UI (the user-facing discovery layer)
 
 ## Trade-off accepted
 
-Two processes, two storage layers, one extra HTTP hop per drive operation. The cost is real but bounded: the Hyper Sidecar is local-only (no remote callers), the OpenAPI contract is small and stable, and the alternative (a single Node process with MonoTorrent-as-a-service, or rewriting MonoTorrent-equivalent in Node) is worse.
+Two processes, two storage layers, one extra HTTP hop per drive operation. The cost is real but bounded: the Hyper Agent is local-only (no remote callers), the OpenAPI contract is small and stable, and the alternative (a single Node process with MonoTorrent-as-a-service, or rewriting MonoTorrent-equivalent in Node) is worse.

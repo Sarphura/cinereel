@@ -50,8 +50,8 @@ public class BootstrapInitializer : IHostedService
     await db.SaveChangesAsync(ct);
 
     // 3. Create Demo drive
-    var demoDrive = await sidecar.CreateLocalDriveAsync("demo");
-    await sidecar.WriteAsync(demoDrive.Uuid, "/descriptor.json",
+    var demoDrive = await hyper-agent.CreateLocalDriveAsync("demo");
+    await hyper-agent.WriteAsync(demoDrive.Uuid, "/descriptor.json",
       Encoding.UTF8.GetBytes(JsonSerializer.Serialize(new {
         name = "Demo",
         type = "metadata",

@@ -4,11 +4,11 @@ The Dockerfile uses a multi-stage build:
 
 - **Stage 1 (node-builder)**: `node:22-alpine` builds `apps/sidecar` (`pnpm install && pnpm build`) and `apps/web` (`pnpm build`) into `apps/web/dist`.
 - **Stage 2 (dotnet-builder)**: `mcr.microsoft.com/dotnet/sdk:10.0-noble` builds `apps/service` (`dotnet publish -c Release -r linux-x64 --self-contained=false`).
-- **Stage 3 (runtime)**: `mcr.microsoft.com/dotnet/aspnet:10.0-noble` with Node 22 installed via the NodeSource setup script. Copy sidecar build artifacts, app server build artifacts, and web dist into the image. Set the entrypoint to the App Server binary.
+- **Stage 3 (runtime)**: `mcr.microsoft.com/dotnet/aspnet:10.0-noble` with Node 22 installed via the NodeSource setup script. Copy hyper-agent build artifacts, app server build artifacts, and web dist into the image. Set the entrypoint to the App Server binary.
 
 ## Context
 
-Cinereel's deployment shape is single-launcher (ADR 0017 + ADR 0022). A single Docker image containing App Server + Sidecar + SPA matches that shape. Three plausible base image choices:
+Cinereel's deployment shape is single-launcher (ADR 0017 + ADR 0022). A single Docker image containing App Server + Hyper Agent + SPA matches that shape. Three plausible base image choices:
 
 - **`mcr.microsoft.com/dotnet/aspnet:10.0-noble` + Node** — Microsoft official, Ubuntu Noble base, regular OS patches. Larger (~600MB) but most predictable.
 - **`node:22-alpine` + manual .NET runtime** — lighter but brittle on musl vs glibc.
@@ -21,7 +21,7 @@ Cinereel's deployment shape is single-launcher (ADR 0017 + ADR 0022). A single D
 ### Dockerfile sketch
 
 ```dockerfile
-# Stage 1: Build sidecar + web
+# Stage 1: Build hyper-agent + web
 FROM node:22-alpine AS node-builder
 WORKDIR /repo
 COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
@@ -31,7 +31,7 @@ RUN corepack enable && pnpm install --frozen-lockfile
 COPY apps/sidecar/ ./apps/sidecar/
 COPY apps/web/ ./apps/web/
 COPY apps/core/ ./apps/core/
-RUN pnpm --filter @cinereel/sidecar build
+RUN pnpm --filter @cinereel/hyper-agent build
 RUN pnpm --filter @cinereel/web build
 
 # Stage 2: Build app server
@@ -50,9 +50,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=node-builder /repo/apps/sidecar/dist ./sidecar/
-COPY --from=node-builder /repo/apps/sidecar/package.json ./sidecar/
-COPY --from=node-builder /repo/apps/sidecar/node_modules ./sidecar/node_modules/
+COPY --from=node-builder /repo/apps/sidecar/dist ./hyper-agent/
+COPY --from=node-builder /repo/apps/sidecar/package.json ./hyper-agent/
+COPY --from=node-builder /repo/apps/sidecar/node_modules ./hyper-agent/node_modules/
 COPY --from=node-builder /repo/apps/web/dist ./wwwroot/
 COPY --from=dotnet-builder /out/app ./
 
@@ -71,14 +71,14 @@ ENTRYPOINT ["dotnet", "CineReel.Service.dll"]
 - Base: `aspnet:10.0-noble` ~ 200MB
 - Node 22: ~ 60MB
 - App Server build: ~ 80MB
-- Sidecar + node_modules: ~ 120MB
+- Hyper Agent + node_modules: ~ 120MB
 - Total: ~ 460MB
 
 Acceptable for a NAS deployment.
 
 ### Single-container rationale
 
-- ADR 0017 mandates that App Server and Sidecar have linked lifecycle.
+- ADR 0017 mandates that App Server and Hyper Agent have linked lifecycle.
 - ADR 0022 mandates that the App Server serves the SPA.
 - Splitting into two containers would force operators to handle orchestration, shared volumes, and process restart policies manually.
 

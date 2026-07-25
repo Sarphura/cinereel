@@ -1,23 +1,23 @@
-# Sidecar HTTP control port is fixed (default 4201, override via env); App Server fails fast on conflict
+# Hyper Agent HTTP control port is fixed (default 4201, override via env); App Server fails fast on conflict
 
-The Hyper Sidecar's HTTP API listens on `127.0.0.1:4201` by default. The .NET Application Server reads `SIDECAR_PORT` (env var, default `4201`) and connects to that port. On startup, the App Server pre-checks that the port is free; if occupied, the App Server exits with a clear error rather than starting a second instance.
+The Hyper Agent's HTTP API listens on `127.0.0.1:4201` by default. The .NET Application Server reads `SIDECAR_PORT` (env var, default `4201`) and connects to that port. On startup, the App Server pre-checks that the port is free; if occupied, the App Server exits with a clear error rather than starting a second instance.
 
 ## Context
 
-After ADR 0010 fixed the Sidecar's HTTP control surface to loopback and ADR 0017 set the Sidecar's lifecycle to "spawned by App Server, fails together", the remaining question is how the App Server discovers the Sidecar's port. Three plausible shapes:
+After ADR 0010 fixed the Hyper Agent's HTTP control surface to loopback and ADR 0017 set the Hyper Agent's lifecycle to "spawned by App Server, fails together", the remaining question is how the App Server discovers the Hyper Agent's port. Three plausible shapes:
 
 - Fixed port (default 4201) with override — simple, debuggable, conflicts must be detected up front.
-- Random port + sidecar.port file — zero-configuration, but adds a coordination layer and prevents easy debugging via curl.
+- Random port + hyper-agent.port file — zero-configuration, but adds a coordination layer and prevents easy debugging via curl.
 - Unix socket — best isolation but Windows requires named-pipe workarounds.
 
 ## Decision
 
 Fixed port. Concretely:
 
-1. The Hyper Sidecar's `main.ts` reads `SIDECAR_PORT` (env, default `4201`) and binds its NestJS HTTP listener to `127.0.0.1:${SIDECAR_PORT}`.
-2. The Application Server's `Program.cs` reads `SIDECAR_PORT` (same env, same default), spawns the Sidecar with the same env var set, and pre-checks the port via `IPGlobalProperties.GetActiveTcpListeners()` (or platform-appropriate call) before spawning.
+1. The Hyper Agent's `main.ts` reads `SIDECAR_PORT` (env, default `4201`) and binds its NestJS HTTP listener to `127.0.0.1:${SIDECAR_PORT}`.
+2. The Application Server's `Program.cs` reads `SIDECAR_PORT` (same env, same default), spawns the Hyper Agent with the same env var set, and pre-checks the port via `IPGlobalProperties.GetActiveTcpListeners()` (or platform-appropriate call) before spawning.
 3. If the port is already in use, the App Server logs `FATAL: port <port> already in use, is another Cinereel instance running?` and exits with code `73` (`EX_CANTCREAT`).
-4. The shared-secret token file (`sidecar.token`, ADR 0010) lives next to the Sidecar's data dir at `<data-dir>/sidecar.token`. Both processes agree on `<data-dir>` via `CINEREEL_DATA_DIR` (env, default `~/.cinereel/`).
+4. The shared-secret token file (`sidecar.token`, ADR 0010) lives next to the Hyper Agent's data dir at `<data-dir>/sidecar.token`. Both processes agree on `<data-dir>` via `CINEREEL_DATA_DIR` (env, default `~/.cinereel/`).
 
 ## Cross-platform note
 

@@ -6,7 +6,7 @@ The .NET Application Server reads `appsettings.json` (and `appsettings.{Environm
 
 ASP.NET Core's `IConfiguration` system supports file-watch-based reload out of the box. The temptation is to enable `reloadOnChange: true` so operators can tweak settings without a restart. Grilling selected "no hot reload" for V1 because:
 
-- The settings in question (Sidecar port, Jellyfin library root, MonoTorrent ports, database path) are typically set once at install time and never changed.
+- The settings in question (Hyper Agent port, Jellyfin library root, MonoTorrent ports, database path) are typically set once at install time and never changed.
 - Hot reload of complex structures (e.g. `BandwidthPolicy`) requires careful design — what's safe to change, what requires re-initialisation.
 - Restart is cheap (<5 seconds for the App Server) and is the most predictable path.
 

@@ -1,6 +1,6 @@
 # If Hyperdrive hole-punching fails, Cinereel fails the subscription loudly; no BT-tracker fallback in V1
 
-When a subscriber mounts a publisher's resource drive and the hyper-sdk cannot establish peer connectivity (NAT traversal fails, both nodes are behind symmetric NATs, etc.), the Sidecar's `mountRemoteDrive` call times out or returns a peer-discovery error. The Application Server treats this as a hard failure:
+When a subscriber mounts a publisher's resource drive and the hyper-sdk cannot establish peer connectivity (NAT traversal fails, both nodes are behind symmetric NATs, etc.), the Hyper Agent's `mountRemoteDrive` call times out or returns a peer-discovery error. The Application Server treats this as a hard failure:
 
 - The subscription transitions to `Failed`.
 - The web UI displays "could not connect to publisher".

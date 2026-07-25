@@ -2,14 +2,14 @@
 
 V1 has two layers of tests:
 
-1. **Unit tests** (xUnit, .NET side) and **Vitest** (Node sidecar side). Unit tests use `InMemorySubscriptionRepository`, `InMemoryMediaItemRepository`, mock `ISidecarClient`, mock `IBtEngine`, and a fake `IClock`. No real DB, no real Hyperdrive, no real BT client.
-2. **One integration smoke test** per release: spins up the .NET App Server + the Node Sidecar in the same container, creates a local drive, writes a known NFO + .torrent + poster, then verifies that the App Server's `media_items` table has the parsed entry, the Jellyfin library root has the expected folder layout, and BT state reflects `pending`.
+1. **Unit tests** (xUnit, .NET side) and **Vitest** (Node hyper-agent side). Unit tests use `InMemorySubscriptionRepository`, `InMemoryMediaItemRepository`, mock `ISidecarClient`, mock `IBtEngine`, and a fake `IClock`. No real DB, no real Hyperdrive, no real BT client.
+2. **One integration smoke test** per release: spins up the .NET App Server + the Node Hyper Agent in the same container, creates a local drive, writes a known NFO + .torrent + poster, then verifies that the App Server's `media_items` table has the parsed entry, the Jellyfin library root has the expected folder layout, and BT state reflects `pending`.
 
 The smoke test runs in CI (ADR 0018) and on every merge to `main`. It is shallow by design — it covers the happy path only.
 
 ## Context
 
-After Q35 selection and ADR 0020's introduction of Repository interfaces and Domain Events, unit testing becomes tractable. The Application Server's services no longer depend on DbContext or Hyper-Sidecar RPC directly — they depend on repository interfaces and event handlers. This is the test pyramid's middle layer.
+After Q35 selection and ADR 0020's introduction of Repository interfaces and Domain Events, unit testing becomes tractable. The Application Server's services no longer depend on DbContext or Hyper-Hyper Agent RPC directly — they depend on repository interfaces and event handlers. This is the test pyramid's middle layer.
 
 ## Decision
 
@@ -23,21 +23,21 @@ After Q35 selection and ADR 0020's introduction of Repository interfaces and Dom
 - Use `[Theory]` + `[InlineData]` for table-driven tests.
 - Use `InMemory*Repository` for state. Mock `ISidecarClient`, `IBtEngine`, `IClock` with Moq or NSubstitute.
 
-### Unit tests (Vitest, Node Sidecar)
+### Unit tests (Vitest, Node Hyper Agent)
 
 - `apps/sidecar/test/` — already in place per the existing project shape.
-- Sidecar unit tests cover `FileService`, `DriveService`, `SwarmService` with mocked Hyperdrive interfaces.
+- Hyper Agent unit tests cover `FileService`, `DriveService`, `SwarmService` with mocked Hyperdrive interfaces.
 - HTTP Range parsing has its own dedicated test file with table-driven Range header inputs.
 
 ### Integration smoke test
 
 - `tests/Cinereel.IntegrationTests/SmokeTests.cs`.
 - The smoke test:
-  1. Boots the Sidecar as a child process pointing at a temp data dir.
+  1. Boots the Hyper Agent as a child process pointing at a temp data dir.
   2. Polls `/health` for readiness.
-  3. Boots the App Server with the Sidecar's loopback URL.
+  3. Boots the App Server with the Hyper Agent's loopback URL.
   4. Creates a resource drive via the App Server's publish API.
-  5. Writes `descriptor.json`, `poster.jpg`, `movie.nfo`, `movie.torrent` via the Sidecar.
+  5. Writes `descriptor.json`, `poster.jpg`, `movie.nfo`, `movie.torrent` via the Hyper Agent.
   6. Subscribes to the resource drive from a second App Server process (same binary, different data dir).
   7. Asserts the subscriber's `media_items` table has 1 row.
   8. Asserts the Jellyfin staging directory contains `Movies/Inception (2010) {imdb-tt1375666}/` with the expected files.

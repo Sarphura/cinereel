@@ -4,10 +4,10 @@ The Cinereel repository's CI is a single `.github/workflows/ci.yml` workflow tha
 
 1. Sets up Node 22 and .NET 10.
 2. Installs pnpm dependencies.
-3. Builds the Sidecar (`pnpm --filter @cinereel/sidecar build`).
+3. Builds the Hyper Agent (`pnpm --filter @cinereel/hyper-agent build`).
 4. Builds the web UI (`pnpm --filter ui build`).
 5. Builds the App Server (`dotnet build apps/service`).
-6. Runs the Sidecar tests (`pnpm --filter @cinereel/sidecar test`).
+6. Runs the Hyper Agent tests (`pnpm --filter @cinereel/hyper-agent test`).
 7. Runs the web UI tests (`pnpm --filter ui test`).
 8. Runs the App Server tests (`dotnet test apps/service`).
 9. Runs the openapi-typescript codegen and checks the generated file into the commit (or fails the build on diff).
@@ -21,7 +21,7 @@ V1 is a single repository with three apps. The question is how many CI workflows
 
 - **Monolithic workflow** — one file, one job matrix. Easy to read.
 - **Multi-pipeline** — separate `ci.yml`, `release.yml`, `nightly.yml`. Each focused.
-- **Per-app workflows** — `sidecar.yml`, `service.yml`, `ui.yml`. Most parallel but most duplication.
+- **Per-app workflows** — `hyper-agent.yml`, `service.yml`, `ui.yml`. Most parallel but most duplication.
 
 ## Decision
 
@@ -57,8 +57,8 @@ jobs:
         with: { dotnet-version: '10.0.x' }
       - run: pnpm install --frozen-lockfile
 
-      - name: Build sidecar
-        run: pnpm --filter @cinereel/sidecar build
+      - name: Build hyper-agent
+        run: pnpm --filter @cinereel/hyper-agent build
 
       - name: Build web
         run: pnpm --filter ui build
@@ -66,8 +66,8 @@ jobs:
       - name: Build service
         run: dotnet build apps/service/CineReel.Service.csproj -c Release
 
-      - name: Test sidecar
-        run: pnpm --filter @cinereel/sidecar test
+      - name: Test hyper-agent
+        run: pnpm --filter @cinereel/hyper-agent test
 
       - name: Test web
         run: pnpm --filter ui test
@@ -103,7 +103,7 @@ ADR 0042 mandates build-time codegen. CI verifies that the committed generated f
 
 ### What's NOT in V1
 
-- Per-app workflows (Sidecar can be built without App Server; web can be built without Sidecar). Single workflow builds everything.
+- Per-app workflows (Hyper Agent can be built without App Server; web can be built without Hyper Agent). Single workflow builds everything.
 - Nightly fuzz or long-running integration tests.
 - Coverage thresholds — coverage is reported but not enforced.
 - Dependabot / Renovate — operators update dependencies manually.

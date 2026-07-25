@@ -17,7 +17,7 @@ Resource Drives are reference-metadata-only. A Media Item folder is identified b
 
 - `scanMovieFolder` rule simplifies to: a folder is a Media Item iff it contains a `.torrent` file. Older rules ("folder containing video files is a movie") are dropped.
 - `Descriptor` does not need a `contentKind` field — every well-formed Resource Drive is reference-only by convention. Misuse (publishers dumping raw video into a drive) is silently tolerated; subscribers will never read those bytes because the Application Server only reads `.torrent` files.
-- Sidecar's `GET /v1/drives/:key/file?path=...` becomes the primary way the Application Server retrieves `.torrent` bytes for MonoTorrent. No HTTP Range streaming of video bytes is needed — the sidecar's job ends at delivering the torrent file.
+- Hyper Agent's `GET /v1/drives/:key/file?path=...` becomes the primary way the Application Server retrieves `.torrent` bytes for MonoTorrent. No HTTP Range streaming of video bytes is needed — the hyper-agent's job ends at delivering the torrent file.
 
 ## Publishing flow
 
@@ -26,16 +26,16 @@ When a publisher adds a Media Item:
 1. The Application Server receives a local video file path (or an existing `.torrent`).
 2. If a local video file is given, the Application Server invokes MonoTorrent's torrent-creation API and a Cinereel-Peer Seed is started for the resulting `.torrent`.
 3. The Application Server stages an NFO + poster + trailer for the item.
-4. The Application Server calls the Hyper Sidecar to create a new resource drive and write `/descriptor.json`, the NFO, the poster, the trailer, and the `.torrent` file into it.
-5. The Hyper Sidecar announces the new drive.
+4. The Application Server calls the Hyper Agent to create a new resource drive and write `/descriptor.json`, the NFO, the poster, the trailer, and the `.torrent` file into it.
+5. The Hyper Agent announces the new drive.
 
 ## Subscribing flow
 
 When a subscriber mounts a Resource Drive:
 
-1. The Hyper Sidecar mounts the remote drive and announces / joins the discovery topic.
-2. The Application Server reads `/descriptor.json` via the sidecar and walks the drive tree, parsing NFO + collecting poster / trailer / `.torrent` references.
-3. For each Media Item, the Application Server pulls the `.torrent` bytes through the sidecar and registers it in its metadata cache.
+1. The Hyper Agent mounts the remote drive and announces / joins the discovery topic.
+2. The Application Server reads `/descriptor.json` via the hyper-agent and walks the drive tree, parsing NFO + collecting poster / trailer / `.torrent` references.
+3. For each Media Item, the Application Server pulls the `.torrent` bytes through the hyper-agent and registers it in its metadata cache.
 4. The Application Server pushes NFO + poster + the resolved video file path (via MonoTorrent's local staging) into Jellyfin's library.
 5. When the user opens an item in Jellyfin, MonoTorrent streams the BT payload into the staging path Jellyfin is watching.
 

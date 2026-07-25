@@ -1,13 +1,13 @@
-# V1 Sidecar exposes only request/response endpoints; no SSE, WebSocket, or other long-lived connections
+# V1 Hyper Agent exposes only request/response endpoints; no SSE, WebSocket, or other long-lived connections
 
-The Hyper Sidecar's HTTP surface is exclusively request/response. Every endpoint returns its result synchronously (or fails fast). There is no Server-Sent Events, WebSocket, or other long-lived connection in V1.
+The Hyper Agent's HTTP surface is exclusively request/response. Every endpoint returns its result synchronously (or fails fast). There is no Server-Sent Events, WebSocket, or other long-lived connection in V1.
 
 ## Context
 
-After ADR 0017 made Sidecar fail-fast on errors, the question is whether Sidecar needs to maintain long-lived connections to push state to the App Server (e.g. BT progress, drive replication events, subscription scans). Three plausible shapes:
+After ADR 0017 made Hyper Agent fail-fast on errors, the question is whether Hyper Agent needs to maintain long-lived connections to push state to the App Server (e.g. BT progress, drive replication events, subscription scans). Three plausible shapes:
 
-- **No long-lived** — App Server polls Sidecar on a schedule (5s for progress, on-demand for scans).
-- **SSE for BT progress** — Sidecar pushes progress events as they change.
+- **No long-lived** — App Server polls Hyper Agent on a schedule (5s for progress, on-demand for scans).
+- **SSE for BT progress** — Hyper Agent pushes progress events as they change.
 - **WebSocket for everything** — bidirectional; opens more advanced orchestration possibilities.
 
 ## Decision
@@ -16,7 +16,7 @@ No long-lived connections. Concretely:
 
 ### BT progress
 
-`GET /v1/bt/torrents` returns the current state of every `TorrentManager` (paused, downloading, seeding, error). App Server polls this every 5 seconds when any torrent is active. The Sidecar doesn't push.
+`GET /v1/bt/torrents` returns the current state of every `TorrentManager` (paused, downloading, seeding, error). App Server polls this every 5 seconds when any torrent is active. The Hyper Agent doesn't push.
 
 ### Drive scans
 
@@ -24,7 +24,7 @@ App Server calls `GET /v1/drives/{key}` and `GET /v1/drives/{key}/tree` on deman
 
 ### DHT / replication events
 
-Sidecar logs Hyperdrive events (`core.on('peer-add')`, etc.) for diagnostics but does not expose them via HTTP. App Server doesn't need real-time replication visibility.
+Hyper Agent logs Hyperdrive events (`core.on('peer-add')`, etc.) for diagnostics but does not expose them via HTTP. App Server doesn't need real-time replication visibility.
 
 ### Why no SSE
 
@@ -35,7 +35,7 @@ Sidecar logs Hyperdrive events (`core.on('peer-add')`, etc.) for diagnostics but
 
 ### Why no WebSocket
 
-- WebSocket is bidirectional; we have nothing to push *to* the Sidecar.
+- WebSocket is bidirectional; we have nothing to push *to* the Hyper Agent.
 - WebSocket state must be tracked; one more thing to test.
 
 ### What's NOT in V1

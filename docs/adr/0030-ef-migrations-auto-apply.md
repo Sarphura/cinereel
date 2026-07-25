@@ -1,6 +1,6 @@
 # EF Core migrations are auto-applied at App Server startup
 
-The .NET Application Server runs `dbContext.Database.MigrateAsync()` during startup, after the Sidecar readiness check passes but before the App Server begins serving HTTP. Pending migrations are applied in order. A migration failure aborts startup with a clear error.
+The .NET Application Server runs `dbContext.Database.MigrateAsync()` during startup, after the Hyper Agent readiness check passes but before the App Server begins serving HTTP. Pending migrations are applied in order. A migration failure aborts startup with a clear error.
 
 ## Context
 
@@ -17,7 +17,7 @@ EF Core Migrations, auto-apply on startup.
 ### Sequence
 
 1. App Server starts.
-2. App Server spawns Sidecar (ADR 0017) and waits for `/health`.
+2. App Server spawns Hyper Agent (ADR 0017) and waits for `/health`.
 3. App Server calls `await dbContext.Database.MigrateAsync(ct)`.
 4. EF Core reads the `__EFMigrationsHistory` table; pending migrations are applied in order.
 5. App Server begins serving HTTP.

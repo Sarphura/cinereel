@@ -24,8 +24,8 @@ Allow self-subscribe.
 
 - No additional check at subscription time.
 - The `subscriptions` row stores `drive_key` like any other subscription.
-- The Sidecar's `mountRemoteDrive` call works the same way — it uses `sdk.getDrive(driveKey)` regardless of origin.
-- The Sidecar's `DriveRegistry.isRemote` returns `true` for the locally-published drive (it's mounted by hex key, not by local namespace), which makes sense semantically — even from the same node, the publisher's view and the subscriber's view can differ if mounted by key.
+- The Hyper Agent's `mountRemoteDrive` call works the same way — it uses `sdk.getDrive(driveKey)` regardless of origin.
+- The Hyper Agent's `DriveRegistry.isRemote` returns `true` for the locally-published drive (it's mounted by hex key, not by local namespace), which makes sense semantically — even from the same node, the publisher's view and the subscriber's view can differ if mounted by key.
 
 ### UI hint
 

@@ -1,6 +1,6 @@
 # CI runs in a single Docker container on Ubuntu for V1
 
-V1 CI runs in a single Ubuntu Docker container with both the Node Hyper Sidecar and the .NET Application Server installed. Tests execute in this single environment. Cross-platform behavior is verified manually before each release.
+V1 CI runs in a single Ubuntu Docker container with both the Node Hyper Agent and the .NET Application Server installed. Tests execute in this single environment. Cross-platform behavior is verified manually before each release.
 
 ## Context
 
@@ -12,12 +12,12 @@ CI runs on GitHub Actions using `ubuntu-latest` runners. Inside each runner:
 
 - A pre-built Docker image with Node 22 + .NET 10 SDK is used as the build/test environment.
 - `pnpm install --frozen-lockfile` runs against `apps/sidecar` and `apps/web`.
-- `pnpm test` runs Sidecar unit tests (Vitest).
-- `pnpm run lint` runs ESLint + tsc --noEmit on Sidecar.
+- `pnpm test` runs Hyper Agent unit tests (Vitest).
+- `pnpm run lint` runs ESLint + tsc --noEmit on Hyper Agent.
 - `dotnet restore && dotnet test` runs Application Server unit tests (xUnit).
 - `dotnet build` builds the App Server in Release configuration.
 - `pnpm --filter @cinereel/web build` builds the SPA into `apps/web/dist`.
-- A smoke integration test launches both processes in the same container and verifies that the App Server can call the Sidecar over loopback HTTP, retrieve a Drive descriptor, and shut both processes down cleanly.
+- A smoke integration test launches both processes in the same container and verifies that the App Server can call the Hyper Agent over loopback HTTP, retrieve a Drive descriptor, and shut both processes down cleanly.
 
 ## What's NOT in CI
 
@@ -36,4 +36,4 @@ These are run manually before each release on a representative set of physical m
 
 ## Migration path
 
-When cross-platform CI becomes necessary (e.g. when a paying customer reports a Windows-only bug), move to a matrix-based CI. The Sidecar and App Server are both portable; the change is incremental.
+When cross-platform CI becomes necessary (e.g. when a paying customer reports a Windows-only bug), move to a matrix-based CI. The Hyper Agent and App Server are both portable; the change is incremental.

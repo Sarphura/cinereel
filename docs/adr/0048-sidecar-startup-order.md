@@ -1,6 +1,6 @@
-# Sidecar startup: load core modules → mount drives → bind HTTP, in that order
+# Hyper Agent startup: load core modules → mount drives → bind HTTP, in that order
 
-The Hyper Sidecar's startup sequence:
+The Hyper Agent's startup sequence:
 
 1. `main.ts` runs `NestFactory.create(AppModule)`. NestJS wires modules and providers but does not yet bind the HTTP listener.
 2. `CoreConfigModule` validates environment variables.
@@ -15,7 +15,7 @@ The Hyper Sidecar's startup sequence:
 
 ## Context
 
-The Sidecar's startup needs to be deterministic and observable. The App Server polls `/health` and only proceeds when that returns 200, so the Sidecar must signal readiness at the right moment.
+The Hyper Agent's startup needs to be deterministic and observable. The App Server polls `/health` and only proceeds when that returns 200, so the Hyper Agent must signal readiness at the right moment.
 
 Two plausible shapes:
 
@@ -55,7 +55,7 @@ async function bootstrap() {
 }
 
 bootstrap().catch(err => {
-  console.error('sidecar bootstrap failed:', err)
+  console.error('hyper-agent bootstrap failed:', err)
   process.exit(1)
 })
 ```
@@ -65,4 +65,4 @@ Nest's `app.init()` blocks until all `onModuleInit` hooks complete. Only then do
 ## Trade-off accepted
 
 - Total startup is slower (~3-5 seconds) than a "bind immediately, mount lazily" shape.
-- A failure during drive remount means the whole Sidecar exits, even if some drives mounted successfully. Acceptable for V1's small drive counts.
+- A failure during drive remount means the whole Hyper Agent exits, even if some drives mounted successfully. Acceptable for V1's small drive counts.

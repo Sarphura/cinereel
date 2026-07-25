@@ -1,6 +1,6 @@
 # HTTP Range handler lives in NestJS controller, delegating to FileService
 
-The Sidecar's `GET /v1/files/:driveKey/*` endpoint is implemented as a standard NestJS controller method (`DrivesController.getFile`). The controller:
+The Hyper Agent's `GET /v1/files/:driveKey/*` endpoint is implemented as a standard NestJS controller method (`DrivesController.getFile`). The controller:
 
 1. Resolves the drive via `FileService.readStream` (NestJS-injectable, returns a `Readable`).
 2. Computes `Range` header parsing (or sets up a passthrough if no `Range` is supplied), via a small `@fastify/range` or hand-rolled parser.
@@ -8,9 +8,9 @@ The Sidecar's `GET /v1/files/:driveKey/*` endpoint is implemented as a standard 
 
 ## Context
 
-After ADR 0005 + 0006 fixed that Sidecar exposes trailer via HTTP Range, the question became where to put the handler. Three plausible shapes:
+After ADR 0005 + 0006 fixed that Hyper Agent exposes trailer via HTTP Range, the question became where to put the handler. Three plausible shapes:
 
-- **NestJS controller** — same as every other HTTP route on the Sidecar. Routes through DI, zod validation, and Nest's exception filters.
+- **NestJS controller** — same as every other HTTP route on the Hyper Agent. Routes through DI, zod validation, and Nest's exception filters.
 - **Raw Fastify handler** — bypass Nest for one route to gain Fastify's native stream abstractions and skip the Nest per-request overhead. Loses DI.
 - **Hybrid** — controller method just delegates to a service that does the streaming via a `@Res()` injection.
 

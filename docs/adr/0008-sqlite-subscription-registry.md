@@ -1,6 +1,6 @@
 # Subscription registry and metadata cache live in SQLite (EF Core) under .NET Application Server
 
-The .NET Application Server persists subscription state, parsed Media Item metadata, BT session state, and Jellyfin staging state in a single SQLite database accessed via EF Core. The Hyper Sidecar has no concept of subscription state — that is purely an Application Server concern.
+The .NET Application Server persists subscription state, parsed Media Item metadata, BT session state, and Jellyfin staging state in a single SQLite database accessed via EF Core. The Hyper Agent has no concept of subscription state — that is purely an Application Server concern.
 
 ## Context
 
@@ -73,7 +73,7 @@ CREATE INDEX idx_subscriptions_state       ON subscriptions(state);
 
 ## Why this shape
 
-- Subscription is user intent and survives drive unavailability → table is `subscriptions`, not driven by Hyper sidecar state.
+- Subscription is user intent and survives drive unavailability → table is `subscriptions`, not driven by Hyper Agent state.
 - Media Item is per-subscription, not global. Two subscribers to the same drive each get their own `media_items` rows. Items are NOT merged across subscriptions — each subscription tracks its own BT session and Jellyfin staging.
 - IMDb ID is the only cross-subscription identity. Indexed, but not unique — duplicates allowed.
 - Jellyfin staging path is stored so the Application Server can detect drift between Hyperdrive-derived metadata and what's on disk.
@@ -81,4 +81,4 @@ CREATE INDEX idx_subscriptions_state       ON subscriptions(state);
 ## Trade-off accepted
 
 - No cross-subscription de-duplication of torrent downloads. If two subscriptions reference the same IMDb ID, each subscription has its own BT session and its own staging copy. The cost is disk space; the benefit is independent lifecycle (one subscription can be removed without affecting the other).
-- SQLite is single-node. If we ever need a multi-node backend, this table set will need migration. That's acceptable because the Application Server is already single-node by design (paired with one Hyper Sidecar).
+- SQLite is single-node. If we ever need a multi-node backend, this table set will need migration. That's acceptable because the Application Server is already single-node by design (paired with one Hyper Agent).

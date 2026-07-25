@@ -9,7 +9,7 @@ A grilling question asked whether to introduce a two-tier event model (Domain Ev
 - Domain Events are part of a unit-of-work (a single transaction commits the aggregate change and raises the event).
 - Integration Events must be persisted to an outbox before the transaction commits so that they survive crashes and are redeliverable.
 
-V1 is a single-process, single-host application. The Application Server and the Hyper Sidecar share lifecycle (ADR 0017), and SQLite persists all subscriptions. There is no scenario in V1 where an event must cross a process boundary or survive a crash in a way that the in-process bus cannot handle.
+V1 is a single-process, single-host application. The Application Server and the Hyper Agent share lifecycle (ADR 0017), and SQLite persists all subscriptions. There is no scenario in V1 where an event must cross a process boundary or survive a crash in a way that the in-process bus cannot handle.
 
 ## Decision
 

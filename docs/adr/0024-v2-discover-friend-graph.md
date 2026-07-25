@@ -22,7 +22,7 @@ V2 picks **friend graph**. Concretely:
 4. Optional: a 2-hop walk where A → B → C's collections are visible but visually distinct (e.g. dimmed).
 5. Friend-adding is itself a manual action: paste a friend's `profileKey`.
 
-This mechanism reuses existing Profile Drive structures (ADR 0014) and Hyper Sidecar RPC paths. No new infrastructure.
+This mechanism reuses existing Profile Drive structures (ADR 0014) and Hyper Agent RPC paths. No new infrastructure.
 
 ## Why not central index
 

@@ -1,6 +1,6 @@
 # Remote drives are read-only mirrors; local drives are writable; the boundary is enforced in FileService
 
-The Hyper Sidecar distinguishes drives by *mount origin*, not by *current user role*:
+The Hyper Agent distinguishes drives by *mount origin*, not by *current user role*:
 
 - **Local drives** — opened via `sdk.getDrive(uuid)` where `uuid` is a string namespace under this Corestore's control. The publisher (Cinereel App Server on this node) has full read/write/delete authority.
 - **Remote drives** — opened via `sdk.getDrive(driveKey)` where `driveKey` is the 64-hex public key of another node's drive. The local node has only read authority via DHT replication.

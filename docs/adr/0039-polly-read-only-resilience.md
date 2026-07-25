@@ -1,6 +1,6 @@
-# Polly resilience pipeline is applied to read-only Sidecar calls only; write calls fail fast
+# Polly resilience pipeline is applied to read-only Hyper Agent calls only; write calls fail fast
 
-The .NET Application Server wraps Sidecar read calls (`GetHealth`, `ListDrives`, `GetEntry`, `GetTree`, `ReadFile`) with a Polly pipeline:
+The .NET Application Server wraps Hyper Agent read calls (`GetHealth`, `ListDrives`, `GetEntry`, `GetTree`, `ReadFile`) with a Polly pipeline:
 
 - **Per-request timeout**: 30 seconds.
 - **Retry on transient failure**: 3 attempts with exponential backoff (200ms / 1s / 5s).
@@ -46,10 +46,10 @@ var pipeline = new ResiliencePipelineBuilder()
 
 `ISidecarClient` interface is split into two:
 
-- `ISidecarReadClient` — `GetHealthAsync`, `ListDrivesAsync`, `GetEntryAsync`, `GetTreeAsync`, `ReadFileAsync`. Wrapped by `ResilientSidecarReadClient` which applies the pipeline.
-- `ISidecarWriteClient` — `MountRemoteDriveAsync`, `CreateDriveAsync`, `WriteFileAsync`, `DeleteFileAsync`. Wrapped by `DirectSidecarWriteClient` which is a thin pass-through.
+- `IHyper AgentReadClient` — `GetHealthAsync`, `ListDrivesAsync`, `GetEntryAsync`, `GetTreeAsync`, `ReadFileAsync`. Wrapped by `ResilientHyper AgentReadClient` which applies the pipeline.
+- `IHyper AgentWriteClient` — `MountRemoteDriveAsync`, `CreateDriveAsync`, `WriteFileAsync`, `DeleteFileAsync`. Wrapped by `DirectHyper AgentWriteClient` which is a thin pass-through.
 
-`HealthCheck` (Q56) uses the read client. The SidecarVersionCheck (ADR 0033) uses the read client with a 5-second timeout.
+`HealthCheck` (Q56) uses the read client. The Hyper AgentVersionCheck (ADR 0033) uses the read client with a 5-second timeout.
 
 ### What failures does Polly handle?
 
@@ -65,9 +65,9 @@ Polly's retry handles the call-level transient failure (network blip). ADR 0027'
 
 ### What's NOT in V1
 
-- Hedging (parallel requests to multiple Sidecar replicas) — V1 has one Sidecar.
-- Rate limiting — Sidecar is loopback, no rate limit needed.
-- Fallback policies — no alternate Sidecar to fall back to.
+- Hedging (parallel requests to multiple Hyper Agent replicas) — V1 has one Hyper Agent.
+- Rate limiting — Hyper Agent is loopback, no rate limit needed.
+- Fallback policies — no alternate Hyper Agent to fall back to.
 
 ## Trade-off accepted
 

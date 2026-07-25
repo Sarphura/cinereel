@@ -1,14 +1,14 @@
-# Sidecar splits responsibilities: Repository interfaces own SDK access; DriveRegistry owns mount bookkeeping
+# Hyper Agent splits responsibilities: Repository interfaces own SDK access; DriveRegistry owns mount bookkeeping
 
-The Hyper Sidecar's NestJS container wires three distinct concerns around the `hyper-sdk`:
+The Hyper Agent's NestJS container wires three distinct concerns around the `hyper-sdk`:
 
 - **`DriveRepository`** (`src/repositories/drive.repository.ts`) — opens / closes Hyperdrive instances via `sdk.getDrive()`. Two implementations: `HyperdriveRepository` (real) and `InMemoryDriveRepository` (tests).
-- **`DriveIndexRepository`** (`src/repositories/drive-index.repository.ts`) — persists a UUID → driveKey index to disk so drives survive Sidecar restarts. `FileSystemDriveIndexRepository` (real), `InMemoryDriveIndexRepository` (tests).
+- **`DriveIndexRepository`** (`src/repositories/drive-index.repository.ts`) — persists a UUID → driveKey index to disk so drives survive Hyper Agent restarts. `FileSystemDriveIndexRepository` (real), `InMemoryDriveIndexRepository` (tests).
 - **`DriveRegistry`** (`src/bootstrap/drive-registry.ts`) — in-memory application state tracking which drives are currently mounted (local / remote), keyed by both UUID and hex `driveKey`. Not a repository: this is process state.
 
 ## Context
 
-Sidecar work with Hyperdrives involves three kinds of knowledge:
+Hyper Agent work with Hyperdrives involves three kinds of knowledge:
 
 1. How to ask the SDK to open a drive (`sdk.getDrive(uuid)`).
 2. Where to remember which UUIDs exist (so drives are remounted on restart).
