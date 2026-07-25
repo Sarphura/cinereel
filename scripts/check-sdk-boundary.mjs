@@ -19,7 +19,7 @@ import { fileURLToPath } from 'node:url'
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const HERE = join(__dirname, '..')
 
-const ALLOWED_PACKAGES = ['apps/sidecar', 'apps/hyper-agent']
+const ALLOWED_PACKAGES = ['apps/hyper-agent']
 const SRC_DIRS = ALLOWED_PACKAGES.flatMap((p) => {
   const src = join(HERE, p, 'src')
   const test = join(HERE, p, 'test')

@@ -4,13 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "concurrently -n sidecar,bootstrap,ui,service \"pnpm run dev:sidecar\" \"pnpm run dev:bootstrap\" \"pnpm run dev:ui\" \"pnpm run dev:service\"",
-    "dev:peer": "concurrently \"pnpm run dev:ui:peer\" \"pnpm run dev:service:peer\" \"pnpm run dev:sidecar:peer\"",
-
-    "dev:sidecar": "pnpm --filter @cinereel/sidecar dev",
-    "dev:sidecar:build": "pnpm --filter @cinereel/sidecar build && pnpm --filter @cinereel/sidecar start",
-    "dev:sidecar:peer": "pnpm --filter @cinereel/sidecar dev:peer",
-    "dev:sidecar:peer:build": "pnpm --filter @cinereel/sidecar build && pnpm --filter @cinereel/sidecar dev:peer",
+    "dev": "concurrently -n hyper-agent,bootstrap,ui,service \"pnpm run dev:hyper-agent\" \"pnpm run dev:bootstrap\" \"pnpm run dev:ui\" \"pnpm run dev:service\"",
+    "dev:peer": "concurrently \"pnpm run dev:ui:peer\" \"pnpm run dev:service:peer\" \"pnpm run dev:hyper-agent:peer\"",
 
     "dev:hyper-agent": "pnpm --filter @cinereel/hyper-agent dev",
     "dev:hyper-agent:build": "pnpm --filter @cinereel/hyper-agent build && pnpm --filter @cinereel/hyper-agent start",
@@ -19,8 +14,8 @@
 
     "build:start": "pnpm run build && pnpm run start",
     "test": "pnpm run test:service",
-    
-    "dev:bootstrap": "pnpm --filter @cinereel/sidecar dev:bootstrap",
+
+    "dev:bootstrap": "pnpm --filter @cinereel/hyper-agent dev:bootstrap",
     "dev:ui": "pnpm --filter ui dev",
     "dev:service": "pnpm --filter @cinereel/service dev",
     "dev:ui:peer": "pnpm --filter ui dev:peer",
