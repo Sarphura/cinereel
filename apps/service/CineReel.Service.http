@@ -1,6 +1,0 @@
-@CineReel.Service_HostAddress = http://localhost:5237
-
-GET {{CineReel.Service_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###

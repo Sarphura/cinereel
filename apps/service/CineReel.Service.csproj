@@ -4,10 +4,33 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>CineReel.Service</RootNamespace>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
   <ItemGroup>
+    <!--
+      Microsoft.AspNetCore.OpenApi 10.x is the .NET 10 built-in OpenAPI
+      implementation. It replaces Swashbuckle for ASP.NET Core 10 hosts.
+
+      ADR 0034 was written assuming Swashbuckle + ASP.NET Core 9. On .NET 10
+      Microsoft.AspNetCore.OpenApi is stable and emits the same OpenAPI 3.x
+      JSON. A follow-up ADR (see ADR 0064) supersedes 0034's choice of
+      Swashbuckle on .NET 10 hosts. The wire format and the route
+      `/api/openapi/v1.json` are unchanged.
+    -->
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.5" />
+  </ItemGroup>
+
+  <!--
+    Keep tests out of the Web SDK's recursive Compile glob.
+    The test project under `tests/` references this project, but its source
+    files must not be compiled into the App Server DLL.
+  -->
+  <ItemGroup>
+    <Compile Remove="tests/**/*.cs" />
+    <None Remove="tests/**" />
+    <EmbeddedResource Remove="tests/**" />
   </ItemGroup>
 
 </Project>
