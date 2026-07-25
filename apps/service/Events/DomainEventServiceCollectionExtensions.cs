@@ -8,7 +8,13 @@ public static class DomainEventServiceCollectionExtensions
     public static IServiceCollection AddDomainEvents(this IServiceCollection services, IEnumerable<Assembly> assemblies)
     {
         services.AddSingleton<InProcessDomainEventBus>();
-        services.AddSingleton<IDomainEventBus>(provider => provider.GetRequiredService<InProcessDomainEventBus>());
+        services.AddSingleton<IRetryDelay, SystemRetryDelay>();
+        services.AddSingleton<IDomainEventBus>(provider =>
+            new RetryingDomainEventBus(
+                provider.GetRequiredService<InProcessDomainEventBus>(),
+                provider.GetRequiredService<IEntityFailureMarker>(),
+                provider.GetRequiredService<IRetryDelay>(),
+                provider.GetRequiredService<ILogger<RetryingDomainEventBus>>()));
 
         foreach (var implementation in assemblies.SelectMany(static assembly => assembly.DefinedTypes)
                      .Where(static type => !type.IsAbstract && !type.IsInterface))
