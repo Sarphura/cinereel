@@ -5,9 +5,10 @@ using CineReel.Service.Features.Bt;
 using CineReel.Service.Features.Health;
 using CineReel.Service.Features.Jellyfin;
 using CineReel.Service.Features.Metadata;
-using CineReel.Service.Features.Metadata.Events;
 using CineReel.Service.Features.Subscription;
+using CineReel.Service.Features.Metadata.Events;
 using CineReel.Service.Features.Subscription.Events;
+using CineReel.Service.Features.Trailers;
 using CineReel.Service.Features.Version;
 using CineReel.Service.Infrastructure.HyperAgent;
 using CineReel.Service.Infrastructure.Lifecycle;
@@ -149,6 +150,12 @@ builder.Services.AddSingleton<BandwidthPolicy>();
 builder.Services.AddSingleton<IDiskPressureProbe>(sp => new LibraryRootDiskPressureProbe("./"));
 builder.Services.AddHostedService<DiskPressureMonitor>();
 
+// Trailer cache (ticket 27). 1 GB LRU with HTTP-trailer stream-through.
+builder.Services.AddSingleton(new TrailerCacheOptions());
+builder.Services.TryAddSingleton<ITrailerFileSystem, LocalTrailerFileSystem>();
+builder.Services.AddSingleton<ITrailerCache, TrailerCache>();
+builder.Services.AddHostedService<TrailerCacheMaintainer>();
+
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 
@@ -205,6 +212,9 @@ app.MapJellyfinEndpoints();
 
 // BT pause/resume endpoints (ticket 25).
 app.MapBtEndpoints();
+
+// Trailer cache endpoints (ticket 27).
+app.MapTrailerEndpoints();
 
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();
