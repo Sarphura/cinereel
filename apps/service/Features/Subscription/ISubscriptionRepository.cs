@@ -11,5 +11,6 @@ public interface ISubscriptionRepository
     Task<IReadOnlyList<SubscriptionEntity>> ListActiveAsync(CancellationToken cancellationToken = default);
     Task<SubscriptionEntity> AddAsync(SubscriptionEntity subscription, CancellationToken cancellationToken = default);
     Task MarkRemountedAsync(DriveKey driveKey, DateTimeOffset at, CancellationToken cancellationToken = default);
+    Task MarkDescriptorSeenAsync(SubscriptionId id, DateTimeOffset at, CancellationToken cancellationToken = default);
     Task RemoveAsync(SubscriptionId id, CancellationToken cancellationToken = default);
 }

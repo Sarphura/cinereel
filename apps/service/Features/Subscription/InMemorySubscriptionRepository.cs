@@ -30,6 +30,12 @@ public sealed class InMemorySubscriptionRepository : ISubscriptionRepository
         if (item is not null) item.LastRemountedAt = at;
         return Task.CompletedTask;
     }
+    public Task MarkDescriptorSeenAsync(SubscriptionId id, DateTimeOffset at, CancellationToken cancellationToken = default)
+    {
+        var item = _items.GetValueOrDefault(id.Value);
+        if (item is not null) item.LastDescriptorSeenAt = at;
+        return Task.CompletedTask;
+    }
     public Task RemoveAsync(SubscriptionId id, CancellationToken cancellationToken = default)
     {
         _items.Remove(id.Value);

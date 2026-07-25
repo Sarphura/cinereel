@@ -1,6 +1,9 @@
 using CineReel.Service.Events;
 using CineReel.Service.Features.Health;
+using CineReel.Service.Features.Metadata;
+using CineReel.Service.Features.Metadata.Events;
 using CineReel.Service.Features.Subscription;
+using CineReel.Service.Features.Subscription.Events;
 using CineReel.Service.Features.Version;
 using CineReel.Service.Infrastructure.HyperAgent;
 using CineReel.Service.Infrastructure.Lifecycle;
@@ -8,6 +11,7 @@ using CineReel.Service.Infrastructure.OpenApi;
 using CineReel.Service.Infrastructure.Settings;
 using CineReel.Service.Infrastructure.Web;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 
@@ -103,6 +107,17 @@ builder.Services.AddCinereelHealth();
 // Subscription feature (ticket 18). The default registration binds to the
 // in-memory repository; production should swap in the EF-backed repository.
 builder.Services.AddCinereelSubscriptions();
+
+// Metadata scanning (ticket 22). The scanner consumes the IMediaItemRepository
+// from ticket 05 and the IMDB resolver from ticket 21.
+builder.Services.AddSingleton<INfoParser, XDocumentNfoParser>();
+builder.Services.AddSingleton<TmdbClient>(sp => new TmdbClient(new HttpClient(), apiKey: null));
+builder.Services.AddSingleton<IIMDBResolver, IMDbResolver>();
+builder.Services.AddSingleton<IMediaItemRepository>(sp => sp.GetRequiredService<InMemoryMediaItemRepository>());
+builder.Services.TryAddSingleton<InMemoryMediaItemRepository>();
+builder.Services.AddSingleton<IMetadataScanner, MetadataScanner>();
+builder.Services.AddTransient<IDomainEventHandler<SubscriptionCreated>, SubscriptionScanningOrchestrator>();
+builder.Services.AddTransient<IDomainEventHandler<SubscriptionDescriptorChanged>, SubscriptionScanningOrchestrator>();
 
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
