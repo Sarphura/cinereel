@@ -1,6 +1,7 @@
 using CineReel.Service.Events;
 using CineReel.Service.Features.Accounts;
 using CineReel.Service.Features.Bootstrap;
+using CineReel.Service.Features.Bt;
 using CineReel.Service.Features.Health;
 using CineReel.Service.Features.Jellyfin;
 using CineReel.Service.Features.Metadata;
@@ -133,6 +134,16 @@ builder.Services.TryAddSingleton<IAccountRepository>(sp => sp.GetRequiredService
 builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
 builder.Services.AddHostedService<BootstrapInitializer>();
 
+// BT scheduler (ticket 25). Wires MediaItemAdded + SubscriptionDeleted
+// into the engine lifecycle. Per-Media-Item pause/resume is exposed via
+// REST in BtEndpoints.
+builder.Services.AddSingleton(new CinereelBtOptions());
+builder.Services.TryAddSingleton<IBtEngine, NoopBtEngine>();
+builder.Services.TryAddSingleton<ITorrentFileRepository, InMemoryTorrentFileRepository>();
+builder.Services.AddSingleton<IBtScheduler, BtScheduler>();
+builder.Services.AddTransient<IDomainEventHandler<MediaItemAdded>, BtScheduler>();
+builder.Services.AddTransient<IDomainEventHandler<SubscriptionDeleted>, BtScheduler>();
+
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 
@@ -186,6 +197,9 @@ app.MapSubscriptionEndpoints();
 
 // Jellyfin push/clean endpoints (ticket 23).
 app.MapJellyfinEndpoints();
+
+// BT pause/resume endpoints (ticket 25).
+app.MapBtEndpoints();
 
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();
