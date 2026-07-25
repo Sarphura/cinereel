@@ -64,7 +64,7 @@ public sealed class MetadataScanner : IMetadataScanner
         {
             descriptor = await _reader.ReadFileAsync(driveKey, "/descriptor.json", cancellationToken: cancellationToken);
         }
-        catch (HyperAgentException ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogWarning(ex, "[scan] descriptor read failed for {DriveKey}", driveKey);
             return;

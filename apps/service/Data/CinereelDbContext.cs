@@ -12,6 +12,7 @@ public sealed class CinereelDbContext(DbContextOptions<CinereelDbContext> option
     public DbSet<AccountEntity> Accounts => Set<AccountEntity>();
     public DbSet<SessionEntity> Sessions => Set<SessionEntity>();
     public DbSet<PermissionEntity> Permissions => Set<PermissionEntity>();
+    public DbSet<EntityFailureEntity> FailureEntries => Set<EntityFailureEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -111,5 +112,16 @@ public sealed class CinereelDbContext(DbContextOptions<CinereelDbContext> option
         permissions.Property(x => x.AccountId).HasColumnName("account_id");
         permissions.Property(x => x.Pattern).HasColumnName("pattern").IsRequired();
         permissions.HasIndex(x => new { x.AccountId, x.Pattern }).IsUnique();
+
+        var failures = modelBuilder.Entity<EntityFailureEntity>();
+        failures.ToTable("entity_failures");
+        failures.HasKey(x => x.Id);
+        failures.Property(x => x.Id).HasColumnName("id");
+        failures.Property(x => x.EntityType).HasColumnName("entity_type").IsRequired();
+        failures.Property(x => x.EntityId).HasColumnName("entity_id").IsRequired();
+        failures.Property(x => x.EventType).HasColumnName("event_type").IsRequired();
+        failures.Property(x => x.Cause).HasColumnName("cause").IsRequired();
+        failures.Property(x => x.LastAttemptedAt).HasColumnName("last_attempted_at").IsRequired();
+        failures.HasIndex(x => new { x.EntityType, x.EntityId }).IsUnique();
     }
 }

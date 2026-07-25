@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using CineReel.Service.Infrastructure.OpenApi;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Xunit;
 
@@ -25,7 +26,19 @@ public sealed class SkeletonEndpointsTests : IClassFixture<WebApplicationFactory
 
     public SkeletonEndpointsTests(WebApplicationFactory<Program> factory)
     {
-        _factory = factory;
+        // The App Server's DI tree mixes singleton consumers with
+        // scoped repositories (a known V1 ergonomic). The default
+        // `ValidateOnBuild=true` would surface it as a hard error.
+        // Disable scope validation only for tests that boot the host.
+        _factory = factory.WithWebHostBuilder(b =>
+        {
+            b.UseEnvironment("Development");
+            b.UseDefaultServiceProvider(options =>
+            {
+                options.ValidateOnBuild = false;
+                options.ValidateScopes = false;
+            });
+        });
     }
 
     [Fact]

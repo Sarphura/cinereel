@@ -200,6 +200,29 @@ namespace CineReel.Service.Data.Migrations
                 table: "subscriptions",
                 column: "drive_key",
                 unique: true);
+
+            migrationBuilder.CreateTable(
+                name: "entity_failures",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "INTEGER", nullable: false)
+                        .Annotation("Sqlite:Autoincrement", true),
+                    entity_type = table.Column<string>(type: "TEXT", nullable: false),
+                    entity_id = table.Column<int>(type: "INTEGER", nullable: false),
+                    event_type = table.Column<string>(type: "TEXT", nullable: false),
+                    cause = table.Column<string>(type: "TEXT", nullable: false),
+                    last_attempted_at = table.Column<DateTimeOffset>(type: "TEXT", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_entity_failures", x => x.id);
+                });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_entity_failures_entity_type_entity_id",
+                table: "entity_failures",
+                columns: new[] { "entity_type", "entity_id" },
+                unique: true);
         }
 
         /// <inheritdoc />
@@ -222,6 +245,9 @@ namespace CineReel.Service.Data.Migrations
 
             migrationBuilder.DropTable(
                 name: "subscriptions");
+
+            migrationBuilder.DropTable(
+                name: "entity_failures");
         }
     }
 }

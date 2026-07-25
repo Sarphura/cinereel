@@ -375,6 +375,44 @@ namespace CineReel.Service.Data.Migrations
                 {
                     b.Navigation("MediaItems");
                 });
+
+            modelBuilder.Entity("CineReel.Service.Data.Entities.EntityFailureEntity", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Cause")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("cause");
+
+                    b.Property<int>("EntityId")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("EventType")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("event_type");
+
+                    b.Property<DateTimeOffset>("LastAttemptedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("last_attempted_at");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("entity_failures", (string)null);
+
+                    b.HasIndex(new[] { "EntityType", "EntityId" }, "IX_entity_failures_entity_type_entity_id")
+                        .IsUnique();
+                });
 #pragma warning restore 612, 618
         }
     }

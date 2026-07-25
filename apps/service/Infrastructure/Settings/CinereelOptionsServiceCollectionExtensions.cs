@@ -59,6 +59,10 @@ public static class CinereelOptionsServiceCollectionExtensions
         var listenHost = configuration["Web:ListenHost"] ?? configuration["Web__ListenHost"];
         if (!string.IsNullOrEmpty(listenHost)) options.Web.ListenHost = listenHost;
         if (int.TryParse(configuration["Web__ListenPort"] ?? configuration["Web:ListenPort"], out var port)) options.Web.ListenPort = port;
+        var staticRoot = configuration["Web:StaticRoot"] ?? configuration["Web__StaticRoot"];
+        if (!string.IsNullOrEmpty(staticRoot)) options.Web.StaticRoot = staticRoot;
+        var spaIndex = configuration["Web:SpaIndex"] ?? configuration["Web__SpaIndex"];
+        if (!string.IsNullOrEmpty(spaIndex)) options.Web.SpaIndex = spaIndex;
         var baseUrl = configuration["HyperAgent:BaseUrl"] ?? configuration["HyperAgent__BaseUrl"];
         if (!string.IsNullOrEmpty(baseUrl)) options.HyperAgent.BaseUrl = baseUrl;
         var tokenFile = configuration["HyperAgent:TokenFile"] ?? configuration["HyperAgent__TokenFile"];

@@ -1,3 +1,4 @@
+using CineReel.Service.Data;
 using CineReel.Service.Events;
 using CineReel.Service.Features.Accounts;
 using CineReel.Service.Features.Bootstrap;
@@ -7,6 +8,7 @@ using CineReel.Service.Features.Jellyfin;
 using CineReel.Service.Features.Metadata;
 using CineReel.Service.Features.Profile;
 using CineReel.Service.Features.Publish;
+using CineReel.Service.Features.Recovery;
 using CineReel.Service.Features.Subscription;
 using CineReel.Service.Features.Metadata.Events;
 using CineReel.Service.Features.Subscription.Events;
@@ -18,6 +20,7 @@ using CineReel.Service.Infrastructure.OpenApi;
 using CineReel.Service.Infrastructure.Settings;
 using CineReel.Service.Infrastructure.Web;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
@@ -185,6 +188,15 @@ builder.Services.AddSingleton<IIdentityService, MainDriveKeyIdentityService>();
 builder.Services.AddSingleton<IPublishService, PublishService>();
 
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
+// The failure journal + marker (ticket 32) are EF-backed, so they must be
+// registered before AddDomainEvents — the retrying bus resolves them at
+// activation time.
+var databasePath = builder.Configuration["Database:Path"] ?? "cinereel.db";
+builder.Services.AddDbContextFactory<CinereelDbContext>(options =>
+    options.UseSqlite($"Data Source={databasePath}"));
+builder.Services.AddCinereelRepositories();
+builder.Services.AddScoped<IEntityFailureJournal, EfEntityFailureJournal>();
+builder.Services.AddScoped<IEntityFailureMarker, EfEntityFailureMarker>();
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 
 // Shutdown chain (ADR 0055, ticket 16) — stages drain HTTP, close DB,

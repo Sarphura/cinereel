@@ -16,9 +16,18 @@ public sealed class OpenApiDocumentTests : IClassFixture<WebApplicationFactory<P
 
     public OpenApiDocumentTests(WebApplicationFactory<Program> factory)
     {
+        // The App Server's DI tree mixes singleton consumers with
+        // scoped repositories (a known V1 ergonomic). The default
+        // `ValidateOnBuild=true` would surface it as a hard error.
+        // Disable scope validation only for tests that boot the host.
         _factory = factory.WithWebHostBuilder(b =>
         {
             b.UseEnvironment("Development");
+            b.UseDefaultServiceProvider(options =>
+            {
+                options.ValidateOnBuild = false;
+                options.ValidateScopes = false;
+            });
         });
     }
 
