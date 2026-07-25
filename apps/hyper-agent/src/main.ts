@@ -1,5 +1,39 @@
 /**
- * Sidecar entry point — NestJS bootstrap on Express adapter.
+ * Hyper Agent entry point — NestJS bootstrap on Express adapter.
+ *
+ * ── Startup contract (ADR 0017, ADR 0048, ADR 0055) ─────────────────────
+ * The Application Server spawns this process and waits for `/healthz` to
+ * return 200 before it proceeds with its own listener bind. The sequence
+ * in `main()` is the contract; reordering any of these steps changes the
+ * readiness signal the App Server sees.
+ *
+ *   1. Bootstrap (pre-Nest: load config + keys).
+ *        Failure: throws synchronously and exits via the catch in
+ *        `main().catch(...)` below — Node exits 1 (the constants for
+ *        explicit failure modes live in infrastructure/exit-codes.ts and
+ *        are wired in by ticket 16).
+ *   2. Nest app construction (`NestFactory.create`).
+ *        Failure: NestFactory.create logs and throws; we exit 1.
+ *   3. CORS + body parsers (express.json + express.raw).
+ *        Failure: would only happen if Express itself failed to register;
+ *        treated as 1.
+ *   4. Global filter (HttpExceptionFilter).
+ *        Failure: would only happen if a constructor threw; treated as 1.
+ *   5. OpenAPI document builder (SwaggerModule.createDocument).
+ *        Failure: ditto.
+ *   6. `app.listen({ host: '127.0.0.1', port: SIDECAR_PORT })`.
+ *        Failure: EADDRINUSE → 73 (`EXIT_PORT_IN_USE`); other listen
+ *        errors → 1. This is the **readiness signal** the App Server
+ *        polls: it waits for `GET /healthz` to return 200, which only
+ *        becomes possible after this step succeeds AND step 4 of the
+ *        BootstrapService comment below completes.
+ *   7. SIGTERM/SIGINT handlers → graceful `app.close()` then exit 0.
+ *
+ * Read also:
+ *   - `infrastructure/exit-codes.ts` for the full numeric exit-code table
+ *     and the Application Server's spawn-watch action per code.
+ *   - `apps/service/Infrastructure/HyperAgent/HyperAgentSpawnConfig.cs`
+ *     for the spawn contract on the App Server side.
  *
  * Wires:
  *   - CORS via app.enableCors()

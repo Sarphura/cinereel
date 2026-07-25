@@ -5,6 +5,31 @@
  * (load index → mount main → remount persisted drives → seed keyToUuid
  * → initial announce) is satisfied by `BootstrapService.onModuleInit`,
  * which runs after Nest has wired all providers.
+ *
+ * ── onModuleInit sequence (ADR 0048, ADR 0050) ─────────────────────
+ *   1. `this.index.load()` — read drive-index.json from disk.
+ *        Failure mode: corrupt index → caught here, exits with
+ *        `EXIT_DRIVE_INDEX_CORRUPT` (79). Missing file is fine; treated
+ *        as "no persisted drives yet" and only `main` is mounted.
+ *   2. Mount the main drive under the fixed `MAIN_NAMESPACE` ('main').
+ *        Failure mode: SDK / Hyperdrive error → exits with
+ *        `EXIT_MAIN_DRIVE_MOUNT_FAILED` (80). The registry MUST have
+ *        this anchor before any non-main drive is opened.
+ *   3. Remount every persisted non-main drive (best-effort per drive).
+ *        A failing remount logs a warning and is skipped — the surviving
+ *        drives still come up. A drive that fails to remount in this
+ *        pass is dropped from the in-memory registry and stays absent
+ *        from `drive-index.json` until the operator intervenes.
+ *   4. Seed `DriveService.keyToUuid` from the recovered registry so
+ *        `remove(driveKey)` works for every drive remounted above.
+ *   5. Best-effort initial `swarmService.announce(true)` — joins the
+ *        main drive's discovery topic and awaits `discovery.flushed()`.
+ *        A slow DHT does NOT block readiness; failures are logged but
+ *        do not change the `/healthz` answer.
+ *
+ * `/healthz` returns 200 only after step 5 has either succeeded or
+ * logged a warning. The Application Server's startup sequence polls
+ * `/healthz` to learn when the Hyper Agent is ready to serve.
  */
 import {
   Global,

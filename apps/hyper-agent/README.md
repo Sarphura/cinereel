@@ -111,7 +111,7 @@ curl -H "X-Sidecar-Token: $SIDECAR_TOKEN" http://127.0.0.1:4321/v1/identity
 ## Testing
 
 ```bash
-pnpm --filter @cinereel/sidecar test
+pnpm --filter @cinereel/hyper-agent test
 ```
 
 The smoke test starts an in-process server on a random port and hits 5 core
@@ -120,8 +120,44 @@ endpoints (`/healthz`, `/v1/identity`, `/v1/drives` + auth negative cases).
 ## Production build
 
 ```bash
-pnpm --filter @cinereel/sidecar build && node --enable-source-maps dist/index.js
+pnpm --filter @cinereel/hyper-agent build && node --enable-source-maps dist/main.js
 ```
+
+## Startup contract
+
+The Hyper Agent is spawned by the Application Server (`apps/service`)
+and signals readiness via `GET /healthz`. The full startup sequence
+lives in `src/main.ts` and `src/bootstrap/bootstrap.module.ts`; this
+section is the operator / contributor-facing summary.
+
+The Application Server's startup loop:
+
+1. Spawns this process with `node` and the configured entry.
+2. Polls `GET /healthz` on `127.0.0.1:<SIDECAR_PORT>` until it returns 200.
+3. Reads `GET /v1/version` (added in ticket 10) and refuses to proceed
+   if the returned version does not match its expected version
+   (ADR 0033).
+
+What `/healthz` means: it returns 200 only after the Hyper Agent's
+`BootstrapService.onModuleInit` has completed its five steps in order:
+
+1. Load `drive-index.json` (exit 79 if corrupt).
+2. Mount the main Hyperdrive under the fixed `main` namespace
+   (exit 80 if this fails).
+3. Remount every persisted non-main drive (best-effort; failures
+   log a warning and are skipped).
+4. Seed the reverse `keyToUuid` map so `remove(driveKey)` works for
+   every drive remounted above.
+5. Best-effort `swarmService.announce(true)` — failures here log a
+   warning but do NOT block `/healthz`.
+
+A SIGTERM or SIGINT triggers `app.close()`, which closes every mounted
+Hyperdrive and exits 0 within the App Server's SIGKILL grace period
+(ADR 0055).
+
+The full exit-code table is in `src/infrastructure/exit-codes.ts`;
+every documented code maps to a specific App Server fatal-error
+action (ticket 16).
 
 ## C# callsite example
 
