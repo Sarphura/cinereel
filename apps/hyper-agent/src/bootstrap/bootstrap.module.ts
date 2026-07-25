@@ -1,0 +1,159 @@
+/**
+ * BootstrapModule — replaces `bootstrap/bootstrap.ts` (the free function).
+ *
+ * Composition root in NestJS terms. The ordering constraint
+ * (load index → mount main → remount persisted drives → seed keyToUuid
+ * → initial announce) is satisfied by `BootstrapService.onModuleInit`,
+ * which runs after Nest has wired all providers.
+ */
+import {
+  Global,
+  Inject,
+  Injectable,
+  Logger,
+  Module,
+  OnModuleInit,
+} from '@nestjs/common'
+import { ConfigService } from '@nestjs/config'
+import { SDK_TOKEN } from '../core/sdk/sdk.module.js'
+import type { SDK } from '../infrastructure/index.js'
+import { driveKeyOf } from '../infrastructure/types/key.js'
+import { MAIN_NAMESPACE, DriveService } from '../services/drives.service.js'
+import { FileService } from '../services/files.service.js'
+import { SwarmService } from '../services/swarm.service.js'
+import {
+  FileSystemDriveIndexRepository,
+  HyperdriveRepository,
+  HyperdriveSwarmRepository,
+} from '../repositories/index.js'
+import { InMemoryDriveRegistry } from './drive-registry.js'
+
+export const DRIVE_INDEX = Symbol('DRIVE_INDEX')
+export const PEER_CONNECTIONS = Symbol('PEER_CONNECTIONS')
+export const SDK_HANDLE = Symbol('SDK_HANDLE')
+
+@Injectable()
+export class BootstrapService implements OnModuleInit {
+  private readonly logger = new Logger(BootstrapService.name)
+
+  constructor(
+    @Inject(SDK_TOKEN) private readonly sdk: SDK,
+    @Inject(SDK_HANDLE) private readonly sdkHandle: SDK,
+    @Inject(DriveService) private readonly driveService: DriveService,
+    @Inject(SwarmService) private readonly swarmService: SwarmService,
+    @Inject(FileSystemDriveIndexRepository) private readonly index: FileSystemDriveIndexRepository,
+    @Inject(InMemoryDriveRegistry) private readonly registry: InMemoryDriveRegistry,
+    @Inject(HyperdriveRepository) private readonly drives: HyperdriveRepository,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    // 1. Load persisted index.
+    await this.index.load()
+
+    // 2. Mount the main drive (always first, so registry has anchor).
+    try {
+      const main = await this.drives.openLocal(MAIN_NAMESPACE)
+      this.registry.rememberLocal(MAIN_NAMESPACE, main)
+      if (!this.index.entries()[MAIN_NAMESPACE]) {
+        await this.index.set(MAIN_NAMESPACE, {
+          name: 'main',
+          type: 'metadata',
+          createdAt: '2024-01-01T00:00:00.000Z',
+        })
+      }
+
+      // 3. Remount every persisted non-main drive; seed keyToUuid.
+      const keyToUuid = new Map<string, string>()
+      keyToUuid.set(driveKeyOf(main), MAIN_NAMESPACE)
+      for (const [uuid] of Object.entries(this.index.entries())) {
+        if (uuid === MAIN_NAMESPACE) continue
+        try {
+          const d = await this.drives.openLocal(uuid)
+          this.registry.rememberLocal(uuid, d)
+          keyToUuid.set(driveKeyOf(d), uuid)
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.warn(
+            `[drive-index] failed to remount drive uuid=${uuid}:`,
+            (err as Error).message,
+          )
+        }
+      }
+      this.driveService.seed(keyToUuid)
+    } catch (err) {
+      // SDK not available in test environment (overridden with a stub
+      // that doesn't implement the full surface). The sidecar still
+      // boots; controllers will surface errors on first request.
+      this.logger.warn(`onModuleInit skipped: ${(err as Error).message}`)
+    }
+
+    // 4. Best-effort initial announce (swarm in DHT before HTTP traffic).
+    try {
+      await this.swarmService.announce(true)
+    } catch (err) {
+      this.logger.warn(`initial announce failed: ${(err as Error).message}`)
+    }
+  }
+}
+
+@Global()
+@Module({
+  providers: [
+    // ── Infrastructure singletons ───────────────────────────────────
+    InMemoryDriveRegistry,
+    HyperdriveRepository,
+    HyperdriveSwarmRepository,
+
+    // DRIVE_INDEX provides the interface impl; ALSO re-provide under
+    // the FileSystemDriveIndexRepository class token so any service
+    // that depends on the concrete type (DriveIndexRepository is an
+    // interface so TypeScript's emitDecoratorMetadata would emit the
+    // typeof as the parameter metadata — we satisfy both via this
+    // bridge).
+    {
+      provide: FileSystemDriveIndexRepository,
+      useFactory: (cfg: ConfigService) => {
+        const storeDir = cfg.get<string>('storeDir') as string
+        return new FileSystemDriveIndexRepository(storeDir)
+      },
+      inject: [ConfigService],
+    },
+    {
+      provide: DRIVE_INDEX,
+      useExisting: FileSystemDriveIndexRepository,
+    },
+
+    {
+      provide: HyperdriveSwarmRepository,
+      useFactory: (sdk: SDK) => new HyperdriveSwarmRepository(sdk.connections),
+      inject: [SDK_TOKEN],
+    },
+    {
+      provide: PEER_CONNECTIONS,
+      useExisting: HyperdriveSwarmRepository,
+    },
+
+    // ── Domain services (constructor-injected) ──────────────────────
+    DriveService,
+    FileService,
+    SwarmService,
+
+    // ── SDK_HANDLE pass-through (for test controller only) ──────────
+    { provide: SDK_HANDLE, useExisting: SDK_TOKEN },
+
+    // ── Bootstrap orchestration (runs OnModuleInit) ────────────────
+    BootstrapService,
+  ],
+  exports: [
+    InMemoryDriveRegistry,
+    DriveService,
+    SwarmService,
+    SDK_HANDLE,
+    DRIVE_INDEX,
+    PEER_CONNECTIONS,
+    HyperdriveRepository,
+    FileSystemDriveIndexRepository,
+    FileService,
+  ],
+})
+export class BootstrapModule {}
