@@ -22,6 +22,7 @@ import { BootstrapModule } from './bootstrap/bootstrap.module.js'
 import { HealthModule } from './feature/health/module.js'
 import { VersionModule } from './feature/version/module.js'
 import { DrivesModule } from './feature/drives/module.js'
+import { FilesModule } from './feature/files/module.js'
 import { SwarmModule } from './feature/swarm/module.js'
 import type { SharedTokenPort } from './infrastructure/security/security.tokens.js'
 
@@ -47,6 +48,7 @@ export class AppModule {
         HealthModule,
         VersionModule,
         DrivesModule,
+        FilesModule,
         SwarmModule,
       ],
     }

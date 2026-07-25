@@ -331,6 +331,62 @@
         ]
       }
     },
+    "/v1/files/{driveKey}/{path}": {
+      "get": {
+        "operationId": "readFileRange",
+        "parameters": [
+          {
+            "name": "driveKey",
+            "required": true,
+            "in": "path",
+            "description": "Hex64 drive key",
+            "schema": {}
+          }
+        ],
+        "responses": {
+          "200": {
+            "headers": {
+              "Accept-Ranges": {
+                "schema": {
+                  "type": "string",
+                  "example": "bytes"
+                }
+              },
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "example": "public, max-age=31536000, immutable"
+                }
+              },
+              "Content-Range": {
+                "schema": {
+                  "type": "string",
+                  "example": "bytes 0-499/1000"
+                }
+              }
+            },
+            "description": "",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "summary": "",
+        "tags": [
+          "files"
+        ]
+      }
+    },
     "/v1/swarm/announce": {
       "post": {
         "operationId": "swarmAnnounce",
