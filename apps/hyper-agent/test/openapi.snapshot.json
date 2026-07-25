@@ -22,6 +22,40 @@
         ]
       }
     },
+    "/v1/version": {
+      "get": {
+        "operationId": "getVersion",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "version"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "summary": "",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
     "/v1/drives": {
       "get": {
         "operationId": "listDrives",
