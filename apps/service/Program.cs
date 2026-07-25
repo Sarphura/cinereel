@@ -44,6 +44,16 @@ if (!string.IsNullOrWhiteSpace(hyperAgentOptions.ExpectedVersion)
             .CreateLogger<HyperAgentVersionProbe>();
         return new HyperAgentVersionProbe(http, hyperAgentOptions.ExpectedVersion, logger);
     });
+    builder.Services.AddTransient<HyperAgentClient>(sp =>
+    {
+        var http = sp.GetRequiredService<IHttpClientFactory>()
+            .CreateClient(HyperAgentHttpClient.Name);
+        var logger = sp.GetRequiredService<ILoggerFactory>()
+            .CreateLogger<HyperAgentClient>();
+        return new HyperAgentClient(http, logger);
+    });
+    builder.Services.AddTransient<IHyperAgentClient>(sp =>
+        sp.GetRequiredService<HyperAgentClient>());
 }
 
 // ── Health checks (ADR 0040) ─────────────────────────────────────────────────
