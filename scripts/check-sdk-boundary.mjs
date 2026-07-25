@@ -1,80 +1,149 @@
 #!/usr/bin/env node
 /**
- * check-sdk-boundary.mjs — replaces the old bash `scripts/check-sdk-boundary.sh`.
+ * check-sdk-boundary.mjs — guardrail that enforces the Hyper SDK
+ * boundary from ADR 0002 across the entire repository.
  *
- * Walks every TypeScript source under the apps/* packages and enforces:
- *   1. No business file imports `hypercore` / `hyperdrive` / `hyperswarm` /
- *      `corestore` directly. Always go through `hyper-sdk`.
- *   2. Only `src/infrastructure/sdk/index.ts` of an allowlisted package may
- *      `import 'hyper-sdk'`. The allowlist (see `ALLOWED_PACKAGES`) carries
- *      both `apps/sidecar` and `apps/hyper-agent` during the rename
- *      transition; ticket 03 will shrink the list to `apps/hyper-agent`.
+ * Rules:
+ *   1. No file under `apps/`, `packages/`, or `libs/` may import
+ *      `hyper-sdk`, `hypercore`, `hyperdrive`, `hyperswarm`, or
+ *      `corestore` directly unless it lives under
+ *      `apps/hyper-agent/src/infrastructure/sdk/`.
+ *   2. `apps/hyper-agent/src/infrastructure/sdk/index.ts` is the
+ *      **only** file that may `import 'hyper-sdk'`. Everything else
+ *      inside `apps/hyper-agent` must reach the SDK through that
+ *      re-export module.
  *
- * Exits non-zero on the first violation (CI-friendly).
+ * The script exits non-zero on a violation (CI fails). The error
+ * message points at the offending file and references ADR 0002 so
+ * newcomers can fix the violation without archaeology.
+ *
+ * Run as `pnpm check:sdk-boundary` (wired in the root package.json).
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { extname, join, relative, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url))
 const HERE = join(__dirname, '..')
 
-const ALLOWED_PACKAGES = ['apps/hyper-agent']
-const SRC_DIRS = ALLOWED_PACKAGES.flatMap((p) => {
-  const src = join(HERE, p, 'src')
-  const test = join(HERE, p, 'test')
-  return [existsSync(src) ? src : null, existsSync(test) ? test : null].filter(Boolean)
-})
-
-const FORBIDDEN_PKGS = ['hypercore', 'hyperdrive', 'hyperswarm', 'corestore']
-const ALLOWED_HYPER_SDK_PATH = ALLOWED_PACKAGES.map((p) =>
-  join(p, 'src/infrastructure/sdk/index.ts'),
+// ── allowlist ────────────────────────────────────────────────────
+const ALLOWED_PACKAGE = 'apps/hyper-agent'
+const ALLOWED_SDK_FILE = join(
+  ALLOWED_PACKAGE,
+  'src',
+  'infrastructure',
+  'sdk',
+  'index.ts',
 )
 
-const IMPORT_RE = /(?:from\s+['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\))/
+const ROOT_DIRS = ['apps', 'packages', 'libs']
+const IGNORE_DIRS = new Set([
+  'node_modules',
+  'dist',
+  'build',
+  '.git',
+  'bin',
+  'obj',
+  'coverage',
+  '.next',
+  '.turbo',
+])
+
+const FORBIDDEN_PKGS = ['hypercore', 'hyperdrive', 'hyperswarm', 'corestore']
+const EXTS = new Set(['.ts', '.mts', '.cts', '.js', '.mjs', '.cjs', '.tsx', '.jsx'])
+
+const IMPORT_RE =
+  /(?:from\s+['"]([^'"]+)['"]|import\s*\(\s*['"]([^'"]+)['"]\s*\)|require\s*\(\s*['"]([^'"]+)['"]\s*\))/
+
+// ── walk ─────────────────────────────────────────────────────────
 
 function* walk(dir) {
-  for (const entry of readdirSync(dir)) {
+  let entries
+  try {
+    entries = readdirSync(dir)
+  } catch {
+    return
+  }
+  for (const entry of entries) {
+    if (IGNORE_DIRS.has(entry)) continue
     const full = join(dir, entry)
-    const st = statSync(full)
+    let st
+    try {
+      st = statSync(full)
+    } catch {
+      continue
+    }
     if (st.isDirectory()) {
       yield* walk(full)
-    } else if (entry.endsWith('.ts') || entry.endsWith('.mts') || entry.endsWith('.cts')) {
+    } else if (EXTS.has(extname(entry))) {
       yield full
     }
   }
 }
 
-let violations = 0
-for (const dir of SRC_DIRS) {
-  for (const file of walk(dir)) {
-    const rel = relative(HERE, file)
+// ── check ────────────────────────────────────────────────────────
+
+const violations = []
+const rel = (p) => relative(HERE, p).split(sep).join('/')
+
+for (const root of ROOT_DIRS) {
+  const abs = join(HERE, root)
+  if (!existsSync(abs)) continue
+  for (const file of walk(abs)) {
+    const r = rel(file)
     const src = readFileSync(file, 'utf8')
 
-    for (const line of src.split('\n')) {
+    for (const [lineno, line] of src.split('\n').entries()) {
       const m = line.match(IMPORT_RE)
       if (!m) continue
-      const modName = (m[1] ?? m[2] ?? '').split('/')[0]
+      const modRaw = m[1] ?? m[2] ?? m[3] ?? ''
+      const modName = modRaw.split('/')[0]
+      if (!modName) continue
 
-      if (FORBIDDEN_PKGS.includes(modName)) {
-        console.error(
-          `\u2716 hyper package leak: ${rel}\n    imports "${modName}" \u2014 use hyper-sdk instead`,
-        )
-        violations++
-      } else if (modName === 'hyper-sdk') {
-        if (!ALLOWED_HYPER_SDK_PATH.includes(rel)) {
-          console.error(
-            `\u2716 'hyper-sdk' imported outside infrastructure/sdk/index.ts: ${rel}`,
-          )
-          violations++
+      const isForbidden = FORBIDDEN_PKGS.includes(modName)
+      const isHyperSdk = modName === 'hyper-sdk'
+
+      if (isForbidden) {
+        violations.push({
+          file: r,
+          line: lineno + 1,
+          mod: modName,
+          reason: 'forbidden',
+        })
+      } else if (isHyperSdk) {
+        // Allow only the single SDK bootstrap file. Anywhere else — even
+        // inside apps/hyper-agent — must go through the SDK port.
+        if (r !== ALLOWED_SDK_FILE) {
+          violations.push({
+            file: r,
+            line: lineno + 1,
+            mod: 'hyper-sdk',
+            reason: 'sdk-direct',
+          })
         }
       }
     }
   }
 }
 
-if (violations > 0) {
-  console.error(`\n${violations} SDK boundary violation(s).`)
+// ── report ───────────────────────────────────────────────────────
+
+if (violations.length > 0) {
+  console.error('')
+  console.error(
+    'Hyper SDK imports are only allowed under apps/hyper-agent (see ADR 0002)',
+  )
+  console.error('')
+  for (const v of violations) {
+    const why =
+      v.reason === 'sdk-direct'
+        ? 'imports "hyper-sdk" directly — go through apps/hyper-agent/src/infrastructure/sdk/index.ts'
+        : `imports "${v.mod}" — use hyper-sdk instead`
+    console.error(`  ${v.file}:${v.line}  ${why}`)
+  }
+  console.error('')
+  console.error(`✖ ${violations.length} SDK boundary violation(s).`)
   process.exit(1)
 }
-console.log('\u2713 SDK boundary OK')
+
+console.log('✓ SDK boundary OK (repo-wide)')
