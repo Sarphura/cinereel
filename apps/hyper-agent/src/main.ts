@@ -39,7 +39,7 @@
  *   - CORS via app.enableCors()
  *   - JSON body parser (express.json) for /v1/auth + drives CRUD
  *   - RAW body parser (express.raw) for PUT /v1/drives/:key/file
- *   - Global HttpExceptionFilter (SidecarError → wire body)
+ *   - Global HttpExceptionFilter (RFC 9457 ProblemDetails envelope)
  *   - @nestjs/swagger DocumentBuilder → Swagger UI (dev mode only)
  *   - Signal handlers for graceful shutdown (sdk.close via OnModuleDestroy)
  */

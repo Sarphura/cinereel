@@ -22,10 +22,12 @@ export {
   driveKeyOf,
 } from './types/key.js'
 export {
-  ErrorCode,
-  SidecarError,
-  toErrorBody,
-  httpStatusFor,
-  type ErrorCodeValue,
-  type SidecarErrorBody,
+  HttpProblem,
+  toProblemDetails,
+  PROBLEM_CONTENT_TYPE,
+  httpStatusFallback,
+  type ProblemDetails,
+  type ProblemTypeSpec,
 } from './errors/index.js'
+
+export * from './errors/errors.const.js'

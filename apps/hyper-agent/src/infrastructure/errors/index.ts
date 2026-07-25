@@ -1,71 +1,77 @@
 /**
- * Sidecar-wide error primitives.
+ * Hyper Agent RFC 9457 ProblemDetails primitives.
  *
- * Imported by both controllers / middlewares (HTTP layer) and services
- * (business layer). The mapping from `ErrorCode` → HTTP status lives here
- * too so services can throw `SidecarError` and the framework's error
- * middleware takes care of the wire shape.
+ * Every 4xx / 5xx response from the Hyper Agent is a ProblemDetails
+ * envelope:
+ *
+ *   {
+ *     "type": "https://cinereel.dev/errors/<slug>",
+ *     "title": "<short>",
+ *     "status": <int>,
+ *     "detail": "<optional human message>",
+ *     "instance": "<request path>"
+ *   }
+ *
+ * with `Content-Type: application/problem+json`. The HTTP-layer code
+ * (`HttpExceptionFilter`) owns the envelope construction; business code
+ * throws `HttpProblem` and the filter emits the body.
+ *
+ * `HttpProblem` deliberately does NOT extend `HttpException`. Nest's
+ * built-in HttpException handler serialises the response with whatever
+ * `getResponse()` returns, which would prevent our filter from
+ * formatting the ProblemDetails envelope. Treating it as a plain Error
+ * lets our global `@Catch()` filter intercept it before Nest does.
+ *
+ * ADR 0032 / ADR 0051 / ticket 08.
  */
-export const ErrorCode = {
-  UNAUTHENTICATED: 'UNAUTHENTICATED',
-  BAD_REQUEST: 'BAD_REQUEST',
-  NOT_FOUND: 'NOT_FOUND',
-  ALREADY_EXISTS: 'ALREADY_EXISTS',
-  INTERNAL: 'INTERNAL',
-  SERVICE_UNAVAILABLE: 'SERVICE_UNAVAILABLE',
-  TIMEOUT: 'TIMEOUT',
-  INVALID_DRIVE_KEY: 'INVALID_DRIVE_KEY',
-} as const
+import {
+  PROBLEM_CONTENT_TYPE,
+  httpStatusFallback,
+  type ProblemTypeSpec,
+} from './errors.const.js'
 
-export type ErrorCodeValue = (typeof ErrorCode)[keyof typeof ErrorCode]
+export { PROBLEM_CONTENT_TYPE, httpStatusFallback, type ProblemTypeSpec }
 
-export interface SidecarErrorBody {
-  error: {
-    code: ErrorCodeValue
-    message: string
-    details?: unknown
-  }
+export * from './errors.const.js'
+
+export interface ProblemDetails {
+  type: string
+  title: string
+  status: number
+  detail?: string
+  instance?: string
 }
 
-export class SidecarError extends Error {
-  constructor(
-    public readonly code: ErrorCodeValue,
-    message: string,
-    public readonly httpStatus: number,
-    public readonly details?: unknown,
-  ) {
-    super(message)
-    this.name = 'SidecarError'
-  }
-}
-
-export function toErrorBody(err: SidecarError): SidecarErrorBody {
+/**
+ * Build a ProblemDetails envelope from a `ProblemTypeSpec` and an
+ * optional human-readable detail. The filter uses this for every
+ * caught exception.
+ */
+export function toProblemDetails(
+  spec: ProblemTypeSpec,
+  options: { detail?: string; instance?: string } = {},
+): ProblemDetails {
   return {
-    error: {
-      code: err.code,
-      message: err.message,
-      ...(err.details !== undefined ? { details: err.details } : {}),
-    },
+    type: spec.uri,
+    title: spec.title,
+    status: spec.status,
+    ...(options.detail !== undefined ? { detail: options.detail } : {}),
+    ...(options.instance !== undefined ? { instance: options.instance } : {}),
   }
 }
 
-export function httpStatusFor(code: ErrorCodeValue): number {
-  switch (code) {
-    case ErrorCode.UNAUTHENTICATED:
-      return 401
-    case ErrorCode.BAD_REQUEST:
-    case ErrorCode.INVALID_DRIVE_KEY:
-      return 400
-    case ErrorCode.NOT_FOUND:
-      return 404
-    case ErrorCode.ALREADY_EXISTS:
-      return 409
-    case ErrorCode.SERVICE_UNAVAILABLE:
-      return 503
-    case ErrorCode.TIMEOUT:
-      return 504
-    case ErrorCode.INTERNAL:
-    default:
-      return 500
+/**
+ * `HttpProblem` is the only exception the business layer throws. The
+ * HTTP filter turns it into a ProblemDetails response. We do NOT embed
+ * the envelope body inside the exception — the filter owns that —
+ * because the filter needs to know the request path (`instance`).
+ */
+export class HttpProblem extends Error {
+  constructor(
+    public readonly spec: ProblemTypeSpec,
+    public readonly detail?: string,
+  ) {
+    super(detail ?? spec.title)
+    this.name = 'HttpProblem'
   }
 }

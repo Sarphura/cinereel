@@ -1,11 +1,21 @@
 /**
- * HttpExceptionFilter — replaces `middlewares/error.middleware.ts`.
+ * HttpExceptionFilter — RFC 9457 ProblemDetails.
  *
- * Catches `SidecarError` (business errors with a code + httpStatus) and
- * `ZodValidationException` (DTO schema failures). Anything else becomes
- * a 500.
+ * Every 4xx / 5xx response from the Hyper Agent carries:
  *
- * Uses Express `Response` API directly (per §0 of plan — Express adapter).
+ *   Content-Type: application/problem+json
+ *   {
+ *     "type":   "https://cinereel.dev/errors/<slug>",
+ *     "title":  "<short>",
+ *     "status": <int>,
+ *     "detail": "<optional>",
+ *     "instance": "<request path>"
+ *   }
+ *
+ * Stack traces are NEVER emitted in 5xx response bodies — they are
+ * logged at error level instead.
+ *
+ * ADR 0032 / ADR 0051 / ticket 08.
  */
 import {
   type ArgumentsHost,
@@ -16,12 +26,14 @@ import {
   Logger,
 } from '@nestjs/common'
 import { ZodValidationException } from 'nestjs-zod'
-import type { Response } from 'express'
+import type { Request, Response } from 'express'
 import {
-  ErrorCode,
-  SidecarError,
-  httpStatusFor,
-  toErrorBody,
+  INVALID_INPUT,
+  INTERNAL,
+  PROBLEM_CONTENT_TYPE,
+  httpStatusFallback,
+  HttpProblem,
+  toProblemDetails,
 } from '../../../infrastructure/errors/index.js'
 
 @Catch()
@@ -30,39 +42,56 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
   catch(err: unknown, host: ArgumentsHost): void {
     const ctx = host.switchToHttp()
+    const req = ctx.getRequest<Request>()
     const res = ctx.getResponse<Response>()
+    const instance = req.originalUrl ?? req.url
 
-    if (err instanceof SidecarError) {
-      res.status(err.httpStatus).json(toErrorBody(err))
+    // 1. Business-layer typed exception.
+    if (err instanceof HttpProblem) {
+      const body = toProblemDetails(err.spec, {
+        detail: err.detail,
+        instance,
+      })
+      this.send(res, body)
       return
     }
 
+    // 2. Zod schema validation failure → 400 invalid-input.
     if (err instanceof ZodValidationException) {
       const zErr = err.getZodError?.() as { issues?: unknown } | undefined
-      res.status(HttpStatus.BAD_REQUEST).json({
-        error: {
-          code: ErrorCode.BAD_REQUEST,
-          message: 'Request validation failed',
-          details: zErr?.issues ?? err.message,
-        },
-      })
+      const detail = zErr?.issues
+        ? `Request validation failed: ${JSON.stringify(zErr.issues)}`
+        : err.message
+      const body = toProblemDetails(INVALID_INPUT, { detail, instance })
+      this.send(res, body)
       return
     }
 
+    // 3. Nest HttpException — catch-all `http-<status>`.
     if (err instanceof HttpException) {
       const status = err.getStatus()
       const body = err.getResponse()
-      res.status(status).json(
-        typeof body === 'string' ? { error: { code: httpStatusFor(ErrorCode.INTERNAL), message: body } } : body,
-      )
+      const detail =
+        typeof body === 'string'
+          ? body
+          : typeof body === 'object' && body !== null && 'message' in body
+            ? String((body as { message?: unknown }).message)
+            : undefined
+      this.send(res, toProblemDetails(httpStatusFallback(status), { detail, instance }))
       return
     }
 
-    // Unhandled error → 500 with INTERNAL code
+    // 4. Unknown error → 500 internal. Stack logged but never in body.
     const message = err instanceof Error ? err.message : String(err)
     this.logger.error(message, err instanceof Error ? err.stack : undefined)
-    res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
-      error: { code: ErrorCode.INTERNAL, message: 'Internal error' },
-    })
+    this.send(res, toProblemDetails(INTERNAL, { instance }))
+  }
+
+  private send(res: Response, body: unknown): void {
+    const status = (body as { status?: number }).status ?? HttpStatus.INTERNAL_SERVER_ERROR
+    res
+      .status(status)
+      .setHeader('Content-Type', PROBLEM_CONTENT_TYPE)
+      .json(body)
   }
 }
