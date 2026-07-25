@@ -7,6 +7,7 @@ public interface ITorrentFileRepository
 {
     Task<TorrentFileEntity?> FindByMediaItemIdAsync(MediaItemId id, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<TorrentFileEntity>> ListBySubscriptionAsync(SubscriptionId id, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<TorrentFileEntity>> ListAllAsync(CancellationToken cancellationToken = default);
     Task<TorrentFileEntity> UpsertAsync(TorrentFileEntity torrent, CancellationToken cancellationToken = default);
     Task RemoveAsync(MediaItemId id, CancellationToken cancellationToken = default);
 }
@@ -17,6 +18,8 @@ public sealed class InMemoryTorrentFileRepository : ITorrentFileRepository
     public Task<TorrentFileEntity?> FindByMediaItemIdAsync(MediaItemId id, CancellationToken cancellationToken = default) => Task.FromResult(_items.GetValueOrDefault(id.Value));
     public Task<IReadOnlyList<TorrentFileEntity>> ListBySubscriptionAsync(SubscriptionId id, CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<TorrentFileEntity>>(_items.Values.Where(item => item.MediaItem?.SubscriptionId == id.Value).ToList());
+    public Task<IReadOnlyList<TorrentFileEntity>> ListAllAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult<IReadOnlyList<TorrentFileEntity>>(_items.Values.ToList());
     public Task<TorrentFileEntity> UpsertAsync(TorrentFileEntity torrent, CancellationToken cancellationToken = default) { _items[torrent.MediaItemId] = torrent; return Task.FromResult(torrent); }
     public Task RemoveAsync(MediaItemId id, CancellationToken cancellationToken = default) { _items.Remove(id.Value); return Task.CompletedTask; }
 }

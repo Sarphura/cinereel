@@ -1,6 +1,6 @@
-using CineReel.Service.Data.Entities;
-
 namespace CineReel.Service.Features.Bt;
+
+using CineReel.Service.Data.Entities;
 
 /// <summary>
 /// Thin surface the BT scheduler consumes. The default implementation
@@ -15,6 +15,7 @@ public interface IBtEngine
     Task PauseAsync(string driveKey, CancellationToken cancellationToken = default);
     Task ResumeAsync(string driveKey, CancellationToken cancellationToken = default);
     Task<BtState> GetStateAsync(string driveKey, CancellationToken cancellationToken = default);
+    Task BanPeerAsync(string infohash, string ip, CancellationToken cancellationToken = default);
     int ActiveTorrentCount { get; }
 }
 

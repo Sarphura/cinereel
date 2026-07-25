@@ -144,6 +144,11 @@ builder.Services.AddSingleton<IBtScheduler, BtScheduler>();
 builder.Services.AddTransient<IDomainEventHandler<MediaItemAdded>, BtScheduler>();
 builder.Services.AddTransient<IDomainEventHandler<SubscriptionDeleted>, BtScheduler>();
 
+// BT governance (ticket 26). Bandwidth policy + DiskPressureMonitor.
+builder.Services.AddSingleton<BandwidthPolicy>();
+builder.Services.AddSingleton<IDiskPressureProbe>(sp => new LibraryRootDiskPressureProbe("./"));
+builder.Services.AddHostedService<DiskPressureMonitor>();
+
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 

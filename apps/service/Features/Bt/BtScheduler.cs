@@ -11,6 +11,8 @@ public interface IBtScheduler
     Task StopAsync(SubscriptionId subscriptionId, CancellationToken cancellationToken = default);
     Task PauseSeedingAsync(MediaItemId mediaItemId, CancellationToken cancellationToken = default);
     Task ResumeAsync(MediaItemId mediaItemId, CancellationToken cancellationToken = default);
+    Task SeedAllButRecentlyAccessedAsync(int retainCount, CancellationToken cancellationToken = default);
+    Task BanPeerAsync(string infohash, string ip, CancellationToken cancellationToken = default);
     int ActiveTorrentCount { get; }
 }
 
@@ -106,6 +108,22 @@ public sealed class BtScheduler : IBtScheduler,
             _options.DhtPort,
             _options.MaxDownloadBytesPerSecond,
             _options.MaxUploadBytesPerSecond);
+
+    public async Task SeedAllButRecentlyAccessedAsync(int retainCount, CancellationToken cancellationToken = default)
+    {
+        var all = await _torrents.ListAllAsync(cancellationToken);
+        var sorted = all.OrderByDescending(t => t.MediaItem?.UpdatedAt ?? DateTimeOffset.MinValue).ToList();
+        foreach (var row in sorted.Skip(retainCount))
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (row.MediaItem is null) continue;
+            try { await _engine.StopAsync(row.MediaItem.DriveKey, cancellationToken); }
+            catch (Exception ex) { _logger.LogWarning(ex, "BT seed-trim stop failed for {DriveKey}", row.MediaItem.DriveKey); }
+        }
+    }
+
+    public Task BanPeerAsync(string infohash, string ip, CancellationToken cancellationToken = default)
+        => _engine.BanPeerAsync(infohash, ip, cancellationToken);
 }
 
 public sealed class CinereelBtOptions

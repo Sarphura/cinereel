@@ -16,4 +16,5 @@ public sealed class NoopBtEngine : IBtEngine
     public Task PauseAsync(string driveKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task ResumeAsync(string driveKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
     public Task<BtState> GetStateAsync(string driveKey, CancellationToken cancellationToken = default) => Task.FromResult(BtState.Stopped);
+    public Task BanPeerAsync(string infohash, string ip, CancellationToken cancellationToken = default) => Task.CompletedTask;
 }

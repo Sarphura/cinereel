@@ -105,6 +105,7 @@ internal sealed class StubBtEngine : IBtEngine
     public List<(string DriveKey, string TorrentPath, BtEngineOptions Options)> StartCalls { get; } = new();
     public List<string> StopCalls { get; } = new();
     public List<string> PauseCalls { get; } = new();
+    public List<(string Infohash, string Ip)> BanCalls { get; } = new();
     public List<string> ResumeCalls { get; } = new();
     public int ActiveTorrentCount => _states.Count(c => c.Value is BtState.Downloading or BtState.Seeding);
 
@@ -119,4 +120,5 @@ internal sealed class StubBtEngine : IBtEngine
     public Task ResumeAsync(string driveKey, CancellationToken cancellationToken = default) { ResumeCalls.Add(driveKey); _states[driveKey] = BtState.Seeding; return Task.CompletedTask; }
     public Task<BtState> GetStateAsync(string driveKey, CancellationToken cancellationToken = default) =>
         Task.FromResult(_states.GetValueOrDefault(driveKey, BtState.Stopped));
+    public Task BanPeerAsync(string infohash, string ip, CancellationToken cancellationToken = default) { BanCalls.Add((infohash, ip)); return Task.CompletedTask; }
 }
