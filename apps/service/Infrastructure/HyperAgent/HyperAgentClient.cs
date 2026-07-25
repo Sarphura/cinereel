@@ -6,8 +6,12 @@ namespace CineReel.Service.Infrastructure.HyperAgent;
 
 /// <summary>
 /// Hand-rolled HTTP implementation of <see cref="IHyperAgentClient"/>.
-/// This is the App Server's pre-NSwag client; ticket 14 will replace
-/// it with a generated NSwag client that satisfies the same interface.
+/// This is the App Server's runtime client. The contract-freeze is
+/// <see cref="Generated.HyperAgentClient"/> (NSwag-style); see
+/// ticket 14. Any controller change in <c>apps/hyper-agent/</c> must
+/// regenerate <c>apps/service/src/HyperAgent/HyperAgentClient.g.cs</c>
+/// via <c>pnpm regen:hyper-agent-client</c>; the drift check fails CI
+/// if the regenerated file differs from the committed one.
 /// </summary>
 public sealed class HyperAgentClient : IHyperAgentClient
 {
@@ -49,10 +53,9 @@ public sealed class HyperAgentClient : IHyperAgentClient
         long? rangeEnd = null,
         CancellationToken ct = default)
     {
-        // The endpoint is path-parameter style: the catch-all
-        // segment is the file path. We pass `path` as-is; the client
-        // does not URL-encode it because Hyperdrive paths use `/`
-        // (no spaces / special chars at this layer).
+        // Path-parameter style: the catch-all segment is the file path.
+        // We pass `path` as-is; Hyperdrive paths use `/` (no spaces or
+        // special chars at this layer) so no URL escaping.
         var url = $"/v1/files/{driveKey}{NormalizePath(path)}";
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         if (rangeStart.HasValue || rangeEnd.HasValue)
@@ -62,11 +65,9 @@ public sealed class HyperAgentClient : IHyperAgentClient
         using var resp = await _http.SendAsync(req, HttpCompletionOption.ResponseContentRead, ct);
 
         var body = await resp.Content.ReadAsByteArrayAsync(ct);
-        // Content-Range is a representation-metadata header and lands
-        // on the content's Headers collection per RFC 9110. Some
-        // HttpClient stacks surface it on the response headers too;
-        // we check both so the migration does not depend on stack
-        // quirks.
+        // Content-Range is representation metadata and lands on the
+        // content's Headers collection per RFC 9110. Some stacks also
+        // surface it on the response headers; check both.
         string? contentRange = null;
         if (resp.Content.Headers.ContentRange is not null)
         {
@@ -88,7 +89,6 @@ public sealed class HyperAgentClient : IHyperAgentClient
     {
         if (string.IsNullOrEmpty(path)) return "/";
         var p = path.StartsWith('/') ? path : "/" + path;
-        // Collapse double slashes defensively.
         while (p.Contains("//")) p = p.Replace("//", "/");
         return p;
     }
@@ -105,13 +105,8 @@ public sealed class HyperAgentClient : IHyperAgentClient
         }
         if (end.HasValue)
         {
-            // Suffix range — both From and To must be set; From = end - length.
-            // For suffix semantics we use To and a sentinel From=0 implicit
-            // by leaving From null. RangeHeaderValue rejects From=null with
-            // a non-null To in some .NET versions; fall back to using To
-            // with a small length argument via a fresh RangeHeaderValue.
-            var length = end.Value;
-            return new RangeHeaderValue(0, length - 1);
+            // Suffix range: build as a "from 0 to end-1" range.
+            return new RangeHeaderValue(0, end.Value - 1);
         }
         throw new ArgumentException("Range requested but neither start nor end was provided");
     }

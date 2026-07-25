@@ -22,7 +22,10 @@
     "dev:service:peer": "pnpm --filter @cinereel/service dev:peer",
     "build": "pnpm --filter ui build",
     "start": "pnpm --filter @cinereel/service start",
-    "test:service": "pnpm --filter @cinereel/service test"
+    "test:service": "pnpm --filter @cinereel/service test",
+    "check:sdk-boundary": "node scripts/check-sdk-boundary.mjs",
+    "check:nswag-drift": "node scripts/check-nswag-drift.mjs",
+    "regen:hyper-agent-client": "node scripts/gen-hyper-agent-client.mjs"
   },
   "author": "Sarphura",
   "license": "AGPL-3.0-only",
