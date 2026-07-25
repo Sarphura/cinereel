@@ -1,4 +1,6 @@
+using CineReel.Service.Events;
 using CineReel.Service.Features.Health;
+using CineReel.Service.Features.Subscription;
 using CineReel.Service.Features.Version;
 using CineReel.Service.Infrastructure.HyperAgent;
 using CineReel.Service.Infrastructure.Lifecycle;
@@ -108,6 +110,13 @@ builder.Services.AddCinereelOpenApi();
 // `/health` endpoint keeps working unchanged.
 builder.Services.AddCinereelHealth();
 
+// Subscription feature (ticket 18). The default registration binds to the
+// in-memory repository; production should swap in the EF-backed repository.
+builder.Services.AddCinereelSubscriptions();
+
+// Domain event bus (ticket 02) + retry decorator (ticket 03).
+builder.Services.AddDomainEvents([typeof(Program).Assembly]);
+
 // Shutdown chain (ADR 0055, ticket 16) — stages drain HTTP, close DB,
 // forward SIGTERM to the Hyper Agent, escalate to SIGKILL.
 builder.Services.AddCinereelShutdownChain();
@@ -151,6 +160,10 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 
 // Full health aggregator (ticket 15) — lists every probe.
 app.MapHealthEndpoints();
+
+// Subscription REST surface (ticket 18) — CRUD + state machine + state
+// transitions emitted through the in-process domain event bus.
+app.MapSubscriptionEndpoints();
 
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();
