@@ -72,8 +72,18 @@ export class BootstrapService implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    // 1. Load persisted index.
-    await this.index.load()
+    // 1. Load persisted index. A corrupt or half-formed file is fatal —
+    //    the Hyper Agent refuses to silently recover (ADR 0045, ticket 07)
+    //    and exits with EXIT_DRIVE_INDEX_CORRUPT so the operator notices
+    //    instead of finding drives missing later.
+    try {
+      await this.index.load()
+    } catch (err) {
+      this.logger.error(
+        `drive-index.json is corrupt or unreadable: ${(err as Error).message}`,
+      )
+      process.exit(79)
+    }
 
     // 2. Mount the main drive (always first, so registry has anchor).
     try {
