@@ -17,6 +17,9 @@
 /** Reserved: 0. The Hyper Agent exits 0 only on a clean shutdown (SIGTERM after app.close()). */
 export const EXIT_OK = 0 as const
 
+/** Reserved: 1. Generic fatal — the run-time error path that does not fit a documented failure mode. */
+export const EXIT_GENERIC = 1 as const
+
 /** The Hyper Agent tried to bind the loopback port but it was already in use (ADR 0010, ADR 0017). */
 export const EXIT_PORT_IN_USE = 73 as const
 
@@ -71,6 +74,8 @@ export function describeExitCode(code: number): string {
   switch (code) {
     case EXIT_OK:
       return 'clean shutdown (SIGTERM after app.close())'
+    case EXIT_GENERIC:
+      return 'generic fatal (uncaught error)'
     case EXIT_PORT_IN_USE:
       return 'loopback port already in use (SIDECAR_PORT)'
     case EXIT_RESERVED_74:

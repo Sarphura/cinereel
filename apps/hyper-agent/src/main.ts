@@ -61,6 +61,7 @@ import { RAW_BODY_KEY } from './core/common/middleware/raw-body.middleware.js'
 import { buildOpenAPI } from './core/swagger/swagger-setup.js'
 import { ensureSwaggerPatch } from './core/common/zod/schema-registry.js'
 import { loadOrMintSharedToken } from './infrastructure/security/shared-token.js'
+import { EXIT_OK, EXIT_GENERIC, EXIT_PORT_IN_USE } from './infrastructure/exit-codes.js'
 
 const DEFAULT_DATA_DIR = '.sidecar-store'
 const DEFAULT_TOKEN_FILENAME = 'sidecar.token'
@@ -143,7 +144,19 @@ async function main(): Promise<void> {
 
   // ── 7. Listen + graceful shutdown ──────────────────────────────
   const listenPort = Number(cfg.port)
-  await app.listen(listenPort, cfg.host)
+  try {
+    await app.listen(listenPort, cfg.host)
+  } catch (err) {
+    // Listen failures: EADDRINUSE → 73 (EXIT_PORT_IN_USE). Other
+    // listen errors (EACCES, EAFNOSUPPORT) → 1 (EXIT_GENERIC).
+    const code = (err as NodeJS.ErrnoException)?.code
+    if (code === 'EADDRINUSE') {
+      // eslint-disable-next-line no-console
+      console.error(`[hyper-agent] port ${listenPort} already in use (EADDRINUSE)`)
+      process.exit(EXIT_PORT_IN_USE)
+    }
+    throw err
+  }
   // eslint-disable-next-line no-console
   console.warn(
     `[hyper-agent] listening on ${cfg.host}:${cfg.port} (NODE_ENV=${process.env.NODE_ENV ?? 'development'})`,
@@ -158,7 +171,7 @@ async function main(): Promise<void> {
       // eslint-disable-next-line no-console
       console.error('[hyper-agent] app close error:', (err as Error).message)
     }
-    process.exit(0)
+    process.exit(EXIT_OK)
   }
   process.on('SIGTERM', (s) => void shutdown(s))
   process.on('SIGINT', (s) => void shutdown(s))
@@ -167,5 +180,5 @@ async function main(): Promise<void> {
 main().catch((err) => {
   // eslint-disable-next-line no-console
   console.error('[hyper-agent] fatal:', err)
-  process.exit(1)
+  process.exit(EXIT_GENERIC)
 })

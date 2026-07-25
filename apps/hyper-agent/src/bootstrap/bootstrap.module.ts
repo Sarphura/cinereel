@@ -51,6 +51,7 @@ import {
   HyperdriveRepository,
   HyperdriveSwarmRepository,
 } from '../repositories/index.js'
+import { EXIT_DRIVE_INDEX_CORRUPT } from '../infrastructure/exit-codes.js'
 import { InMemoryDriveRegistry } from './drive-registry.js'
 
 export const DRIVE_INDEX = Symbol('DRIVE_INDEX')
@@ -82,7 +83,7 @@ export class BootstrapService implements OnModuleInit {
       this.logger.error(
         `drive-index.json is corrupt or unreadable: ${(err as Error).message}`,
       )
-      process.exit(79)
+      process.exit(EXIT_DRIVE_INDEX_CORRUPT)
     }
 
     // 2. Mount the main drive (always first, so registry has anchor).

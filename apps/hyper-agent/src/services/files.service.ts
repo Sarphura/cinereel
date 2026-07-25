@@ -15,6 +15,8 @@ import type {
 } from '../infrastructure/index.js'
 import { HEX64 } from '../infrastructure/types/key.js'
 import { InMemoryDriveRegistry, type DriveRegistry } from '../bootstrap/drive-registry.js'
+import { HttpProblem } from '../infrastructure/errors/index.js'
+import { CANNOT_WRITE_REMOTE_DRIVE } from '../infrastructure/errors/errors.const.js'
 
 function adaptEntry(
   raw: { key: string; seq: number; value: unknown } | null,
@@ -125,7 +127,10 @@ export class FileService {
   ): Promise<{ ok: true; byteLength: number }> {
     const drive = this.get(driveKey)
     if (this.registry.isRemote(driveKey)) {
-      throw new Error(`cannot write to remote drive ${driveKey}`)
+      throw new HttpProblem(
+        CANNOT_WRITE_REMOTE_DRIVE,
+        `cannot write to remote drive ${driveKey}`,
+      )
     }
     const ws = drive.createWriteStream(path)
     const finished = new Promise<{ byteLength: number }>((resolve, reject) => {
@@ -146,7 +151,10 @@ export class FileService {
     const drive = this.get(driveKey)
     const target = normalizePath(path)
     if (this.registry.isRemote(driveKey)) {
-      throw new Error(`cannot delete from remote drive ${driveKey}`)
+      throw new HttpProblem(
+        CANNOT_WRITE_REMOTE_DRIVE,
+        `cannot delete from remote drive ${driveKey}`,
+      )
     }
     const stat = await drive.stat(target)
     if (stat?.isDirectory?.()) {

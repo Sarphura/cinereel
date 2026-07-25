@@ -375,9 +375,12 @@ for (const [path, item] of Object.entries(doc.paths ?? {})) {
     out.push(`    /// <summary><c>${method.toUpperCase()} ${path}</c></summary>\n`)
     out.push(`    public async ${returnsTask} ${opName}(${args.join(', ')})\n`)
     out.push(`    {${qs.replace(/\n/g, '\n')}\n`)
-    out.push(`        using var req = new HttpRequestMessage(HttpMethod.${pascal(method.toLowerCase())}, $\@"`)
-    out.push(csPathRaw)
-    out.push(`"${qsSuffix});${headerInits}\n`)
+    // C# verbatim strings preserve everything literally between the
+    // quotes including newlines, so a `$\@"\n/v1/version\n"` would
+    // encode a leading newline and break the URL. Strip newlines
+    // from the path before emitting the verbatim string.
+    const escapedPath = csPathRaw.replace(/\\/g, '\\\\').replace(/\n/g, '')
+    out.push(`        using var req = new HttpRequestMessage(HttpMethod.${pascal(method.toLowerCase())}, $\@"${escapedPath}"${qsSuffix});${headerInits}\n`)
     out.push(`        ${isVoid ? 'await' : 'return await'} SendAsync<${sendAsyncType}>(req, ct);\n`)
     out.push(`    }\n`)
   }

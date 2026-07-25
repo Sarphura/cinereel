@@ -213,9 +213,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $@"
-/healthz
-");
+        using var req = new HttpRequestMessage(HttpMethod.Get, $@"/healthz");
 
         return await SendAsync<Models.HealthResponse>(req, ct);
 
@@ -229,9 +227,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $@"
-/v1/version
-");
+        using var req = new HttpRequestMessage(HttpMethod.Get, $@"/v1/version");
 
         return await SendAsync<object /* { string Name; string Version } */>(req, ct);
 
@@ -245,9 +241,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $@"
-/v1/drives
-");
+        using var req = new HttpRequestMessage(HttpMethod.Get, $@"/v1/drives");
 
         return await SendAsync<IReadOnlyList<Models.DriveDescriptor>>(req, ct);
 
@@ -261,9 +255,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, $@"
-/v1/drives
-");
+        using var req = new HttpRequestMessage(HttpMethod.Post, $@"/v1/drives");
 
         return await SendAsync<Models.DriveDescriptor>(req, ct);
 
@@ -277,9 +269,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Delete, $@"
-/v1/drives/{key}
-");
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $@"/v1/drives/{key}");
 
         return await SendAsync<object>(req, ct);
 
@@ -293,9 +283,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $@"
-/v1/drives/{key}/tree
-");
+        using var req = new HttpRequestMessage(HttpMethod.Get, $@"/v1/drives/{key}/tree");
 
         await SendAsync<Unit>(req, ct);
 
@@ -309,9 +297,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $@"
-/v1/drives/{key}/entry
-");
+        using var req = new HttpRequestMessage(HttpMethod.Get, $@"/v1/drives/{key}/entry");
 
         return await SendAsync<Models.HyperdriveEntry>(req, ct);
 
@@ -325,9 +311,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Put, $@"
-/v1/drives/{key}/file
-");
+        using var req = new HttpRequestMessage(HttpMethod.Put, $@"/v1/drives/{key}/file");
 
         return await SendAsync<object>(req, ct);
 
@@ -341,9 +325,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Delete, $@"
-/v1/drives/{key}/file
-");
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $@"/v1/drives/{key}/file");
 
         await SendAsync<Unit>(req, ct);
 
@@ -357,9 +339,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, $@"
-/v1/_test/peer
-");
+        using var req = new HttpRequestMessage(HttpMethod.Post, $@"/v1/_test/peer");
 
         await SendAsync<Unit>(req, ct);
 
@@ -373,9 +353,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Delete, $@"
-/v1/_test/peer/{publicKey}
-");
+        using var req = new HttpRequestMessage(HttpMethod.Delete, $@"/v1/_test/peer/{publicKey}");
 
         await SendAsync<Unit>(req, ct);
 
@@ -389,9 +367,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $@"
-/v1/files/{driveKey}/{path}
-");
+        using var req = new HttpRequestMessage(HttpMethod.Get, $@"/v1/files/{driveKey}/{path}");
 
         await SendAsync<Unit>(req, ct);
 
@@ -405,9 +381,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, $@"
-/v1/swarm/announce
-");
+        using var req = new HttpRequestMessage(HttpMethod.Post, $@"/v1/swarm/announce");
 
         return await SendAsync<object>(req, ct);
 
@@ -421,9 +395,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $@"
-/v1/swarm/peers
-");
+        using var req = new HttpRequestMessage(HttpMethod.Get, $@"/v1/swarm/peers");
 
         return await SendAsync<IReadOnlyList<Models.PeerInfo>>(req, ct);
 
@@ -437,9 +409,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, $@"
-/v1/swarm/mount/{publicKey}
-");
+        using var req = new HttpRequestMessage(HttpMethod.Post, $@"/v1/swarm/mount/{publicKey}");
 
         return await SendAsync<object>(req, ct);
 
@@ -453,9 +423,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, $@"
-/v1/swarm/unmount/{publicKey}
-");
+        using var req = new HttpRequestMessage(HttpMethod.Post, $@"/v1/swarm/unmount/{publicKey}");
 
         return await SendAsync<object>(req, ct);
 
@@ -469,9 +437,7 @@ public sealed partial class HyperAgentClient
 
     {
 
-        using var req = new HttpRequestMessage(HttpMethod.Get, $@"
-/v1/identity
-");
+        using var req = new HttpRequestMessage(HttpMethod.Get, $@"/v1/identity");
 
         return await SendAsync<Models.IdentityInfo>(req, ct);
 

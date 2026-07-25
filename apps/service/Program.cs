@@ -54,6 +54,30 @@ if (!string.IsNullOrWhiteSpace(hyperAgentOptions.ExpectedVersion)
     });
     builder.Services.AddTransient<IHyperAgentClient>(sp =>
         sp.GetRequiredService<HyperAgentClient>());
+
+    // Subscription recovery (ticket 17): the App Server replays
+    // every persisted subscription after the Hyper Agent recovers
+    // from a restart. The watcher is the IHostedService that fires
+    // the recovery event when /healthz + /v1/version both succeed.
+    builder.Services.AddSingleton<InMemorySubscriptionStore>();
+    builder.Services.AddSingleton<ISubscriptionStore>(sp =>
+        sp.GetRequiredService<InMemorySubscriptionStore>());
+    builder.Services.AddTransient<SubscriptionRecoveryService>(sp =>
+    {
+        var client = sp.GetRequiredService<IHyperAgentClient>();
+        var store = sp.GetRequiredService<ISubscriptionStore>();
+        var logger = sp.GetRequiredService<ILoggerFactory>()
+            .CreateLogger<SubscriptionRecoveryService>();
+        return new SubscriptionRecoveryService(client, store, logger);
+    });
+    builder.Services.AddHostedService<HyperAgentReadinessWatcher>(sp =>
+    {
+        var client = sp.GetRequiredService<IHyperAgentClient>();
+        var recovery = sp.GetRequiredService<SubscriptionRecoveryService>();
+        var logger = sp.GetRequiredService<ILoggerFactory>()
+            .CreateLogger<HyperAgentReadinessWatcher>();
+        return new HyperAgentReadinessWatcher(client, hyperAgentOptions.ExpectedVersion, recovery, logger);
+    });
 }
 
 // ── Health checks (ADR 0040) ─────────────────────────────────────────────────
