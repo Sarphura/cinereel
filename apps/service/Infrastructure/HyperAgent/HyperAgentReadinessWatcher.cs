@@ -1,3 +1,4 @@
+using CineReel.Service.Features.Subscription;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 
@@ -48,7 +49,7 @@ public sealed class HyperAgentReadinessWatcher : IHostedService
                 _expectedVersion);
             return;
         }
-        var evt = new HyperAgentRecoveredEvent(DateTime.UtcNow, version.Version);
+        var evt = new CineReel.Service.Features.Subscription.HyperAgentRecovered(DateTime.UtcNow, version.Version);
         await _recovery.RecoverAsync(evt, ct);
     }
 
