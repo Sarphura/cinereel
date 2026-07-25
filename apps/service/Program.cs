@@ -1,11 +1,13 @@
 using CineReel.Service.Features.Health;
 using CineReel.Service.Features.Version;
 using CineReel.Service.Infrastructure.HyperAgent;
+using CineReel.Service.Infrastructure.Lifecycle;
 using CineReel.Service.Infrastructure.OpenApi;
 using CineReel.Service.Infrastructure.Settings;
 using CineReel.Service.Infrastructure.Web;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -106,6 +108,10 @@ builder.Services.AddCinereelOpenApi();
 // `/health` endpoint keeps working unchanged.
 builder.Services.AddCinereelHealth();
 
+// Shutdown chain (ADR 0055, ticket 16) — stages drain HTTP, close DB,
+// forward SIGTERM to the Hyper Agent, escalate to SIGKILL.
+builder.Services.AddCinereelShutdownChain();
+
 var port = builder.Configuration["Web:ListenPort"] ?? "8090";
 var host = builder.Configuration["Web:ListenHost"] ?? "127.0.0.1";
 builder.WebHost.UseUrls($"http://{host}:{port}");
@@ -161,6 +167,19 @@ app.MapCinereelOpenApi();
 // startup configuration.
 var webOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<CinereelOptions>>().Value.Web;
 app.UseCinereelStaticSite(new StaticSiteOptions(webOptions.StaticRoot, webOptions.SpaIndex));
+
+// ── Startup orchestration (ticket 16) ────────────────────────────────────────
+// Run EF Core migrations once the option graph has validated. Per ADR 0030
+// the App Server auto-applies the latest migration on every startup so a
+// fresh deploy doesn't need a separate `dotnet ef database update` step.
+await DatabaseMigrator.MigrateAsync(app.Services, CancellationToken.None);
+
+// ── Shutdown chain (ticket 16) ───────────────────────────────────────────────
+// Wire the documented drain order into the host's
+// `ApplicationStopping` so SIGTERM triggers a graceful exit.
+var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+var shutdown = app.Services.GetRequiredService<ShutdownChain>();
+lifetime.ApplicationStopping.Register(() => _ = Task.Run(() => shutdown.RunAsync(CancellationToken.None)));
 
 app.Run();
 
