@@ -52,6 +52,7 @@ public sealed class JellyfinOptions
 {
     public string? Url { get; set; }
     public string? ApiKey { get; set; }
+    public string LibraryRoot { get; set; } = "/var/lib/cinereel/jellyfin";
 }
 
 public sealed class TmdbOptions

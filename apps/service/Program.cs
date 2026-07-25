@@ -1,5 +1,6 @@
 using CineReel.Service.Events;
 using CineReel.Service.Features.Health;
+using CineReel.Service.Features.Jellyfin;
 using CineReel.Service.Features.Metadata;
 using CineReel.Service.Features.Metadata.Events;
 using CineReel.Service.Features.Subscription;
@@ -119,6 +120,9 @@ builder.Services.AddSingleton<IMetadataScanner, MetadataScanner>();
 builder.Services.AddTransient<IDomainEventHandler<SubscriptionCreated>, SubscriptionScanningOrchestrator>();
 builder.Services.AddTransient<IDomainEventHandler<SubscriptionDescriptorChanged>, SubscriptionScanningOrchestrator>();
 
+// Jellyfin pusher + cleaner (ticket 23).
+builder.Services.AddCinereelJellyfin();
+
 // Domain event bus (ticket 02) + retry decorator (ticket 03).
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 
@@ -169,6 +173,9 @@ app.MapHealthEndpoints();
 // Subscription REST surface (ticket 18) — CRUD + state machine + state
 // transitions emitted through the in-process domain event bus.
 app.MapSubscriptionEndpoints();
+
+// Jellyfin push/clean endpoints (ticket 23).
+app.MapJellyfinEndpoints();
 
 // Version endpoint (ADR 0033 consumer).
 app.MapVersion();
