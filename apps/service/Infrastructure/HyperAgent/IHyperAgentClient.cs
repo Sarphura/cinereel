@@ -38,6 +38,14 @@ public interface IHyperAgentClient
         long? rangeStart = null,
         long? rangeEnd = null,
         CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>POST /v1/swarm/mount/:publicKey</c> — asks the Hyper Agent
+    /// to connect to a peer and mount its shared drive. Used by
+    /// the subscription recovery service (ticket 17). Returns the
+    /// hex64 drive key on success.
+    /// </summary>
+    Task<string> MountAsync(string publicKey, CancellationToken ct = default);
 }
 
 /// <summary>

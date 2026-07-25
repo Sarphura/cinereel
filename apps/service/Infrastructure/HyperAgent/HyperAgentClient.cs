@@ -46,6 +46,22 @@ public sealed class HyperAgentClient : IHyperAgentClient
         }
     }
 
+    public async Task<string> MountAsync(string publicKey, CancellationToken ct = default)
+    {
+        using var resp = await _http.PostAsync(
+            $"/v1/swarm/mount/{publicKey}",
+            content: null,
+            ct);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadFromJsonAsync<MountResponse>(cancellationToken: ct)
+            ?? throw new InvalidOperationException(
+                $"Hyper Agent /v1/swarm/mount/{publicKey} returned an empty body");
+        return body.DriveKey ?? throw new InvalidOperationException(
+            $"Hyper Agent /v1/swarm/mount/{publicKey} returned no driveKey");
+    }
+
+    private sealed record MountResponse(string? DriveKey);
+
     public async Task<HyperAgentFileResponse> FilesRangeReadAsync(
         string driveKey,
         string path,
