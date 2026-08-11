@@ -1,44 +1,46 @@
-# Design It Twice
+# 设计两次
 
-When the user wants to explore alternative interfaces for a chosen deepening candidate, use this parallel sub-agent pattern. Based on "Design It Twice" (Ousterhout) — your first idea is unlikely to be the best.
+当用户希望为选定的深化候选对象探索备选 Interface 时，使用以下并行子代理模式。该模式基于 Ousterhout 提出的“设计两次”原则——第一个想法不太可能就是最佳方案。
 
-Uses the vocabulary in [SKILL.md](SKILL.md) — **module**, **interface**, **seam**, **adapter**, **leverage**.
+本文使用 [SKILL.md](SKILL.md) 中的术语——**Module**、**Interface**、**Seam**、**Adapter**、**Leverage**。
 
-## Process
+## 流程
 
-### 1. Frame the problem space
+### 1. 明确问题空间
 
-Before spawning sub-agents, write a user-facing explanation of the problem space for the chosen candidate:
+启动子代理之前，先面向用户说明所选候选对象的问题空间：
 
-- The constraints any new interface would need to satisfy
-- The dependencies it would rely on, and which category they fall into (see [DEEPENING.md](DEEPENING.md))
-- A rough illustrative code sketch to ground the constraints — not a proposal, just a way to make the constraints concrete
+- 任何新 Interface 都必须满足的约束
+- 它将依赖哪些事物，以及这些依赖属于哪个类别（参见 [DEEPENING.md](DEEPENING.md)）
+- 一份用于说明约束的大致代码草图——它不是提案，只是让约束变得具体
 
-Show this to the user, then immediately proceed to Step 2. The user reads and thinks while the sub-agents work in parallel.
+向用户展示这些内容，然后立即进入第 2 步。子代理并行工作时，用户可以阅读并思考。
 
-### 2. Spawn sub-agents
+### 2. 启动子代理
 
-Spawn 3+ sub-agents in parallel using the Agent tool. Each must produce a **radically different** interface for the deepened module.
+使用 `Agent` 工具并行启动至少 3 个子代理。每个子代理都必须为深化后的 Module 设计一个**截然不同**的 Interface。
 
-Prompt each sub-agent with a separate technical brief (file paths, coupling details, dependency category from [DEEPENING.md](DEEPENING.md), what sits behind the seam). The brief is independent of the user-facing problem-space explanation in Step 1. Give each agent a different design constraint:
+为每个子代理提供一份独立的技术简报，其中包括文件路径、耦合细节、[DEEPENING.md](DEEPENING.md) 所定义的依赖类别，以及 Seam 后隐藏的内容。技术简报独立于第 1 步中面向用户的问题空间说明。为每个子代理设置不同的设计约束：
 
-- Agent 1: "Minimize the interface — aim for 1–3 entry points max. Maximise leverage per entry point."
-- Agent 2: "Maximise flexibility — support many use cases and extension."
-- Agent 3: "Optimise for the most common caller — make the default case trivial."
-- Agent 4 (if applicable): "Design around ports & adapters for cross-seam dependencies."
+- 子代理 1：“最小化 Interface——最多设置 1–3 个入口。让每个入口提供尽可能高的 Leverage。”
+- 子代理 2：“最大化灵活性——支持多种用例和扩展方式。”
+- 子代理 3：“针对最常见的调用方进行优化——让默认场景极其简单。”
+- 子代理 4（如适用）：“围绕端口与 Adapter 设计跨 Seam 依赖。”
 
-Include both [SKILL.md](SKILL.md) vocabulary and CONTEXT.md vocabulary in the brief so each sub-agent names things consistently with the architecture language and the project's domain language.
+每个子代理提示词都必须明确要求：使用简体中文返回分析和说明，代码可以保留原编程语言；仅当用户明确要求其他语言时才切换。
 
-Each sub-agent outputs:
+技术简报中应同时包含 [SKILL.md](SKILL.md) 和 `CONTEXT.md` 的术语，使每个子代理的命名都与架构语言及项目领域语言保持一致。
 
-1. Interface (types, methods, params — plus invariants, ordering, error modes)
-2. Usage example showing how callers use it
-3. What the implementation hides behind the seam
-4. Dependency strategy and adapters (see [DEEPENING.md](DEEPENING.md))
-5. Trade-offs — where leverage is high, where it's thin
+每个子代理应输出：
 
-### 3. Present and compare
+1. Interface（类型、方法和参数，以及不变量、顺序约束和错误模式）
+2. 展示调用方如何使用该 Interface 的用法示例
+3. Implementation 在 Seam 后隐藏的内容
+4. 依赖策略和 Adapter（参见 [DEEPENING.md](DEEPENING.md)）
+5. 权衡——哪些位置的 Leverage 高，哪些位置较弱
 
-Present designs sequentially so the user can absorb each one, then compare them in prose. Contrast by **depth** (leverage at the interface), **locality** (where change concentrates), and **seam placement**.
+### 3. 展示并比较
 
-After comparing, give your own recommendation: which design you think is strongest and why. If elements from different designs would combine well, propose a hybrid. Be opinionated — the user wants a strong read, not a menu.
+依次展示各个设计，让用户能够逐一理解，然后用文字进行比较。比较时应突出 **Depth**（Interface 提供的 Leverage）、**Locality**（变更集中在哪里）和 **Seam** 的位置。
+
+比较完成后，给出自己的建议：指出你认为哪个设计最强，并说明原因。如果不同设计中的某些元素适合组合，应提出混合方案。要有明确判断——用户需要的是有力的评估，而不是一份选项菜单。

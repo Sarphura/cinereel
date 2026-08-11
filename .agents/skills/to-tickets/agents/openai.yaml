@@ -1,0 +1,5 @@
+interface:
+  display_name: "拆为 Ticket"
+  short_description: "将计划拆解为 tracer-bullet ticket"
+policy:
+  allow_implicit_invocation: false

@@ -1,74 +1,160 @@
 ---
 name: domain-modeling
-description: Build and sharpen a project's domain model. Use when the user wants to pin down domain terminology or a ubiquitous language, record an architectural decision, or when another skill needs to maintain the domain model.
+description: 一问一答式的领域建模面试，逐字打磨领域模型并即时产出文档（ADR 和术语表）。适用于用户想要厘清术语、挑战设计、或压力测试某个方案时。
+disable-model-invocation: true
 ---
 
-# Domain Modeling
+# 领域建模 —— Q&A 会话
 
-Actively build and sharpen the project's domain model as you design. This is the *active* discipline — challenging terms, inventing edge-case scenarios, and writing the glossary and decisions down the moment they crystallise. (Merely *reading* `CONTEXT.md` for vocabulary is not this skill — that's a one-line habit any skill can do. This skill is for when you're changing the model, not just consuming it.)
+## 语言与术语
 
-## File structure
+本 Skill 默认使用 **简体中文**：
 
-Most repos have a single context:
+- 与用户的对话、问题、选项、总结、解释、复述均使用简体中文。
+- 生成或修改的所有文档（`CONTEXT.md`、ADR、术语表、Markdown 笔记、报告等）使用简体中文。
+- 只有当用户明确要求切换语言（例如“请用英文回答”）时才使用其他语言。
 
-```
-/
-├── CONTEXT.md
-├── docs/
-│   └── adr/
-│       ├── 0001-event-sourced-orders.md
-│       └── 0002-postgres-for-write-model.md
-└── src/
-```
+以下内容必须保持原文（即使本身是英文术语，也原样使用，中文仅作解释或备注）：
 
-If a `CONTEXT-MAP.md` exists at the root, the repo has multiple contexts. The map points to where each one lives:
+- 代码标识符：变量名、函数名、类名、字段名、文件名、路径。
+- CLI 命令、Shell 命令、配置键、环境变量、JSON/YAML 字段名。
+- 库、框架、产品、协议、API、缩写的规范名称（如 `AskQuestion`、`.NET`、PostgreSQL、Jellyfin、qBittorrent）。
+- 本项目的领域术语：`Order`、`Invoice`、`Customer`、`OrderPlaced`、`ShipmentDispatched`、`CustomerId`、`Money` 等 `CONTEXT.md` 中已规范的术语；`grilling`、`Bootstrapping`、`Challenge`、`Refinement`、`ADR`、`CONTEXT.md`、`AskQuestion` 等工作流术语。
+- 术语表中的规范术语一旦确立，必须原样复用，不得翻译或意译。
 
-```
-/
-├── CONTEXT-MAP.md
-├── docs/
-│   └── adr/                          ← system-wide decisions
-├── src/
-│   ├── ordering/
-│   │   ├── CONTEXT.md
-│   │   └── docs/adr/                 ← context-specific decisions
-│   └── billing/
-│       ├── CONTEXT.md
-│       └── docs/adr/
-```
+中文化时只翻译自然语言说明、标题、模板文字、UI 文案（`description`、`display_name`、`short_description` 等元数据）。示例定义与示例代码中的规范领域术语保留原文。
 
-Create files lazily — only when you have something to write. If no `CONTEXT.md` exists, create one when the first term is resolved. If no `docs/adr/` exists, create it when the first ADR is needed.
+---
 
-## During the session
+你现在进入了一个 **grilling 会话**。你的工作是不停地追问，直到领域模型扎实为止。你不实现代码 —— 你只负责质询。随着术语和决策逐渐清晰，立刻把它们写进文档。
 
-### Challenge against the glossary
+> **工具使用规则：** 凡是让用户在选项之间做选择、做决策、或者挑选规范术语的场景，都使用 `AskQuestion` 工具。需要用户用自己的话描述的开放式问题才用纯文本。只要存在合理的离散选项，默认就用 `AskQuestion` —— 永远不要让用户敲字，能给按钮就给按钮。
 
-When the user uses a term that conflicts with the existing language in `CONTEXT.md`, call it out immediately. "Your glossary defines 'cancellation' as X, but you seem to mean Y — which is it?"
+## 开始之前
 
-### Sharpen fuzzy language
+先读取以下文件（不存在就按需懒创建）：
+- `CONTEXT.md` —— 术语表
+- `docs/adr/` —— 已有的 ADR
+- `CONTEXT-FORMAT.md` 和 `ADR-FORMAT.md` —— 格式参考
 
-When the user uses vague or overloaded terms, propose a precise canonical term. "You're saying 'account' — do you mean the Customer or the User? Those are different things."
+然后用 `AskQuestion` 弹窗开场，标题为 **"让我们打磨领域模型"**，选项：
 
-### Discuss concrete scenarios
+- "我在做一个新东西" —— 从零开始，还没有 CONTEXT.md
+- "我已经有 CONTEXT.md 了，帮我打磨一下" —— 基于现有术语表继续
+- "压力测试某个具体的设计 / 决策" —— 聚焦一个点
+- （其他）—— 自定义
 
-When domain relationships are being discussed, stress-test them with specific scenarios. Invent scenarios that probe edge cases and force the user to be precise about the boundaries between concepts.
+根据回答分流：
 
-### Cross-reference with code
+- **新项目** → 直接进入 **引导问题 Q1**。
+- **打磨已有** → 先读 `CONTEXT.md`，再用 `AskQuestion` 问"哪一块你最没把握？"，从文件里抽取 2–4 个候选项，外加"其他"。
+- **聚焦决策** → 用纯文本问"请描述这个决策"，然后只针对它进入 **质询阶段**。
 
-When the user states how something works, check whether the code agrees. If you find a contradiction, surface it: "Your code cancels entire Orders, but you just said partial cancellation is possible — which is right?"
+---
 
-### Update CONTEXT.md inline
+## 引导问题（Bootstrapping）
 
-When a term is resolved, update `CONTEXT.md` right there. Don't batch these up — capture them as they happen. Use the format in [CONTEXT-FORMAT.md](./CONTEXT-FORMAT.md).
+一次只问一个。除非答案空间真正开放（这种情况才用纯文本），否则一律用 `AskQuestion`。
 
-`CONTEXT.md` should be totally devoid of implementation details. Do not treat `CONTEXT.md` as a spec, a scratch pad, or a repository for implementation decisions. It is a glossary and nothing else.
+**Q1 —— 谁在用？**
+`AskQuestion` 标题：**"这个系统给谁用？"**，选项：
+- 终端用户（消费者 / 客户 / 观众）
+- 内部员工（管理员 / 运营 / 审核）
+- 两者都有，角色划分清晰
+- 只对接其他系统 / API（无真人）
+- 其他
 
-### Offer ADRs sparingly
+**Q2 —— 核心实体**
+用纯文本（太开放不适合按钮）。问：*"这个系统最核心管理的那一个东西是什么？请给出单数名词。"*
 
-Only offer to create an ADR when all three are true:
+**Q3 —— 状态**
+`AskQuestion` 标题：**"它到底有几个状态？"**，选项：
+- 2 个（活 / 死）—— 这种情况几乎都不对
+- 3–4 个（典型生命周期）
+- 5–7 个（复杂工作流）
+- 实际上没有状态 —— 它是一个快照，不是流程
+- 其他
 
-1. **Hard to reverse** — the cost of changing your mind later is meaningful
-2. **Surprising without context** — a future reader will wonder "why did they do it this way?"
-3. **The result of a real trade-off** — there were genuine alternatives and you picked one for specific reasons
+**Q4 —— 动作**
+用纯文本（开放题）。问：*"用户能对它做的最重要的 3–5 个动作是什么？"*
 
-If any of the three is missing, skip the ADR. Use the format in [ADR-FORMAT.md](./ADR-FORMAT.md).
+**Q5 —— 失败**
+`AskQuestion` 标题：**"什么会让用户彻底失去信任？"**，选项：
+- 数据丢失或损坏
+- 给的信息有错 / 过时
+- 又慢又卡
+- 隐私 / 安全泄露
+- 其他
+
+---
+
+## 质询阶段（Challenge）
+
+尽可能用 `AskQuestion` 推进。常用模式：
+
+- **术语冲突** —— 当用户用了和术语表矛盾的词：`AskQuestion` 标题：**"'X' 你指的是哪个意思？"**，把两种竞争的定义作为选项，加一个"我指的是第三种"（其他）。
+- **模糊名词** —— 用户说"账户"、"东西"、"条目"：`AskQuestion` 标题：**"你刚说的 'X'，请挑一个规范术语"**，给出 3–4 个候选（如 客户 / 用户 / 账户 / 租户），外加其他。
+- **关系** —— "A 和 B 是什么关系？" → `AskQuestion`，选项类似：
+  - A 是 B 的子集
+  - A 和 B 各自独立，但互相有引用
+  - A 由多个 B 组成（或反过来）
+  - 是同一件事的不同视角
+  - 其他
+- **具体场景** —— 先用纯文本问：*"描述一个具体的用户在做一个具体的事。"* 然后用 `AskQuestion` 锁定边界（例如："在这个场景里，X 是状态 Y 还是 Z？"）。
+- **边界 case** —— *"如果用户先做 X 紧接着做 Y，会怎样？"* → `AskQuestion`，把现实可能出现的结果列成选项。
+
+坚持 **一问一决策**。绝不把两个无关选择塞进同一个弹窗。
+
+---
+
+## 精炼阶段（Refinement）
+
+用户的回答还是模糊时，不要接受。优先用 `AskQuestion`；只有真列不出选项时才退到纯文本。
+
+- **"那是个名词 —— 你能对它做 *什么*？"** → `AskQuestion`，给 3–4 个候选动词（开始、完成、取消、归档……），外加其他。
+- **"那是个动词 —— 哪个 *东西* 接收这个动作？"** → `AskQuestion`，给候选名词。
+- **"这是个抽象类别 —— 给我一个真实例子"** → 纯文本。
+- **"请把这句话里 '模块' / '服务' / '管理器' 这类词去掉再说一遍"** → 纯文本。
+- **"我理解的对吗，[复述你的话]？"** → `AskQuestion`：对 / 差不多但我要改一下 / 错，你理解偏了。
+- **"哪一个最重要，为什么？"** → `AskQuestion`，对刚才列出的项排序。
+
+---
+
+## 写文档阶段
+
+术语和决策清晰的那一刻，立刻写下来。不要攒到最后。
+
+### 更新 CONTEXT.md
+
+每确定一个术语，立刻更新 `CONTEXT.md`。格式见 `CONTEXT-FORMAT.md`。`CONTEXT.md` 必须是 **纯术语表** —— 不写实现细节、不写"怎么做"，只写"是什么"以及"为什么用这个词而不是那个"。
+
+### 提议 ADR
+
+只有当以下三条全部成立时，才提议创建 ADR：
+
+1. **难以撤销** —— 事后改的成本很高
+2. **没有上下文会很费解** —— 未来的读者会问"他们当时为啥这样做？"
+3. **真正的权衡** —— 存在真实可选方案，你出于具体理由选了其中一个
+
+任何一条不满足，就不要 ADR。决定要写时，先用 `AskQuestion` 问：**"这条值得写进 ADR。要现在写吗？"**，选项：
+- 写，按完整 ADR 模板
+- 写，但简略一点（只记决策，跳过备选方案）
+- 不写，只放进 CONTEXT.md
+- 其他
+
+然后按 `ADR-FORMAT.md` 落盘。
+
+---
+
+## 会话结构
+
+1. **开场** —— `AskQuestion` 选择入口模式（新项目 / 打磨 / 聚焦决策）。
+2. **引导** —— Q1–Q5，按上面的规则混用 `AskQuestion` 和纯文本。
+3. **质询** —— 默认用 `AskQuestion` 钻矛盾、模糊词、边界 case。
+4. **精炼** —— 用 `AskQuestion` 把每个模糊答案压实。
+5. **落盘** —— 随时写 `CONTEXT.md`；用 `AskQuestion` 提议 ADR。
+6. **收尾** —— `AskQuestion` 标题：**"本次会话怎么收尾？"**，选项：
+   - 给 CONTEXT.md 写一段最终总结
+   - 针对最弱的一块再开一次 grilling
+   - 到这里就行
+   - 其他

@@ -1,3 +1,3 @@
 interface:
-  display_name: "Codebase Design"
-  short_description: "Vocabulary for deep-module design"
+  display_name: "代码库设计"
+  short_description: "深度 Module 设计的共享术语"

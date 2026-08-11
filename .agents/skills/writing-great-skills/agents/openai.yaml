@@ -1,5 +1,5 @@
 interface:
-  display_name: "Writing Great Skills"
-  short_description: "Principles for predictable skills"
+  display_name: "编写高质量 Skill"
+  short_description: "打造可预测 Skill 的原则"
 policy:
   allow_implicit_invocation: false

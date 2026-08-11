@@ -1,75 +1,81 @@
 ---
 name: to-spec
-description: Turn the current conversation into a spec and publish it to the project issue tracker — no interview, just synthesis of what you've already discussed.
+description: 将当前对话转化为 Spec 并发布到项目 issue tracker——不进行访谈，只综合你已经讨论过的内容。
 disable-model-invocation: true
 ---
 
-This skill takes the current conversation context and codebase understanding and produces a spec (you may know this document as a PRD). Do NOT interview the user — just synthesize what you already know.
+## 语言与术语
 
-The issue tracker and triage label vocabulary should have been provided to you — run `/setup-matt-pocock-skills` if not.
+与用户的对话、问题、选项和总结一律使用简体中文；生成或修改的所有 Markdown / ADR / Issue / Spec / PRD 等文档也以简体中文撰写。仅当用户明确要求其他语言时才切换。代码标识符、类型 / 函数 / 文件名、路径、CLI 命令、配置键、API / 协议 / 库 / 产品名、缩写以及机器读取字面量（如 `ready-for-agent`、`/setup-matt-pocock-skills`）保持原文。`Spec`、`PRD`、`ADR`、`Issue`、`ticket`、`tracer bullet`、`vertical slice`、`expand–contract`、`frontier`、`actor`、`feature`、`benefit` 等术语可保留英文，但模板标题、字段说明、提问内容与示例叙述都必须用中文组织。
 
-## Process
+## 概述
 
-1. Explore the repo to understand the current state of the codebase, if you haven't already. Use the project's domain glossary vocabulary throughout the spec, and respect any ADRs in the area you're touching.
+本 skill 会基于当前对话上下文和已掌握的代码库认知，产出一份 Spec（你可能也把它叫做 PRD）。**不要**对用户进行访谈——综合你已经知道的内容即可。
 
-2. Sketch out the seams at which you're going to test the feature. Existing seams should be preferred to new ones. Use the highest seam possible. If new seams are needed, propose them at the highest point you can. The fewer seams across the codebase, the better - the ideal number is one.
+issue tracker 与 triage 标签词汇应当已经被提供给你——若还没有，请先运行 `/setup-matt-pocock-skills`。
 
-Check with the user that these seams match their expectations.
+## 流程
 
-3. Write the spec using the template below, then publish it to the project issue tracker. Apply the `ready-for-agent` triage label - no need for additional triage.
+1. 探索仓库以了解代码库现状（如果还没有）。整份 Spec 中都使用项目的领域术语词汇，并尊重你所触及区域内的所有 ADR。
+
+2. 勾画准备测试该功能时的接缝。优先使用已有接缝而非新增接缝；能利用更高层的接缝就尽量利用。如需新增接缝，请在尽量高的层级提出。代码库中的接缝数量越少越好——理想状态是只有一个。
+
+   与用户核对，确认这些接缝符合他们的预期。
+
+3. 按下面的模板撰写 Spec，然后发布到项目 issue tracker。打上 `ready-for-agent` triage 标签——无需额外的 triage。
 
 <spec-template>
 
-## Problem Statement
+## 问题陈述
 
-The problem that the user is facing, from the user's perspective.
+用户当前面临的问题，从用户的视角描述。
 
-## Solution
+## 解决方案
 
-The solution to the problem, from the user's perspective.
+针对上述问题给出的解决方案，同样从用户视角描述。
 
-## User Stories
+## 用户故事
 
-A LONG, numbered list of user stories. Each user story should be in the format of:
+一条**长长的、带编号**的用户故事列表。每条用户故事应采用以下格式：
 
-1. As an <actor>, I want a <feature>, so that <benefit>
+1. 作为 <actor>，我希望 <feature>，以便 <benefit>
 
 <user-story-example>
-1. As a mobile bank customer, I want to see balance on my accounts, so that I can make better informed decisions about my spending
+1. 作为移动银行客户，我希望看到自己账户的余额，以便做出更明智的消费决策。
 </user-story-example>
 
-This list of user stories should be extremely extensive and cover all aspects of the feature.
+这份用户故事列表必须非常详尽，覆盖该功能的方方面面。
 
-## Implementation Decisions
+## 实现决策
 
-A list of implementation decisions that were made. This can include:
+列出已做出的实现决策。可包含：
 
-- The modules that will be built/modified
-- The interfaces of those modules that will be modified
-- Technical clarifications from the developer
-- Architectural decisions
-- Schema changes
-- API contracts
-- Specific interactions
+- 将要新建或修改的模块
+- 这些模块将被修改的接口
+- 来自开发者的技术澄清
+- 架构决策
+- Schema 变更
+- API 契约
+- 具体的交互方式
 
-Do NOT include specific file paths or code snippets. They may end up being outdated very quickly.
+不要包含具体的文件路径或代码片段——它们可能很快过时。
 
-Exception: if a prototype produced a snippet that encodes a decision more precisely than prose can (state machine, reducer, schema, type shape), inline it within the relevant decision and note briefly that it came from a prototype. Trim to the decision-rich parts — not a working demo, just the important bits.
+例外：如果某个原型产出的片段能以比散文更精确的方式编码一项决策（状态机、reducer、schema、类型形态），可以把它内联到对应决策处，并简短标注它来自原型。裁剪到只剩决策密度最高的部分——不是可运行的 demo，只保留那些关键片段。
 
-## Testing Decisions
+## 测试决策
 
-A list of testing decisions that were made. Include:
+列出已做出的测试决策。包括：
 
-- A description of what makes a good test (only test external behavior, not implementation details)
-- Which modules will be tested
-- Prior art for the tests (i.e. similar types of tests in the codebase)
+- 一段对"何为好的测试"的描述（只测外部行为，不测实现细节）
+- 哪些模块将被测试
+- 测试的先例参考（即代码库中已有的同类测试）
 
-## Out of Scope
+## 不在范围内
 
-A description of the things that are out of scope for this spec.
+描述本 Spec 不涵盖的事项。
 
-## Further Notes
+## 进一步说明
 
-Any further notes about the feature.
+任何关于该功能的其它补充说明。
 
 </spec-template>

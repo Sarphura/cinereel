@@ -1,3 +1,3 @@
 interface:
-  display_name: "Code Review"
-  short_description: "Review a diff on standards and spec"
+  display_name: "代码评审"
+  short_description: "沿规范与需求两轴审查一份 diff"

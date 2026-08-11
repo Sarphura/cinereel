@@ -85,3 +85,5 @@ test/
 .peer-route-store
 .sidecar-store
 .demo
+
+/jellyfin

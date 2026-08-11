@@ -24,7 +24,7 @@ importers:
         specifier: ^4.0.18
         version: 4.0.18(@types/node@25.3.2)(jiti@2.6.1)(jsdom@27.4.0(@noble/hashes@1.8.0))(lightningcss@1.32.0)(terser@5.48.0)(tsx@4.21.0)(yaml@2.8.3)
 
-  apps/hyper-agent:
+  apps/hyper-client:
     dependencies:
       '@nestjs/common':
         specifier: ^11.1.28
