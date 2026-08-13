@@ -3,7 +3,7 @@
  */
 import { Controller, Get } from '@nestjs/common'
 import { ApiOkResponse, ApiTags } from '@nestjs/swagger'
-import { HealthResponseDto } from '../dto/health.dto.js'
+import { HealthResponseDto } from '../../dto/health.dto.js'
 
 @ApiTags('health')
 @Controller('healthz')

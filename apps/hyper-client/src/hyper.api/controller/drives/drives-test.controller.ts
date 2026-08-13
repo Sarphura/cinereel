@@ -22,8 +22,8 @@ import {
 import { ApiOperation, ApiTags } from '@nestjs/swagger'
 import { z } from 'zod'
 import { ZodValidationPipe } from 'nestjs-zod'
-import { SDK_HANDLE } from '../../hyper.domain/bootstrap/bootstrap.module.js'
-import type { SDK } from '../../hyper.infrastructure/types/hyperdrive.js'
+import { SDK_HANDLE } from '../../../hyper.domain/bootstrap/bootstrap.module.js'
+import type { SDK } from '../../../hyper.infrastructure/types/hyperdrive.js'
 
 interface SyntheticConnection {
   remotePublicKey: Buffer

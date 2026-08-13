@@ -4,10 +4,10 @@
 import { Controller, Get, Inject, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 import { ZodValidationPipe } from 'nestjs-zod'
-import { SwarmService } from '../../hyper.domain/model/swarm.service.js'
-import { PeerInfoDto } from '../dto/swarm.dto.js'
-import { SECURITY_BEARER } from '../swagger/security.constants.js'
-import { BodyOptional } from '../decorators/body-optional.decorator.js'
+import { SwarmService } from '../../../hyper.domain/model/swarm.service.js'
+import { PeerInfoDto } from '../../dto/swarm.dto.js'
+import { SECURITY_BEARER } from '../../swagger/security.constants.js'
+import { BodyOptional } from '../../decorators/body-optional.decorator.js'
 
 @ApiTags('swarm')
 @ApiBearerAuth(SECURITY_BEARER)

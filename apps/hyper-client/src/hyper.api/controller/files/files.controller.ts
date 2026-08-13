@@ -1,26 +1,18 @@
-/**
- * FilesController — `GET /v1/files/:driveKey/*` (ticket 11, ADR 0047).
- *
- * Range-aware streaming for trailer playback. Path-parameter style: the
- * catch-all segment after `:driveKey` is the file path inside the drive.
- * The endpoint honours the `Range` header per RFC 9110, returning 200
- * for full bodies, 206 for partial, 416 for unsatisfiable / multi-range,
- * and 400 for malformed input. ProblemDetails is RFC 9457 throughout.
- *
- * This is the only read path on the Hyper Agent. Writes and deletes
- * remain on `DrivesController` (`PUT`/`DELETE /v1/drives/:key/file`).
- */
 import {
   Controller,
+  Delete,
   Get,
   Headers,
   Inject,
   Param,
+  Put,
+  Query,
   Req,
   Res,
 } from '@nestjs/common'
 import {
   ApiBearerAuth,
+  ApiConsumes,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
@@ -29,10 +21,11 @@ import {
 } from '@nestjs/swagger'
 import type { Request, Response } from 'express'
 import { Transform } from 'node:stream'
-import { FileService } from '../../hyper.domain/model/files.service.js'
-import { SECURITY_BEARER } from '../swagger/security.constants.js'
-import { parseRange } from '../../hyper.infrastructure/http/range.js'
-import { contentTypeForPath } from '../../hyper.infrastructure/http/content-type.js'
+import { ZodValidationPipe } from 'nestjs-zod'
+import { FileService } from '../../../hyper.domain/model/files.service.js'
+import { SECURITY_BEARER } from '../../swagger/security.constants.js'
+import { parseRange } from '../../../hyper.infrastructure/http/range.js'
+import { contentTypeForPath } from '../../../hyper.infrastructure/http/content-type.js'
 import {
   INVALID_RANGE,
   INVALID_DRIVE_KEY,
@@ -40,14 +33,82 @@ import {
   RANGE_NOT_SATISFIABLE,
   MULTI_RANGE_NOT_SUPPORTED,
   HttpProblem,
-} from '../../hyper.infrastructure/errors/index.js'
-import { HEX64 } from '../../hyper.infrastructure/types/key.js'
+} from '../../../hyper.infrastructure/errors/index.js'
+import { HEX64 } from '../../../hyper.infrastructure/types/key.js'
+import {
+  FileDeleteQueryDto,
+  HyperdriveEntryDto,
+  PathQueryDto,
+  TreeQueryDto,
+} from '../../dto/drives.dto.js'
+import { RawBody } from '../../decorators/raw-body.decorator.js'
 
 @ApiTags('files')
 @ApiBearerAuth(SECURITY_BEARER)
 @Controller('v1/files')
 export class FilesController {
   constructor(@Inject(FileService) private readonly files: FileService) {}
+
+  // ── GET :driveKey/ (tree listing) ───────────────────────────────────
+
+  @Get(':driveKey/')
+  @ApiOperation({ operationId: 'tree' })
+  @ApiParam({ name: 'driveKey', description: 'Hex64 drive key' })
+  async tree(
+    @Param('driveKey') driveKey: string,
+    @Query(new ZodValidationPipe(TreeQueryDto.schema)) q: TreeQueryDto,
+  ) {
+    return this.files.getTree(driveKey, q.prefix, q.wait ?? true)
+  }
+
+  // ── HEAD :driveKey/* (entry metadata) ────────────────────────────────
+
+  @Get(':driveKey/~entry')
+  @ApiOperation({ operationId: 'entry' })
+  @ApiParam({ name: 'driveKey', description: 'Hex64 drive key' })
+  @ApiOkResponse({ type: HyperdriveEntryDto })
+  async entry(
+    @Param('driveKey') driveKey: string,
+    @Query(new ZodValidationPipe(PathQueryDto.schema)) q: PathQueryDto,
+  ): Promise<HyperdriveEntryDto | null> {
+    const out = await this.files.getEntry(driveKey, q.path, q.wait ?? true)
+    return (out ?? null) as HyperdriveEntryDto | null
+  }
+
+  // ── PUT :driveKey/* (write file) ─────────────────────────────────────
+
+  @Put(':driveKey/*')
+  @ApiOperation({ operationId: 'writeFile' })
+  @ApiConsumes('application/octet-stream')
+  @ApiParam({ name: 'driveKey', description: 'Hex64 drive key' })
+  @ApiOkResponse({ schema: { example: { ok: true, byteLength: 0 } } })
+  async writeFile(
+    @Param('driveKey') driveKey: string,
+    @Req() req: Request,
+    @RawBody() body: Buffer,
+    @Headers('x-metadata') metaHdr?: string,
+  ): Promise<{ ok: true; byteLength: number }> {
+    const splat = this.extractSplat(req)
+    const metadata =
+      typeof metaHdr === 'string' && metaHdr.length > 0 ? JSON.parse(metaHdr) : undefined
+    return this.files.write(driveKey, splat, body, metadata)
+  }
+
+  // ── DELETE :driveKey/* (delete file/directory) ───────────────────────
+
+  @Delete(':driveKey/*')
+  @ApiOperation({ operationId: 'deleteEntry' })
+  @ApiParam({ name: 'driveKey', description: 'Hex64 drive key' })
+  async deleteEntry(
+    @Param('driveKey') driveKey: string,
+    @Query(new ZodValidationPipe(FileDeleteQueryDto.schema)) q: FileDeleteQueryDto,
+    @Req() req: Request,
+  ): Promise<{ ok: true }> {
+    const splat = this.extractSplat(req)
+    return this.files.deleteEntry(driveKey, splat, q.recursive ?? false)
+  }
+
+  // ── GET :driveKey/* (read file with Range support) ───────────────────
 
   /**
    * `GET /v1/files/:driveKey/<rest...>` with optional `Range` header.
@@ -85,16 +146,7 @@ export class FilesController {
       throw new HttpProblem(INVALID_DRIVE_KEY, `driveKey is not hex64: ${driveKey.slice(0, 16)}`)
     }
 
-    // NestJS exposes the splat under `path` as a string array; the
-    // string-indexed array path is not populated because NestJS
-    // introspects the route's wildcard differently.
-    const splatRaw = (req.params as Record<string, unknown>)['path']
-    const splat = Array.isArray(splatRaw)
-      ? splatRaw.join('/')
-      : typeof splatRaw === 'string'
-        ? splatRaw
-        : ((req.params as Record<string, string | undefined>)[0] ?? '')
-    const target = splat.length === 0 ? '/' : '/' + splat.replace(/^\/+/, '')
+    const target = this.extractSplat(req)
 
     const { size, mounted } = await this.resolveSize(driveKey, target)
     if (!mounted) {
@@ -138,6 +190,23 @@ export class FilesController {
     const stream = await this.files.readStream(driveKey, target, true)
     const sliced = sliceStream(stream, start, end)
     await pipeAll(sliced, res)
+  }
+
+  /**
+   * Extract the splat (catch-all) segment from Express route `/:driveKey/*`.
+   *
+   * NestJS exposes the splat under `path` as a string array; the
+   * string-indexed array path is not populated because NestJS
+   * introspects the route's wildcard differently.
+   */
+  private extractSplat(req: Request): string {
+    const splatRaw = (req.params as Record<string, unknown>)['path']
+    const splat = Array.isArray(splatRaw)
+      ? splatRaw.join('/')
+      : typeof splatRaw === 'string'
+        ? splatRaw
+        : ((req.params as Record<string, string | undefined>)[0] ?? '')
+    return splat.length === 0 ? '/' : '/' + splat.replace(/^\/+/, '')
   }
 
   /**
