@@ -51,7 +51,7 @@ export class DrivesController {
   @Post()
   @ApiOperation({ 
     operationId: 'createDrive',
-    summary: '创建新的 Hyperdrive'
+    summary: 'Create new drive'
   })
   @ApiBody({ type: CreateDriveRequestDto })
   @ApiOkResponse({ type: DriveResponseDto })
