@@ -68,6 +68,7 @@ export class DriveService implements DriveInterface, OnModuleInit {
     }
   }
 
+  // Need to use this mount function, if user not open autoJoin setting in SDK
   async mountDrive(driveKey: string): Promise<Boolean> {
     const drive = await this.sdk.getDrive(driveKey)
     this.sdk.join(drive.discoveryKey)
@@ -77,6 +78,7 @@ export class DriveService implements DriveInterface, OnModuleInit {
   async unmountDrive(driveKey: string): Promise<Boolean> {
     const drive = await this.sdk.getDrive(driveKey)
     this.sdk.leave(drive.discoveryKey)
+    await drive.close()
     return true
   }
 
