@@ -9,17 +9,12 @@
   },
   "main": "dist/main.js",
   "scripts": {
-    "dev": "SIDECAR_ENV_FILE=.env.development NODE_ENV=development node --env-file-if-exists=.env.development --enable-source-maps --watch --import tsx/esm src/main.ts",
-    "dev:peer": "SIDECAR_ENV_FILE=.env.peer NODE_ENV=development node --env-file-if-exists=.env.development --env-file-if-exists=.env.peer --enable-source-maps --watch --import tsx/esm src/main.ts",
-    "dev:bootstrap": "SIDECAR_ENV_FILE=.env.bootstrap NODE_ENV=development node --env-file-if-exists=.env.bootstrap --enable-source-maps --import tsx/esm src/main.ts",
+    "dev": "NODE_ENV=development tsx watch src/main.ts",
     "start": "node --enable-source-maps dist/main.js",
-    "start:prod": "SIDECAR_ENV_FILE=.env.production NODE_ENV=production node --enable-source-maps dist/main.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "lint:sdk-boundary": "node ../../scripts/check-sdk-boundary.mjs",
-    "test:openapi:snapshot": "UPDATE_SNAPSHOT=1 pnpm test -- test/openapi.spec.ts"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.28",
@@ -30,8 +25,10 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.4",
     "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
     "express": "^4.22.2",
     "hyper-sdk": "^6.2.2",
+    "hyperdrive": "^13.3.3",
     "nestjs-pino": "^4.6.1",
     "nestjs-zod": "^4.3.1",
     "pino": "^9.6.0",

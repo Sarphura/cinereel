@@ -68,6 +68,7 @@ temp/
 .storage/
 storage/
 corestore/
+.hyper-storage/
 
 cache/
 test/
@@ -87,3 +88,4 @@ test/
 .demo
 
 /jellyfin
+

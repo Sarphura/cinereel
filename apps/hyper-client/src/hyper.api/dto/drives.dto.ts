@@ -18,11 +18,15 @@ export class DriveDto extends createZodDto(DriveResponseSchema) {} // 向后兼�
 export class DriveDescriptorDto extends createZodDto(DriveResponseSchema) {} // 向后兼容别名
 
 export const CreateDriveRequestSchema = z.object({
-  namespace: z.string().min(1),
-  name: z.string().min(1),
-  type: DriveTypeSchema,
+  namespace: z.string().min(1).describe('Drive 命名空间'),
+  name: z.string().min(1).describe('Drive 名称'),
+  type: DriveTypeSchema.describe('Drive 类型：metadata 或 blob'),
 })
-export class CreateDriveRequestDto extends createZodDto(CreateDriveRequestSchema) {}
+export class CreateDriveRequestDto extends createZodDto(CreateDriveRequestSchema) {
+  namespace!: string
+  name!: string
+  type!: 'metadata' | 'blob'
+}
 
 export const DriveEntryResponseSchema = z.object({
   key: z.string(),

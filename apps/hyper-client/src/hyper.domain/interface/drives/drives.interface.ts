@@ -1,7 +1,7 @@
 import type { CreateDriveRequestDto, DriveResponseDto } from '@hyper.api/dto/drives.dto';
 
 export interface DriveInterface {
-  createDrive(request: CreateDriveRequestDto): Promise<Boolean>;
+  createDrive(request: CreateDriveRequestDto): Promise<DriveResponseDto>;
   mountDrive(driveKey: string): Promise<Boolean>
   
   deleteDrive(driveKey: string): Promise<Boolean>;

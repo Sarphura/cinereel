@@ -50,12 +50,18 @@ importers:
       cors:
         specifier: ^2.8.6
         version: 2.8.6
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       express:
         specifier: ^4.22.2
         version: 4.22.2
       hyper-sdk:
         specifier: ^6.2.2
         version: 6.2.2(bare-buffer@3.6.2)(bare-pipe@4.2.2(bare-buffer@3.6.2))(bare-url@2.4.2)
+      hyperdrive:
+        specifier: ^13.3.3
+        version: 13.3.3(bare-buffer@3.6.2)(bare-url@2.4.2)
       nestjs-pino:
         specifier: ^4.6.1
         version: 4.6.1(@nestjs/common@11.1.28(class-transformer@0.5.1)(class-validator@0.14.4)(reflect-metadata@0.2.2)(rxjs@7.8.2))(pino-http@11.0.0)(pino@9.14.0)(rxjs@7.8.2)
@@ -4038,6 +4044,10 @@ packages:
 
   dotenv@17.4.1:
     resolution: {integrity: sha512-k8DaKGP6r1G30Lx8V4+pCsLzKr8vLmV2paqEj1Y55GdAgJuIqpRp5FfajGF8KtwMxCz9qJc6wUIJnm053d/WCw==}
+    engines: {node: '>=12'}
+
+  dotenv@17.4.2:
+    resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
 
   dunder-proto@1.0.1:
@@ -10747,6 +10757,8 @@ snapshots:
   dotenv@16.6.1: {}
 
   dotenv@17.4.1: {}
+
+  dotenv@17.4.2: {}
 
   dunder-proto@1.0.1:
     dependencies:

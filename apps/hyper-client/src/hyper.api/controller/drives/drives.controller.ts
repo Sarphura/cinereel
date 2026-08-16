@@ -16,43 +16,50 @@ import {
 } from '@nestjs/common'
 import {
   ApiBearerAuth,
+  ApiBody,
   ApiOkResponse,
   ApiOperation,
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
 import { ZodValidationPipe } from 'nestjs-zod'
-import { DriveService } from '@hyper.domain/obsolete/drives.service.js'
+import { DriveService } from '@hyper.implementation/drives.service.js'
+import { DRIVE_SERVICE } from './drives.tokens.js'
 import {
   CreateDriveRequestDto,
-  DriveDto,
+  DriveResponseDto,
 } from '../../dto/drives.dto.js'
-import { SECURITY_BEARER } from '../../swagger/security.constants.js'
 
 @ApiTags('drives')
-@ApiBearerAuth(SECURITY_BEARER)
+// @ApiBearerAuth(SECURITY_BEARER)
 @Controller('v1/drives')
 export class DrivesController {
-  constructor(@Inject(DriveService) private readonly drives: DriveService) {}
-
-  // ── CRUD ─────────────────────────────────────────────────────────
-
+  constructor(
+    @Inject(DRIVE_SERVICE) 
+    private readonly driveService: DriveService
+  ) {
+    
+  }
+    
   @Get()
   @ApiOperation({ operationId: 'listDrives' })
-  @ApiOkResponse({ type: DriveDto, isArray: true })
-  list(): Promise<DriveDto[]> {
-    return this.drives.list() as unknown as Promise<DriveDto[]>
+  @ApiOkResponse({ type: DriveResponseDto, isArray: true })
+  list(): Promise<DriveResponseDto[]> {
+    return this.driveService.getDrives()
   }
 
   @Post()
-  @ApiOperation({ operationId: 'createDrive' })
-  @ApiOkResponse({ type: DriveDto })
+  @ApiOperation({ 
+    operationId: 'createDrive',
+    summary: '创建新的 Hyperdrive'
+  })
+  @ApiBody({ type: CreateDriveRequestDto })
+  @ApiOkResponse({ type: DriveResponseDto })
   async create(
     @Body(new ZodValidationPipe(CreateDriveRequestDto.schema))
     body: CreateDriveRequestDto,
-  ): Promise<DriveDto> {
-    const desc = await this.drives.create(body.name, body.type)
-    return desc as DriveDto
+  ): Promise<DriveResponseDto> {
+    return this.driveService.createDrive(body)
   }
 
   @Delete(':key')
@@ -60,7 +67,31 @@ export class DrivesController {
   @ApiParam({ name: 'key', description: 'Hex64 drive key' })
   @ApiOkResponse({ schema: { example: { ok: true } } })
   async remove(@Param('key') key: string): Promise<{ ok: true }> {
-    await this.drives.remove(key)
+    await this.driveService.deleteDrive(key)
+    return { ok: true as const }
+  }
+
+  @Post(':key/mount')
+  @ApiOperation({ 
+    operationId: 'mountDrive',
+    summary: '加入 swarm 开始同步此 drive'
+  })
+  @ApiParam({ name: 'key', description: 'Hex64 drive key' })
+  @ApiOkResponse({ schema: { example: { ok: true } } })
+  async mount(@Param('key') key: string): Promise<{ ok: true }> {
+    await this.driveService.mountDrive(key)
+    return { ok: true as const }
+  }
+
+  @Post(':key/unmount')
+  @ApiOperation({ 
+    operationId: 'unmountDrive',
+    summary: '离开 swarm 停止同步此 drive'
+  })
+  @ApiParam({ name: 'key', description: 'Hex64 drive key' })
+  @ApiOkResponse({ schema: { example: { ok: true } } })
+  async unmount(@Param('key') key: string): Promise<{ ok: true }> {
+    await this.driveService.unmountDrive(key)
     return { ok: true as const }
   }
 }
