@@ -22,10 +22,10 @@ import {
   ApiTags,
 } from '@nestjs/swagger'
 import { ZodValidationPipe } from 'nestjs-zod'
-import { DriveService } from '../../../hyper.domain/model/drives.service.js'
+import { DriveService } from '@hyper.domain/obsolete/drives.service.js'
 import {
-  CreateDriveBodyDto,
-  DriveDescriptorDto,
+  CreateDriveRequestDto,
+  DriveDto,
 } from '../../dto/drives.dto.js'
 import { SECURITY_BEARER } from '../../swagger/security.constants.js'
 
@@ -39,20 +39,20 @@ export class DrivesController {
 
   @Get()
   @ApiOperation({ operationId: 'listDrives' })
-  @ApiOkResponse({ type: DriveDescriptorDto, isArray: true })
-  list(): Promise<DriveDescriptorDto[]> {
-    return this.drives.list() as unknown as Promise<DriveDescriptorDto[]>
+  @ApiOkResponse({ type: DriveDto, isArray: true })
+  list(): Promise<DriveDto[]> {
+    return this.drives.list() as unknown as Promise<DriveDto[]>
   }
 
   @Post()
   @ApiOperation({ operationId: 'createDrive' })
-  @ApiOkResponse({ type: DriveDescriptorDto })
+  @ApiOkResponse({ type: DriveDto })
   async create(
-    @Body(new ZodValidationPipe(CreateDriveBodyDto.schema))
-    body: CreateDriveBodyDto,
-  ): Promise<DriveDescriptorDto> {
+    @Body(new ZodValidationPipe(CreateDriveRequestDto.schema))
+    body: CreateDriveRequestDto,
+  ): Promise<DriveDto> {
     const desc = await this.drives.create(body.name, body.type)
-    return desc as DriveDescriptorDto
+    return desc as DriveDto
   }
 
   @Delete(':key')

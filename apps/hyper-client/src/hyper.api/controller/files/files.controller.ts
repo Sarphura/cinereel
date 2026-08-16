@@ -22,10 +22,10 @@ import {
 import type { Request, Response } from 'express'
 import { Transform } from 'node:stream'
 import { ZodValidationPipe } from 'nestjs-zod'
-import { FileService } from '../../../hyper.domain/model/files.service.js'
+import { FileService } from '@hyper.implementation/files.service.js'
 import { SECURITY_BEARER } from '../../swagger/security.constants.js'
-import { parseRange } from '../../../hyper.infrastructure/http/range.js'
-import { contentTypeForPath } from '../../../hyper.infrastructure/http/content-type.js'
+import { parseRange } from '@hyper.infrastructure/http/range.js'
+import { contentTypeForPath } from '@hyper.infrastructure/http/content-type.js'
 import {
   INVALID_RANGE,
   INVALID_DRIVE_KEY,
@@ -33,14 +33,14 @@ import {
   RANGE_NOT_SATISFIABLE,
   MULTI_RANGE_NOT_SUPPORTED,
   HttpProblem,
-} from '../../../hyper.infrastructure/errors/index.js'
-import { HEX64 } from '../../../hyper.infrastructure/types/key.js'
+} from '@hyper.infrastructure/errors/index.js'
+import { HEX64 } from '@hyper.infrastructure/types/key.js'
 import {
-  FileDeleteQueryDto,
-  HyperdriveEntryDto,
+  DeleteFileRequestDto,
   PathQueryDto,
-  TreeQueryDto,
-} from '../../dto/drives.dto.js'
+  GetTreeRequestDto,
+} from '../../dto/files.dto.js'
+import { DriveEntryResponseDto } from '../../dto/drives.dto.js'
 import { RawBody } from '../../decorators/raw-body.decorator.js'
 
 @ApiTags('files')
@@ -56,7 +56,7 @@ export class FilesController {
   @ApiParam({ name: 'driveKey', description: 'Hex64 drive key' })
   async tree(
     @Param('driveKey') driveKey: string,
-    @Query(new ZodValidationPipe(TreeQueryDto.schema)) q: TreeQueryDto,
+    @Query(new ZodValidationPipe(GetTreeRequestDto.schema)) q: GetTreeRequestDto,
   ) {
     return this.files.getTree(driveKey, q.prefix, q.wait ?? true)
   }
@@ -66,13 +66,13 @@ export class FilesController {
   @Get(':driveKey/~entry')
   @ApiOperation({ operationId: 'entry' })
   @ApiParam({ name: 'driveKey', description: 'Hex64 drive key' })
-  @ApiOkResponse({ type: HyperdriveEntryDto })
+  @ApiOkResponse({ type: DriveEntryResponseDto })
   async entry(
     @Param('driveKey') driveKey: string,
     @Query(new ZodValidationPipe(PathQueryDto.schema)) q: PathQueryDto,
-  ): Promise<HyperdriveEntryDto | null> {
+  ): Promise<DriveEntryResponseDto | null> {
     const out = await this.files.getEntry(driveKey, q.path, q.wait ?? true)
-    return (out ?? null) as HyperdriveEntryDto | null
+    return (out ?? null) as DriveEntryResponseDto | null
   }
 
   // ── PUT :driveKey/* (write file) ─────────────────────────────────────
@@ -101,7 +101,7 @@ export class FilesController {
   @ApiParam({ name: 'driveKey', description: 'Hex64 drive key' })
   async deleteEntry(
     @Param('driveKey') driveKey: string,
-    @Query(new ZodValidationPipe(FileDeleteQueryDto.schema)) q: FileDeleteQueryDto,
+    @Query(new ZodValidationPipe(DeleteFileRequestDto.schema)) q: DeleteFileRequestDto,
     @Req() req: Request,
   ): Promise<{ ok: true }> {
     const splat = this.extractSplat(req)

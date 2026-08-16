@@ -1,7 +1,5 @@
-/**
- * Health DTOs.
- */
-import { z, createZodDto } from '../../hyper.api/zod/schema-registry.js'
+import { z } from 'zod'
+import { createZodDto } from 'nestjs-zod'
 
 export const HealthResponseSchema = z.object({
   status: z.literal('ok'),

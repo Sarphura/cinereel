@@ -13,18 +13,11 @@
  * `imports` is the dependency order.
  */
 import { Module, type DynamicModule } from '@nestjs/common'
-import { CoreConfigModule } from './hyper.infrastructure/config/config.module.js'
-import { CoreLoggerModule } from './hyper.infrastructure/logging/logger.module.js'
-import { CoreSdkModule } from './hyper.infrastructure/sdk/sdk.module.js'
-import { SecurityModule } from './hyper.infrastructure/security/security.module.js'
-import { AuthMiddlewareModule } from './hyper.api/middleware/auth-middleware.module.js'
-import { BootstrapModule } from './hyper.domain/bootstrap/bootstrap.module.js'
 import { HealthModule } from './hyper.api/controller/health/health.module.js'
 import { VersionModule } from './hyper.api/controller/version/version.module.js'
 import { DrivesModule } from './hyper.api/controller/drives/drives.module.js'
 import { FilesModule } from './hyper.api/controller/files/files.module.js'
 import { SwarmModule } from './hyper.api/controller/swarms/swarm.module.js'
-import type { SharedTokenPort } from './hyper.infrastructure/security/security.tokens.js'
 
 @Module({})
 export class AppModule {
@@ -35,16 +28,10 @@ export class AppModule {
    * constructs the graph. Tests call `forRoot(testToken)` with a
    * deterministic value.
    */
-  static forRoot(sharedToken: SharedTokenPort): DynamicModule {
+  static forRoot(): DynamicModule {
     return {
       module: AppModule,
       imports: [
-        CoreConfigModule,
-        CoreLoggerModule,
-        CoreSdkModule.forRootAsync(),
-        SecurityModule.forRoot(sharedToken),
-        AuthMiddlewareModule,
-        BootstrapModule,
         HealthModule,
         VersionModule,
         DrivesModule,

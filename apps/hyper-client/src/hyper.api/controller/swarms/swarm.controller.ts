@@ -4,8 +4,8 @@
 import { Controller, Get, Inject, Param, Post } from '@nestjs/common'
 import { ApiBearerAuth, ApiOkResponse, ApiOperation, ApiParam, ApiTags } from '@nestjs/swagger'
 import { ZodValidationPipe } from 'nestjs-zod'
-import { SwarmService } from '../../../hyper.domain/model/swarm.service.js'
-import { PeerInfoDto } from '../../dto/swarm.dto.js'
+import { SwarmService } from '@hyper.domain/obsolete/swarm.service.js'
+import { GetPeerInfoResponseDto } from '../../dto/swarm.dto.js'
 import { SECURITY_BEARER } from '../../swagger/security.constants.js'
 import { BodyOptional } from '../../decorators/body-optional.decorator.js'
 
@@ -28,9 +28,9 @@ export class SwarmController {
 
   @Get('peers')
   @ApiOperation({ operationId: 'swarmPeers' })
-  @ApiOkResponse({ type: PeerInfoDto, isArray: true })
-  peers(): PeerInfoDto[] {
-    return this.swarm.getPeers() as unknown as PeerInfoDto[]
+  @ApiOkResponse({ type: GetPeerInfoResponseDto, isArray: true })
+  peers(): GetPeerInfoResponseDto[] {
+    return this.swarm.getPeers() as unknown as GetPeerInfoResponseDto[]
   }
 
   @Post('mount/:publicKey')

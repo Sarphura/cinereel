@@ -15,7 +15,14 @@
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
     "useDefineForClassFields": false,
-    "types": ["node"]
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@hyper.api/*": ["src/hyper.api/*"],
+      "@hyper.domain/*": ["src/hyper.domain/*"],
+      "@hyper.infrastructure/*": ["src/hyper.infrastructure/*"],
+      "@hyper.implementation/*": ["src/hyper.implementation/*"]
+    }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }
