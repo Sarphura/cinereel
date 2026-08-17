@@ -5,7 +5,7 @@ namespace CineReel.Service.Features.Trailers;
 
 /// <summary>
 /// Periodically evicts the trailer cache until total size is below
-/// the configured floor (ADR 0054). Eviction order is LRU by
+/// the configured floor. Eviction order is LRU by
 /// last-access time.
 /// </summary>
 public sealed class TrailerCacheMaintainer : BackgroundService

@@ -4,7 +4,7 @@ using CineReel.Service.Data.Entities;
 
 /// <summary>
 /// Thin surface the BT scheduler consumes. The default implementation
-/// wraps MonoTorrent's <c>ClientEngine</c> (ADR 0028); tests inject a
+/// wraps MonoTorrent's <c>ClientEngine</c>; tests inject a
 /// fake. The scheduler owns the per-subscription lifecycle but the
 /// engine owns the wire protocol.
 /// </summary>

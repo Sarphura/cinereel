@@ -6,7 +6,7 @@ namespace CineReel.Service.Features.Metadata;
 /// <summary>
 /// Computes the canonical SHA-256 descriptor hash for a remote
 /// drive. The scanner stores this on every <c>media_items</c> row
-/// (the <c>descriptor_hash</c> column from ADR 0008) so a later
+/// (the <c>descriptor_hash</c> column) so a later
 /// re-scan can short-circuit when the publisher hasn't touched the
 /// drive.
 /// </summary>

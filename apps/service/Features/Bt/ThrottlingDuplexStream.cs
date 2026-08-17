@@ -2,7 +2,7 @@ namespace CineReel.Service.Features.Bt;
 
 /// <summary>
 /// Stream decorator that enforces a per-second byte budget on reads
-/// and writes (ADR 0009). The decorator is intentionally simple: it
+/// and writes. The decorator is intentionally simple: it
 /// keeps a sliding window of bytes per second and blocks the calling
 /// thread on the next call when the budget is exceeded.
 /// </summary>

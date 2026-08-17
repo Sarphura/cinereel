@@ -2,11 +2,11 @@ namespace CineReel.Service.Features.Jellyfin;
 
 /// <summary>
 /// Canonical helpers for the on-disk folder name a <c>media_items</c>
-/// row becomes once pushed to Jellyfin (ADR 0007). The folder is
+/// row becomes once pushed to Jellyfin. The folder is
 /// <c>&lt;Title&gt; (&lt;Year&gt;) {imdb-&lt;id&gt;}</c> for direct matches
 /// and <c>&lt;Title&gt; (&lt;Year&gt;) {local-&lt;16hex&gt;}</c> for
-/// synthetic IDs (the latter is what the IMDB fallback chain in
-/// ticket 21 produces).
+/// synthetic IDs (the latter is what the IMDB fallback chain
+/// produces).
 /// </summary>
 public static class JellyfinFolderName
 {

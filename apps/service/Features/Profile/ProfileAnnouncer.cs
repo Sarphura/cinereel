@@ -6,7 +6,7 @@ namespace CineReel.Service.Features.Profile;
 
 /// <summary>
 /// Re-announces every local drive after a <see cref="ProfileUpdated"/>
-/// event (ADR 0014). The local main drive and every resource drive
+/// event. The local main drive and every resource drive
 /// in the collection get one <c>AnnounceAsync(wait: true)</c> per
 /// event so peers see the latest profile metadata.
 /// </summary>

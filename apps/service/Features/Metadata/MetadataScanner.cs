@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 namespace CineReel.Service.Features.Metadata;
 
 /// <summary>
-/// Default scan implementation for ticket 22. The scanner pulls every
+/// Default scan implementation. The scanner pulls every
 /// <c>movie.nfo</c> it finds under a subscription's drive, parses via
 /// <see cref="INfoParser"/>, resolves an IMDb ID via
 /// <see cref="IIMDBResolver"/>, and upserts a <c>media_items</c> row.

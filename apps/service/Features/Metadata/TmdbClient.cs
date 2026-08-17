@@ -7,8 +7,8 @@ using System.Text.Json.Serialization;
 namespace CineReel.Service.Features.Metadata;
 
 /// <summary>
-/// Thin TMDB client that calls <c>/search/movie</c> with title + year
-/// (ADR 0016, ticket 21). Tier 1 of the IMDb fallback chain — gated on
+/// Thin TMDB client that calls <c>/search/movie</c> with title + year.
+/// Tier 1 of the IMDb fallback chain — gated on
 /// a configured API key. Returning <c>null</c> means "no result; the
 /// caller should fall through to Tier 2".
 /// </summary>

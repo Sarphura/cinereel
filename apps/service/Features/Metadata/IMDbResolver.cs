@@ -4,7 +4,7 @@ using Microsoft.Extensions.Options;
 namespace CineReel.Service.Features.Metadata;
 
 /// <summary>
-/// Coordinates the IMDb fallback chain from ADR 0016 (ticket 21).
+/// Coordinates the IMDb fallback chain.
 /// If the parsed NFO already carries an IMDb ID, it is returned as
 /// <see cref="IDKind.Direct"/>. Otherwise Tier 1 (TMDB) is attempted
 /// only if an API key is configured. On Tier 1 success the resolved

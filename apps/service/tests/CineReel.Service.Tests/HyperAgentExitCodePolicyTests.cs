@@ -5,7 +5,7 @@ using Xunit;
 namespace CineReel.Service.Tests;
 
 /// <summary>
-/// Pin the per-exit-code action table from ticket 16. Each
+/// Pin the per-exit-code action table. Each
 /// documented exit code MUST map to a documented action and a
 /// documented exit code. The App Server's spawn-watch loop relies
 /// on this table; if the table changes, the operator-visible

@@ -5,8 +5,8 @@ using Microsoft.Extensions.Logging;
 namespace CineReel.Service.Features.Trailers;
 
 /// <summary>
-/// Warms the trailer cache when a torrent finishes downloading
-/// (ADR 0054). Looks up the media item, derives the cache key
+/// Warms the trailer cache when a torrent finishes downloading.
+/// Looks up the media item, derives the cache key
 /// (imdb or local id), and stores the trailer from the publisher's
 /// drive.
 /// </summary>

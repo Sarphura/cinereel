@@ -10,8 +10,7 @@ namespace CineReel.Service.Features.Recovery;
 /// SQLite-backed failure journal. Stores
 /// <c>(entity_type, entity_id, event_type, cause, last_attempted_at)</c>
 /// so the FailedEntitySweeper and the retry-now endpoint can replay the
-/// original event without keeping the in-memory state across restarts
-/// (ticket 32).
+/// original event without keeping the in-memory state across restarts.
 /// </summary>
 public sealed class EfEntityFailureJournal(IDbContextFactory<CinereelDbContext> dbFactory) : IEntityFailureJournal
 {
@@ -72,11 +71,11 @@ public sealed class EfEntityFailureJournal(IDbContextFactory<CinereelDbContext> 
 }
 
 /// <summary>
-/// Production failure marker (ticket 32). When an <see cref="IEntityDomainEvent"/>
+/// Production failure marker. When an <see cref="IEntityDomainEvent"/>
 /// exhausts its retries the marker records the entity as
 /// <c>subscriptions.state = failed</c> or
 /// <c>media_items.jellyfin_state = failed</c> and writes a journal entry.
-/// The FailedEntitySweeper (ticket 32) consumes those marks to drive
+/// The FailedEntitySweeper consumes those marks to drive
 /// recovery.
 /// </summary>
 public sealed class EfEntityFailureMarker(

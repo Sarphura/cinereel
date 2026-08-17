@@ -35,8 +35,7 @@ public sealed class LibraryRootDiskPressureProbe : IDiskPressureProbe
 /// <summary>
 /// Watches the library drive's free space. When it dips below
 /// <c>BandwidthPolicy.MinFreeSpaceBytes</c>, the monitor asks the
-/// scheduler to seed only the most recently accessed torrents
-/// (ADR 0009, ticket 26).
+/// scheduler to seed only the most recently accessed torrents.
 /// </summary>
 public sealed class DiskPressureMonitor : BackgroundService
 {

@@ -5,7 +5,7 @@ namespace CineReel.Service.Features.Version;
 
 /// <summary>
 /// Stable build / runtime identity for the Application Server.
-/// Per ADR 0033, the Sidecar reads X-Cinereel-Version from a `/version`
+/// The Sidecar reads X-Cinereel-Version from a `/version`
 /// endpoint on this server and refuses to talk to it if the versions diverge
 /// beyond the supported set. The endpoint is plain JSON, no auth.
 /// </summary>

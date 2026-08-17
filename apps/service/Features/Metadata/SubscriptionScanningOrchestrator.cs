@@ -8,8 +8,8 @@ using Microsoft.Extensions.Logging;
 namespace CineReel.Service.Features.Metadata;
 
 /// <summary>
-/// React to subscription lifecycle events by triggering a scan
-/// (ticket 22). Re-entrant scans for the same subscription are
+/// React to subscription lifecycle events by triggering a scan.
+/// Re-entrant scans for the same subscription are
 /// serialised via a <see cref="SemaphoreSlim"/>; scans across
 /// different subscriptions run concurrently.
 /// </summary>

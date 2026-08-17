@@ -6,7 +6,7 @@ namespace CineReel.Service.Infrastructure.Lifecycle;
 /// <summary>
 /// Runs <see cref="Microsoft.EntityFrameworkCore.RelationalDatabaseFacadeExtensions.MigrateAsync"/>
 /// at startup so a fresh deployment does not require a separate migration
-/// command (ADR 0030). Failures abort the host with a non-zero exit code
+/// command. Failures abort the host with a non-zero exit code
 /// and log the migration that failed so the operator can diagnose.
 /// </summary>
 public static class DatabaseMigrator

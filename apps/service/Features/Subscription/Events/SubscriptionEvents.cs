@@ -4,8 +4,8 @@ using CineReel.Service.Events;
 namespace CineReel.Service.Features.Subscription.Events;
 
 /// <summary>
-/// Fired when a subscription row is inserted. The scanner (ticket 22) and
-/// future Jellyfin pusher (ticket 23) consume this event to materialize
+/// Fired when a subscription row is inserted. The scanner and
+/// future Jellyfin pusher consume this event to materialize
 /// downstream state.
 /// </summary>
 public sealed record SubscriptionCreated(

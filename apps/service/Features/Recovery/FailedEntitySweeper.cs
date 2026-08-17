@@ -11,7 +11,7 @@ using Microsoft.Extensions.Logging;
 namespace CineReel.Service.Features.Recovery;
 
 /// <summary>
-/// Background reconciliation (ticket 32). Polls every 60 seconds;
+/// Background reconciliation. Polls every 60 seconds;
 /// re-publishes the original event for each failed subscription /
 /// media item so handlers can attempt the action again.
 /// </summary>

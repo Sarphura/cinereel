@@ -5,7 +5,7 @@ using CineReel.Service.Domain.Common;
 namespace CineReel.Service.Features.Metadata;
 
 /// <summary>
-/// XDocument-backed NFO parser (ADR 0012, ticket 20). It walks the
+/// XDocument-backed NFO parser. It walks the
 /// Kodi movie.nfo schema, extracts the documented fields, and shoves
 /// everything else into <see cref="NfoRawFields.Extensions"/>. The
 /// parser is tolerant of missing fields — only a malformed root or

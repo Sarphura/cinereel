@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 namespace CineReel.Service.Features.Jellyfin;
 
 /// <summary>
-/// Per-key async lock (ADR 0029). Pushes to different folders run in
+/// Per-key async lock. Pushes to different folders run in
 /// parallel; pushes to the same folder serialise. The lock is keyed
 /// by an opaque string (typically the IMDb or local ID).
 /// </summary>

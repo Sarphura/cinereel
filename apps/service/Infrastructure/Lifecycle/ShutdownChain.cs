@@ -3,7 +3,7 @@ using Microsoft.Extensions.Hosting;
 namespace CineReel.Service.Infrastructure.Lifecycle;
 
 /// <summary>
-/// Shutdown chain operator. Implements ADR 0055: drain HTTP, close the DB
+/// Shutdown chain operator. Implements: drain HTTP, close the DB
 /// context, forward SIGTERM to the Hyper Agent child process, wait 10 s,
 /// escalate to SIGKILL. The chain is registered with the host via
 /// <see cref="ApplicationLifetimeExtensions.AddCinereelShutdownChain"/>;

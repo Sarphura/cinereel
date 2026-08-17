@@ -11,11 +11,11 @@ using Microsoft.Extensions.Logging;
 namespace CineReel.Service.Features.Subscription;
 
 /// <summary>
-/// Owns the subscription lifecycle (ticket 18): the create-from-drive and
+/// Owns the subscription lifecycle: the create-from-drive and
 /// create-from-profile flows, the listing/get/delete endpoints, and the
 /// state machine transitions `Pending → Active/Failed`. Hyper Agent calls
 /// go through the read/write halves so a Polly-style retry can wrap the
-/// read side later (ticket 07).
+/// read side later.
 /// </summary>
 public sealed class SubscriptionService : ISubscriptionService
 {
@@ -99,7 +99,7 @@ public sealed class SubscriptionService : ISubscriptionService
 
         // The Hyper Agent doesn't expose a typed /profile.json read yet —
         // we surface a static placeholder so the picker UI has something
-        // to display when wiring the picker (ticket 22 / 24).
+        // to display when wiring the picker.
         return new ProfilePickerResponse(
             ProfileDriveKey: profileKeyRaw,
             PublisherName: "Publisher",

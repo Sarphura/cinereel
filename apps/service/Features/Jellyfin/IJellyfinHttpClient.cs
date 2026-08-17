@@ -1,7 +1,7 @@
 namespace CineReel.Service.Features.Jellyfin;
 
 /// <summary>
-/// HTTP / file-system boundary for Jellyfin pushes (ADR 0007, 0029).
+/// HTTP / file-system boundary for Jellyfin pushes.
 /// The default implementation writes to a configured local
 /// <c>Jellyfin:LibraryRoot</c>; tests inject a fake that captures the
 /// writes. The HTTP endpoint used by the real Jellyfin server is

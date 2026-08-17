@@ -5,7 +5,7 @@ namespace CineReel.Service.Infrastructure.HyperAgent;
 
 /// <summary>
 /// Response payload of the Hyper Agent's <c>GET /v1/version</c> endpoint.
-/// The shape is fixed by ADR 0065 and the Hyper Agent's Nest controller
+/// The shape is fixed by the Hyper Agent's Nest controller
 /// (see <c>apps/hyper-agent/src/feature/version/controller.ts</c>).
 /// </summary>
 public sealed record HyperAgentVersionResponse(
@@ -14,16 +14,16 @@ public sealed record HyperAgentVersionResponse(
 
 /// <summary>
 /// Probes the Hyper Agent's <c>GET /v1/version</c> endpoint and compares
-/// it to the Application Server's expected version. Ticket 10 wires this
-/// into the App Server's startup sequence: after <c>/healthz</c> returns
+/// it to the Application Server's expected version. This is wired into
+/// the App Server's startup sequence: after <c>/healthz</c> returns
 /// 200 the App Server issues a version probe and refuses to proceed if
 /// the strings differ. A mismatch is a fatal startup error with both
 /// versions in the log line and the documented exit code <c>76</c>.
 ///
 /// The probe is a small, side-effect-free object so tests can drive it
 /// against a fake <see cref="HttpMessageHandler"/> without spinning up
-/// the real Hyper Agent process (the integration smoke in ticket 18
-/// covers the full two-process boot).
+/// the real Hyper Agent process (the integration smoke covers the
+/// full two-process boot).
 /// </summary>
 public sealed class HyperAgentVersionProbe
 {
@@ -82,7 +82,7 @@ public sealed class HyperAgentVersionProbe
 /// Raised by <see cref="HyperAgentVersionProbe.EnsureAsync"/> when the
 /// Hyper Agent's reported <c>version</c> differs from the App Server's
 /// expected value. The fields are exposed so callers (and the integration
-/// smoke in ticket 18) can inspect both sides without re-parsing the
+/// smoke) can inspect both sides without re-parsing the
 /// message string.
 /// </summary>
 public sealed class HyperAgentVersionMismatchException : Exception

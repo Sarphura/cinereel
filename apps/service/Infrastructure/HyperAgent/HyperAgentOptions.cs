@@ -7,7 +7,7 @@ namespace CineReel.Service.Infrastructure.HyperAgent;
 /// Resolved from the <c>HyperAgent:</c> configuration section and the
 /// documented environment variables; the App Server's startup code
 /// constructs a probe from these options and runs it as a side-effecting
-/// step in its pre-bind hook (ticket 10).
+/// step in its pre-bind hook.
 /// </summary>
 public sealed class HyperAgentOptions
 {

@@ -11,7 +11,7 @@ using Xunit;
 namespace CineReel.Service.Infrastructure.Web;
 
 /// <summary>
-/// Verifies the static-site middleware from ticket 14: the SPA entry page
+/// Verifies the static-site middleware: the SPA entry page
 /// is served at `/`, asset paths resolve to their files on disk, and
 /// unknown paths fall back to the SPA index for client-side routing.
 /// </summary>

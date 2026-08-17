@@ -9,7 +9,7 @@ public sealed record NfoPerson(string Name, string? Role = null, string? Thumb =
 
 /// <summary>
 /// Catch-all bag of fields the parser doesn't recognize. The scanner
-/// (ticket 22) keeps these around so that V2 features (e.g. custom
+/// keeps these around so that V2 features (e.g. custom
 /// badges, advanced search) can read them without re-parsing the NFO.
 /// </summary>
 public sealed record NfoRawFields(IReadOnlyDictionary<string, string> Extensions)

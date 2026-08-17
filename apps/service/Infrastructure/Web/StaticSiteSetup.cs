@@ -5,7 +5,7 @@ using Microsoft.Extensions.FileProviders;
 namespace CineReel.Service.Infrastructure.Web;
 
 /// <summary>
-/// Wires the SPA surface from ADR 0022: serves the contents of
+/// Wires the SPA surface: serves the contents of
 /// <c>Web:StaticRoot</c> at the URL root, with a fallback rewrite of
 /// unknown paths back to <c>Web:SpaIndex</c> for client-side routing.
 /// The single port is <c>Web:ListenPort</c>; the SPA, the JSON API, and

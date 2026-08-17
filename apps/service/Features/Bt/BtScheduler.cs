@@ -17,7 +17,7 @@ public interface IBtScheduler
 }
 
 /// <summary>
-/// BT scheduler (ticket 25). Wires <c>MediaItemAdded</c> into
+/// BT scheduler. Wires <c>MediaItemAdded</c> into
 /// <c>IBtEngine.StartAsync</c> for each torrent_file row, and
 /// <c>SubscriptionDeleted</c> into <c>IBtScheduler.StopAsync</c>.
 /// Per-Media-Item pause/resume goes through <c>MediaItemId</c> via

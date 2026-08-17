@@ -5,7 +5,7 @@ namespace CineReel.Service.Infrastructure.HyperAgent;
 
 /// <summary>
 /// Spawns the Hyper Agent as a child process and runs the
-/// "spawn-watch" loop that ADR 0017 + ADR 0055 specify.
+/// "spawn-watch" loop.
 ///
 /// The loop is:
 ///   1. Launch the Hyper Agent with <see cref="HyperAgentSpawnConfig"/>.
@@ -96,7 +96,7 @@ public sealed class HyperAgentProcess
         // Prefer the Hyper Agent's entry; fall back to the legacy
         // sidecar path so a stale binary still boots (the spawn-watch
         // loop logs a warning). The fallback exists for one release
-        // cycle per ADR 0059.
+        // cycle.
         var candidate = Path.IsPathRooted(_config.Entry)
             ? _config.Entry
             : Path.Combine(_config.WorkingDirectory, _config.Entry);

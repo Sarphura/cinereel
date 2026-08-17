@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace CineReel.Service.Features.Bootstrap;
 
 /// <summary>
-/// First-launch experience (ADR 0063, ticket 24). After migrations
+/// First-launch experience. After migrations
 /// run and the Hyper Agent is reachable, the initializer checks if
 /// <c>accounts</c> has any rows; if so, it returns immediately. On a
 /// fresh install it seeds an <c>admin</c> account with a random

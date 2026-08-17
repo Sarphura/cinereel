@@ -7,7 +7,7 @@ using Xunit;
 namespace CineReel.Service.Tests;
 
 /// <summary>
-/// Unit tests for the Hyper Agent version probe (ticket 10).
+/// Unit tests for the Hyper Agent version probe.
 ///
 /// Drives the probe against a fake <see cref="HttpMessageHandler"/> so
 /// the test runs without spawning the real Hyper Agent process. The

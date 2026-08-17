@@ -26,7 +26,7 @@ public sealed class WebOptions
     /// publish layout.</summary>
     public string StaticRoot { get; set; } = "apps/web/dist";
     /// <summary>SPA entry point; served as the fallback for unknown routes
-    /// to enable client-side routing (ticket 14).</summary>
+    /// to enable client-side routing.</summary>
     public string SpaIndex { get; set; } = "index.html";
 }
 

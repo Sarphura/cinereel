@@ -13,7 +13,7 @@ namespace CineReel.Service.Infrastructure.HyperAgent;
 /// loop in <see cref="HyperAgentProcess"/> is the executor.
 ///
 /// The 5-second shutdown grace period and SIGKILL escalation are
-/// unchanged from ADR 0055 — this class only decides what to do
+/// unchanged — this class only decides what to do
 /// AFTER the process has exited.
 /// </summary>
 public static class HyperAgentExitCodePolicy
@@ -29,7 +29,7 @@ public static class HyperAgentExitCodePolicy
         ILogger logger)
     {
         var (reason, action) = Classify(code);
-        // Per ticket 16: every branch logs
+        // Every branch logs
         // "FATAL: hyper-agent exit <code>: <reason>".
         logger.LogCritical(
             "FATAL: hyper-agent exit {Code}: {Reason}",

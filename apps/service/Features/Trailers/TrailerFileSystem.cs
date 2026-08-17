@@ -1,7 +1,7 @@
 namespace CineReel.Service.Features.Trailers;
 
 /// <summary>
-/// 1 GB default trailer cache (ADR 0054). The cap and the eviction
+/// 1 GB default trailer cache. The cap and the eviction
 /// floor are configurable per deployment. Test overrides pass an
 /// in-memory filesystem via <see cref="ITrailerFileSystem"/>.
 /// </summary>

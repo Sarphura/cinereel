@@ -8,7 +8,7 @@ using Xunit;
 namespace CineReel.Service.Tests;
 
 /// <summary>
-/// Pin the recovery contract from ticket 19:
+/// Pin the recovery contract:
 ///   - Recovery is idempotent.
 ///   - Recovery failures do not crash the loop.
 ///   - The loop continues after a single "drive-not-mounted" return.

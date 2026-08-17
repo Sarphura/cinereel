@@ -3,7 +3,7 @@ using System.Diagnostics;
 namespace CineReel.Service.Features.Health;
 
 /// <summary>
-/// Runs all probes per ADR 0040. Required probes run serially so a probe
+/// Runs all probes. Required probes run serially so a probe
 /// side-effect (e.g. circuit-breaker state change) isn't observed out of
 /// order; optional probes run in parallel to keep the endpoint latency
 /// bounded when one of them is slow. The endpoint returns 200 when all

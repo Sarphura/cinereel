@@ -1,8 +1,8 @@
 namespace CineReel.Service.Features.Metadata;
 
 /// <summary>
-/// Result of parsing a Kodi-style <c>movie.nfo</c> via XDocument
-/// (ADR 0012, ticket 20). Only fields Cinereel actually uses are
+/// Result of parsing a Kodi-style <c>movie.nfo</c> via XDocument.
+/// Only fields Cinereel actually uses are
 /// exposed; everything else lives in <see cref="Raw"/>.
 /// </summary>
 public sealed record ParsedNfo(

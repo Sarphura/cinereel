@@ -4,7 +4,7 @@ namespace CineReel.Service.Features.Bootstrap;
 
 /// <summary>
 /// Generates a random alphanumeric password for the first-launch
-/// bootstrap admin (ADR 0063). 16 chars from the base62 alphabet —
+/// bootstrap admin. 16 chars from the base62 alphabet —
 /// readable on a printout, impossible to brute force against the
 /// Argon2id hash in any reasonable time.
 /// </summary>

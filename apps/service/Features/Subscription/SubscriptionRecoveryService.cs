@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace CineReel.Service.Features.Subscription;
 
 /// <summary>
-/// Domain event raised by the readiness watcher (ticket 16 lifecycle)
+/// Domain event raised by the readiness watcher (lifecycle)
 /// when both `/healthz` and `/v1/version` are green. Listeners are
 /// responsible for whatever side-effects a Hyper Agent restart requires
 /// — for subscriptions it's the recovery loop in
@@ -17,8 +17,8 @@ namespace CineReel.Service.Features.Subscription;
 public sealed record HyperAgentRecovered(DateTimeOffset ObservedAt, string ReportedVersion) : IDomainEvent;
 
 /// <summary>
-/// Re-mounts every active subscription after the Hyper Agent recovers
-/// (ticket 19). The recovery pass is idempotent — drives already mounted
+/// Re-mounts every active subscription after the Hyper Agent recovers.
+/// The recovery pass is idempotent — drives already mounted
 /// by the Hyper Agent return a 200 — and a single drive failure does
 /// NOT crash the loop; the failing row is logged at warning level and
 /// the loop continues.

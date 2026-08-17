@@ -7,7 +7,7 @@ using Xunit;
 namespace CineReel.Service.Infrastructure.OpenApi;
 
 /// <summary>
-/// OpenAPI drift detector (ADR 0042, ticket 34). Boots the App Server
+/// OpenAPI drift detector. Boots the App Server
 /// in-process via <see cref="WebApplicationFactory{Program}"/>, fetches
 /// the canonical OpenAPI document at <see cref="OpenApiSetup.OpenApiRoute"/>,
 /// and diffs the canonical bytes against the fixture committed at

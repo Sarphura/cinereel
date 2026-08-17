@@ -13,7 +13,7 @@ public static class HyperAgentExitCodes
     /// <summary>Clean shutdown after SIGTERM and <c>app.close()</c>.</summary>
     public const int Ok = 0;
 
-    /// <summary>Loopback port already in use (ADR 0010, ADR 0017).</summary>
+    /// <summary>Loopback port already in use.</summary>
     public const int PortInUse = 73;
 
     /// <summary>Reserved range for future-side failure modes.</summary>
@@ -25,24 +25,24 @@ public static class HyperAgentExitCodes
     /// <summary>
     /// Version mismatch. The Hyper Agent itself never emits this; the
     /// App Server propagates it after <c>/v1/version</c> does not match
-    /// the expected value (ADR 0033, ticket 10).
+    /// the expected value.
     /// </summary>
     public const int VersionMismatch = 76;
 
-    /// <summary>Corestore directory is missing or unwritable (ADR 0046).</summary>
+    /// <summary>Corestore directory is missing or unwritable.</summary>
     public const int CorestoreUnavailable = 77;
 
-    /// <summary>DI / NestJS wiring failure during boot (ADR 0044).</summary>
+    /// <summary>DI / NestJS wiring failure during boot.</summary>
     public const int DiFailure = 78;
 
-    /// <summary>drive-index.json is malformed or unreadable (ADR 0045, ticket 07).</summary>
+    /// <summary>drive-index.json is malformed or unreadable.</summary>
     public const int DriveIndexCorrupt = 79;
 
-    /// <summary>Main Hyperdrive failed to open during bootstrap (ADR 0045, ADR 0048).</summary>
+    /// <summary>Main Hyperdrive failed to open during bootstrap.</summary>
     public const int MainDriveMountFailed = 80;
 
     /// <summary>
-    /// Readiness poll exceeded the budget (ADR 0055). The Hyper Agent
+    /// Readiness poll exceeded the budget. The Hyper Agent
     /// never emits this; the App Server sets it after the readiness
     /// watchdog fires.
     /// </summary>

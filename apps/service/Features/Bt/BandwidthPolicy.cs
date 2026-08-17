@@ -1,7 +1,7 @@
 namespace CineReel.Service.Features.Bt;
 
 /// <summary>
-/// Typed binding for <c>Bt:*</c> configuration (ADR 0009, 0041). Per
+/// Typed binding for <c>Bt:*</c> configuration. Per
 /// torrent caps are derived from the global cap divided by the
 /// active-torrent count. <c>MinFreeSpaceBytes</c> is the disk-pressure
 /// threshold consumed by <see cref="DiskPressureMonitor"/>.

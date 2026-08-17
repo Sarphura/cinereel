@@ -4,7 +4,7 @@ using CineReel.Service.Infrastructure.HyperAgent;
 namespace CineReel.Service.Features.Publish;
 
 /// <summary>
-/// Default identity provider for the publish surface (ticket 31).
+/// Default identity provider for the publish surface.
 /// Resolves the local main drive key at call time via the Hyper
 /// Agent identity endpoint. Production deployments should swap in
 /// a cached implementation once the Hyper Agent emits a stable

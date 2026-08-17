@@ -1,7 +1,7 @@
 namespace CineReel.Service.Features.Health;
 
 /// <summary>
-/// A single probe in the health aggregator. Per ADR 0040 the response shape
+/// A single probe in the health aggregator. The response shape
 /// enumerates each probe individually and lets the aggregator decide whether
 /// the overall status is `healthy` or `degraded` based on whether the probe
 /// is `required`.

@@ -13,10 +13,10 @@
       Microsoft.AspNetCore.OpenApi 10.x is the .NET 10 built-in OpenAPI
       implementation. It replaces Swashbuckle for ASP.NET Core 10 hosts.
 
-      ADR 0034 was written assuming Swashbuckle + ASP.NET Core 9. On .NET 10
+      The original plan assumed Swashbuckle + ASP.NET Core 9. On .NET 10
       Microsoft.AspNetCore.OpenApi is stable and emits the same OpenAPI 3.x
-      JSON. A follow-up ADR (see ADR 0064) supersedes 0034's choice of
-      Swashbuckle on .NET 10 hosts. The wire format and the route
+      JSON. A follow-up decision supersedes that choice of Swashbuckle on
+      .NET 10 hosts. The wire format and the route
       `/api/openapi/v1.json` are unchanged.
     -->
     <PackageReference Include="Konscious.Security.Cryptography.Argon2" Version="1.3.1" />
@@ -42,7 +42,7 @@
 
   <!--
     Bundle the SPA from `apps/web/dist/**` into the publish output so the
-    App Server can serve it via ticket 14's StaticSiteSetup. The include
+    App Server can serve it via StaticSiteSetup. The include
     pattern uses a wildcard glob so the build succeeds even before the SPA
     bundle exists — the wildcard simply matches zero files. Set
     `CopyToOutputDirectory=Always` for development to drop a freshly-built

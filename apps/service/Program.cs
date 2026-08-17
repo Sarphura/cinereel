@@ -27,7 +27,7 @@ using Microsoft.Extensions.Hosting;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ── Logging: MEL only (ADR 0036) ──────────────────────────────────────────────
+// ── Logging: MEL only ─────────────────────────────────────────────────────────
 builder.Logging.ClearProviders();
 builder.Logging.AddSimpleConsole(o =>
 {
@@ -36,7 +36,7 @@ builder.Logging.AddSimpleConsole(o =>
     o.TimestampFormat = "HH:mm:ss.fff ";
 });
 
-// ── Hyper Agent client (ADR 0065, ticket 10) ─────────────────────────────────
+// ── Hyper Agent client ────────────────────────────────────────────────────────
 // The Application Server probes the Hyper Agent's `/v1/version` endpoint
 // during startup and refuses to proceed on a mismatch. The probe is
 // registered as a transient service so tests can drive it against a
@@ -78,7 +78,7 @@ if (!string.IsNullOrWhiteSpace(hyperAgentOptions.ExpectedVersion)
     builder.Services.AddTransient<IHyperAgentWriteClient>(sp =>
         sp.GetRequiredService<HyperAgentClient>());
 
-    // Subscription recovery (ticket 19): the App Server replays every
+    // Subscription recovery: the App Server replays every
     // persisted subscription after the Hyper Agent recovers from a
     // restart. The watcher is the IHostedService that fires the
     // HyperAgentRecovered event when /healthz + /v1/version both succeed.
@@ -98,12 +98,12 @@ else
     // register null implementations of the typed halves so feature
     // services can be constructed without a real sidecar. Calls still
     // fail loudly with a documented not-mounted exception so callers
-    // don't silently corrupt state. (ADR 0055, ticket 33.)
+    // don't silently corrupt state.
     builder.Services.AddSingleton<IHyperAgentReadClient, NullHyperAgentReadClient>();
     builder.Services.AddSingleton<IHyperAgentWriteClient, NullHyperAgentWriteClient>();
 }
 
-// ── Health checks (ADR 0040) ─────────────────────────────────────────────────
+// ── Health checks ─────────────────────────────────────────────────────────────
 // Required = "service is alive". Sidecar-mount and MonoTorrent-session checks
 // are deferred to V1.x when those subsystems land. Each becomes Optional there.
 builder.Services
@@ -113,25 +113,25 @@ builder.Services
         failureStatus: HealthStatus.Unhealthy,
         tags: ["required"]);
 
-// ── OpenAPI (ADR 0064) ─────────────────────────────────────────────────────────
+// ── OpenAPI ───────────────────────────────────────────────────────────────────
 // Microsoft.AspNetCore.OpenApi 10.x emits OpenAPI 3.x JSON. The default
 // route is `/openapi/v1.json`; we re-register it as `/api/openapi/v1.json`
 // to keep the URL family consistent with `/api/*` and to give the codegen
-// consumer (ticket 14) a stable URL. Dev-only Swagger UI lives at
+// consumer a stable URL. Dev-only Swagger UI lives at
 // `/api/openapi/ui` (Development environment only).
 builder.Services.AddCinereelOpenApi();
 
-// Health aggregator (ADR 0040, ticket 15). The custom probes register
+// Health aggregator. The custom probes register
 // alongside the framework's required `SelfHealthCheck` so the legacy
 // `/health` endpoint keeps working unchanged.
 builder.Services.AddCinereelHealth();
 
-// Subscription feature (ticket 18). The default registration binds to the
+// Subscription feature. The default registration binds to the
 // in-memory repository; production should swap in the EF-backed repository.
 builder.Services.AddCinereelSubscriptions();
 
-// Metadata scanning (ticket 22). The scanner consumes the IMediaItemRepository
-// from ticket 05 and the IMDB resolver from ticket 21.
+// Metadata scanning. The scanner consumes the IMediaItemRepository
+// and the IMDB resolver.
 builder.Services.AddSingleton<INfoParser, XDocumentNfoParser>();
 builder.Services.AddSingleton<TmdbClient>(sp => new TmdbClient(new HttpClient(), apiKey: null));
 builder.Services.AddSingleton<IIMDBResolver, IMDbResolver>();
@@ -141,10 +141,10 @@ builder.Services.AddSingleton<IMetadataScanner, MetadataScanner>();
 builder.Services.AddTransient<IDomainEventHandler<SubscriptionCreated>, SubscriptionScanningOrchestrator>();
 builder.Services.AddTransient<IDomainEventHandler<SubscriptionDescriptorChanged>, SubscriptionScanningOrchestrator>();
 
-// Jellyfin pusher + cleaner (ticket 23).
+// Jellyfin pusher + cleaner.
 builder.Services.AddCinereelJellyfin();
 
-// Bootstrap admin + demo drive (ticket 24). Runs on first launch and is
+// Bootstrap admin + demo drive. Runs on first launch and is
 // idempotent on every subsequent startup while the password file exists.
 builder.Services.AddSingleton(new CinereelBootstrapOptions { DataDir = "./" });
 builder.Services.TryAddSingleton<InMemoryAccountRepository>();
@@ -152,7 +152,7 @@ builder.Services.TryAddSingleton<IAccountRepository>(sp => sp.GetRequiredService
 builder.Services.AddSingleton<IPasswordHasher, Argon2idPasswordHasher>();
 builder.Services.AddHostedService<BootstrapInitializer>();
 
-// BT scheduler (ticket 25). Wires MediaItemAdded + SubscriptionDeleted
+// BT scheduler. Wires MediaItemAdded + SubscriptionDeleted
 // into the engine lifecycle. Per-Media-Item pause/resume is exposed via
 // REST in BtEndpoints.
 builder.Services.AddSingleton(new CinereelBtOptions());
@@ -162,33 +162,33 @@ builder.Services.AddSingleton<IBtScheduler, BtScheduler>();
 builder.Services.AddTransient<IDomainEventHandler<MediaItemAdded>, BtScheduler>();
 builder.Services.AddTransient<IDomainEventHandler<SubscriptionDeleted>, BtScheduler>();
 
-// BT governance (ticket 26). Bandwidth policy + DiskPressureMonitor.
+// BT governance. Bandwidth policy + DiskPressureMonitor.
 builder.Services.AddSingleton<BandwidthPolicy>();
 builder.Services.AddSingleton<IDiskPressureProbe>(sp => new LibraryRootDiskPressureProbe("./"));
 builder.Services.AddHostedService<DiskPressureMonitor>();
 
-// Trailer cache (ticket 27). 1 GB LRU with HTTP-trailer stream-through.
+// Trailer cache. 1 GB LRU with HTTP-trailer stream-through.
 builder.Services.AddSingleton(new TrailerCacheOptions());
 builder.Services.TryAddSingleton<ITrailerFileSystem, LocalTrailerFileSystem>();
 builder.Services.AddSingleton<ITrailerCache, TrailerCache>();
 builder.Services.AddHostedService<TrailerCacheMaintainer>();
 
-// Auto-Pack (ticket 29). POST /api/publish/pack wraps local videos into
+// Auto-Pack. POST /api/publish/pack wraps local videos into
 // a fresh resource drive. Failure rolls back the drive via the Hyper
 // Agent write client.
 builder.Services.AddSingleton<ITorrentFactory, FileSystemTorrentFactory>();
 builder.Services.AddSingleton<IAutoPackService, AutoPackService>();
 
-// Profile (ticket 30). Reads/writes /profile.json on the local main drive.
+// Profile. Reads/writes /profile.json on the local main drive.
 builder.Services.AddSingleton<IProfileService, ProfileService>();
 builder.Services.AddTransient<IDomainEventHandler<ProfileUpdated>, ProfileAnnouncer>();
 
-// Publish service + identity (ticket 31).
+// Publish service + identity.
 builder.Services.AddSingleton<IIdentityService, MainDriveKeyIdentityService>();
 builder.Services.AddSingleton<IPublishService, PublishService>();
 
-// Domain event bus (ticket 02) + retry decorator (ticket 03).
-// The failure journal + marker (ticket 32) are EF-backed, so they must be
+// Domain event bus + retry decorator.
+// The failure journal + marker are EF-backed, so they must be
 // registered before AddDomainEvents — the retrying bus resolves them at
 // activation time.
 var databasePath = builder.Configuration["Database:Path"] ?? "cinereel.db";
@@ -199,7 +199,7 @@ builder.Services.AddScoped<IEntityFailureJournal, EfEntityFailureJournal>();
 builder.Services.AddScoped<IEntityFailureMarker, EfEntityFailureMarker>();
 builder.Services.AddDomainEvents([typeof(Program).Assembly]);
 
-// Shutdown chain (ADR 0055, ticket 16) — stages drain HTTP, close DB,
+// Shutdown chain — stages drain HTTP, close DB,
 // forward SIGTERM to the Hyper Agent, escalate to SIGKILL.
 builder.Services.AddCinereelShutdownChain();
 
@@ -209,7 +209,7 @@ builder.WebHost.UseUrls($"http://{host}:{port}");
 
 var app = builder.Build();
 
-// ── Pre-bind Hyper Agent version probe (ticket 10) ───────────────────────────
+// ── Pre-bind Hyper Agent version probe ────────────────────────────────────────
 // When the App Server is configured to talk to a Hyper Agent, we run the
 // version probe BEFORE binding the listener. A mismatch logs both versions
 // and exits with the documented code 76 — the operator sees a clear
@@ -233,47 +233,47 @@ if (app.Services.GetService<HyperAgentVersionProbe>() is { } probe)
 // ── Pipeline ─────────────────────────────────────────────────────────────────
 app.UseRouting();
 
-// Required health check (ADR 0040) — 200/503 only.
+// Required health check — 200/503 only.
 app.MapHealthChecks("/health", new HealthCheckOptions
 {
     Predicate = check => check.Tags.Contains("required"),
     AllowCachingResponses = false
 });
 
-// Full health aggregator (ticket 15) — lists every probe.
+// Full health aggregator — lists every probe.
 app.MapHealthEndpoints();
 
-// Subscription REST surface (ticket 18) — CRUD + state machine + state
+// Subscription REST surface — CRUD + state machine + state
 // transitions emitted through the in-process domain event bus.
 app.MapSubscriptionEndpoints();
 
-// Jellyfin push/clean endpoints (ticket 23).
+// Jellyfin push/clean endpoints.
 app.MapJellyfinEndpoints();
 
-// BT pause/resume endpoints (ticket 25).
+// BT pause/resume endpoints.
 app.MapBtEndpoints();
 
-// Trailer cache endpoints (ticket 27).
+// Trailer cache endpoints.
 app.MapTrailerEndpoints();
 
-// Publish endpoints (ticket 29).
+// Publish endpoints.
 app.MapPublishEndpoints();
 
-// Profile endpoints (ticket 30).
+// Profile endpoints.
 app.MapProfileEndpoints();
 
-// Swarm + identity endpoints (ticket 31).
+// Swarm + identity endpoints.
 app.MapSwarmEndpoints();
 
-// Version endpoint (ADR 0033 consumer).
+// Version endpoint (consumer).
 app.MapVersion();
 
 // OpenAPI: emitted at the documented stable route `/api/openapi/v1.json`.
 // The default framework route (`/openapi/v1.json`) is suppressed; the web
-// codegen consumer in ticket 14 reads from the remapped URL.
+// codegen consumer reads from the remapped URL.
 app.MapCinereelOpenApi();
 
-// ── SPA host (ADR 0022, ticket 14) ────────────────────────────────────────────
+// ── SPA host ──────────────────────────────────────────────────────────────────
 // Static files from `Web:StaticRoot` are served at `/`; unknown routes
 // fall back to `Web:SpaIndex` for client-side routing. The path root
 // resolved from `CinereelOptions` after `AddCinereelOptions` validated
@@ -281,13 +281,13 @@ app.MapCinereelOpenApi();
 var webOptions = app.Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<CinereelOptions>>().Value.Web;
 app.UseCinereelStaticSite(new StaticSiteOptions(webOptions.StaticRoot, webOptions.SpaIndex));
 
-// ── Startup orchestration (ticket 16) ────────────────────────────────────────
-// Run EF Core migrations once the option graph has validated. Per ADR 0030
-// the App Server auto-applies the latest migration on every startup so a
-// fresh deploy doesn't need a separate `dotnet ef database update` step.
+// ── Startup orchestration ─────────────────────────────────────────────────────
+// Run EF Core migrations once the option graph has validated. The App
+// Server auto-applies the latest migration on every startup so a fresh
+// deploy doesn't need a separate `dotnet ef database update` step.
 await DatabaseMigrator.MigrateAsync(app.Services, CancellationToken.None);
 
-// ── Shutdown chain (ticket 16) ───────────────────────────────────────────────
+// ── Shutdown chain ────────────────────────────────────────────────────────────
 // Wire the documented drain order into the host's
 // `ApplicationStopping` so SIGTERM triggers a graceful exit.
 var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();

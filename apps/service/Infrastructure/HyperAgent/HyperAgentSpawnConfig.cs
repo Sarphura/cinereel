@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 namespace CineReel.Service.Infrastructure.HyperAgent;
 
 /// <summary>
-/// Hyper Agent spawn configuration (ADR 0017, ADR 0055).
+/// Hyper Agent spawn configuration.
 ///
 /// The Application Server spawns the Hyper Agent as a child process during
 /// startup and waits for `/healthz` to return 200 before proceeding. The
@@ -34,7 +34,7 @@ public sealed record HyperAgentSpawnConfig(
 
     /// <summary>
     /// Read spawn configuration from environment, applying the precedence
-    /// rules from ADR 0059 (env wins over appsettings).
+    /// rules (env wins over appsettings).
     /// </summary>
     public static HyperAgentSpawnConfig FromConfiguration(IConfiguration config)
     {

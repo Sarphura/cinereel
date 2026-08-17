@@ -8,7 +8,7 @@ namespace CineReel.Service.Tests;
 /// <summary>
 /// Smoke tests for the NSwag-generated <see cref="HyperAgentClient"/>.
 /// The wire-format compatibility is the contract-freeze asserted by
-/// ticket 14's drift check; these tests confirm the generated code
+/// the drift check; these tests confirm the generated code
 /// round-trips a few representative routes against a stub
 /// <see cref="HttpMessageHandler"/>.
 /// </summary>

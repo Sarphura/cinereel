@@ -4,7 +4,7 @@ using System.Text;
 namespace CineReel.Service.Features.Metadata;
 
 /// <summary>
-/// Tier 2 fallback (ADR 0016) — produces a stable synthetic ID of the
+/// Tier 2 fallback — produces a stable synthetic ID of the
 /// form <c>local-</c> followed by 16 hex chars derived from
 /// <c>sha256(driveKey || ':' || drivePath)</c>. The ID is identical
 /// across re-publishes of the same (driveKey, drivePath) pair.

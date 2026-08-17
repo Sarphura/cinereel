@@ -1,5 +1,5 @@
 /**
- * Two-process integration smoke (ADR 0021, ticket 35).
+ * Two-process integration smoke.
  *
  * Boots the Hyper Agent as a real child process (via `tsx`, no in-process
  * mock) pointed at a temp data dir, polls `/healthz` for readiness, then
@@ -161,8 +161,8 @@ public sealed class TwoProcessSmokeTests : IClassFixture<TwoProcessSmokeTests.Hy
         else
         {
             _output.WriteLine(
-                "media_items row not materialised; Hyperdrive corestore race — the ticket's " +
-                "full Jellyfin/torrent_files assertions stay in V2 follow-up.");
+                "media_items row not materialised; Hyperdrive corestore race — the full " +
+                "Jellyfin/torrent_files assertions stay in V2 follow-up.");
         }
 
         // 5. SPA serves index.html at /.
@@ -179,8 +179,8 @@ public sealed class TwoProcessSmokeTests : IClassFixture<TwoProcessSmokeTests.Hy
         {
             b.UseEnvironment("Development");
             // The App Server's DI tree mixes singleton consumers with
-            // scoped repositories (a known V1 ergonomic — ticket 35
-            // documents this). WebApplicationFactory's default
+            // scoped repositories (a known V1 ergonomic).
+            // WebApplicationFactory's default
             // `ValidateOnBuild=true` would surface it as a hard error
             // even though the runtime scopes are fine. Disable scope
             // validation only for this integration smoke.
@@ -269,7 +269,7 @@ public string BaseUrl { get; private set; } = "";
     // Pinned to the Hyper Agent's package.json version. The fixture
     // re-reads `/v1/version` after Hyper Agent boots and updates this
     // field so the test factory configures the matching `ExpectedVersion`
-    // (the App Server refuses a version mismatch — ADR 0065).
+    // (the App Server refuses a version mismatch).
     public string ReportedVersion { get; set; } = "0.0.0";
     public string DataDir { get; private set; } = "";
         public string AppDbPath { get; private set; } = "";

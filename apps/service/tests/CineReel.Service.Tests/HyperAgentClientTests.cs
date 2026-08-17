@@ -8,15 +8,15 @@ using Xunit;
 namespace CineReel.Service.Tests;
 
 /// <summary>
-/// Unit tests for the hand-rolled <see cref="HyperAgentClient"/>
-/// (ticket 12). The client is the App Server's pre-NSwag typed
-/// surface for the Hyper Agent's HTTP API; ticket 14 will replace it
-/// with a generated NSwag client that satisfies the same
+/// Unit tests for the hand-rolled <see cref="HyperAgentClient"/>.
+/// The client is the App Server's pre-NSwag typed
+/// surface for the Hyper Agent's HTTP API; it will be replaced
+/// by a generated NSwag client that satisfies the same
 /// <see cref="IHyperAgentClient"/> interface.
 ///
 /// These tests drive the client against a stub
 /// <see cref="HttpMessageHandler"/> so the test runs without a real
-/// Hyper Agent process. The integration smoke in ticket 18 covers
+/// Hyper Agent process. The integration smoke covers
 /// the full two-process boot.
 /// </summary>
 public sealed class HyperAgentClientTests

@@ -6,8 +6,8 @@ namespace CineReel.Service.Features.Metadata.Events;
 
 /// <summary>
 /// Emitted by the scanner when a new <c>media_items</c> row is
-/// upserted. Listeners include the Jellyfin pusher (ticket 23) and
-/// the BT scheduler (ticket 25).
+/// upserted. Listeners include the Jellyfin pusher and
+/// the BT scheduler.
 /// </summary>
 public sealed record MediaItemAdded(
     MediaItemId Id,
