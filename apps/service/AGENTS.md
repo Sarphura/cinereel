@@ -14,12 +14,15 @@
 - `Infrastructure/`：仅放确实被多个 Feature 共享的技术设施。
 - `tests/Cinereel.Tests/`：后端自动化测试。
 
-不要预先创建横向的 `Controllers`、`Services`、`Repositories` 或 `Dtos` 目录。Feature 规模较小时保持扁平；只有出现多个用例或独立领域逻辑后，才在 Feature 内继续分组。
+不要预先创建顶层 `Controllers`、`Services`、`Repositories` 或 `Dtos` 目录。Controller、Interface、Implementation 和 DTO 均放在所属 Feature 内。Feature 规模较小时保持扁平；只有出现多个用例或独立领域逻辑后，才在 Feature 内继续分组。
 
 ## 编码约定
 
-- 使用 Minimal API，端点按 Feature 分组。
-- 每个 Feature 只公开一个组合入口，其余类型默认使用 `internal`。
+- 使用 ASP.NET Core MVC Controller，不混用 Minimal API 业务端点。
+- Controller 使用 `[ApiController]` 和 attribute routing，并保持 `public sealed`。
+- Controller 依赖业务 Interface，不直接依赖 Implementation。
+- Controller action 签名涉及的 Interface 和 DTO 使用 `public`；Implementation 默认使用 `internal sealed`。
+- 每个 Feature 提供一个依赖注册入口，路由由 MVC 自动发现。
 - 文件级命名空间统一以 `Cinereel` 开头。
 - 类默认标记为 `sealed`，除非明确需要继承。
 - 公开端点必须提供 OpenAPI 元数据。
