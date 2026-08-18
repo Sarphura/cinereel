@@ -1,10 +1,10 @@
 # AGENTS.md
 
-CineReel 项目级约定。所有参与本仓库的开发者与 AI 编码代理均须遵守本文件。若某个子项目内有更具体的 `AGENTS.md`，以该子项目内的文件为准。
+Cinereel 项目级约定。所有参与本仓库的开发者与 AI 编码代理均须遵守本文件。若某个子项目内有更具体的 `AGENTS.md`，以该子项目内的文件为准。
 
 ## 项目概述
 
-CineReel 是一个媒体服务 monorepo（AGPL-3.0）。仓库同时包含 Web 前端、C# 后端服务与 Hyper 客户端等子项目，通过 pnpm workspace 与 .NET 工程共同组织。
+Cinereel 是一个媒体服务 monorepo（AGPL-3.0）。仓库同时包含 Web 前端、C# 后端服务与 Hyper 客户端等子项目，通过 pnpm workspace 与 .NET 工程共同组织。
 
 ## 语言约定
 
@@ -18,8 +18,7 @@ CineReel 是一个媒体服务 monorepo（AGPL-3.0）。仓库同时包含 Web �
 
 - `apps/web` — Web 前端（Vite + React + Tailwind），npm 包名 `@cinereel/ui`
 - `apps/hyper-client` — Hyper 客户端，npm 包名 `@cinereel/hyper-client`
-- `apps/service` — 标准 ASP.NET Core Web API 服务（`CineReel.Service`），约定见 `apps/service/AGENTS.md`
-- `service/` — 历史废弃的 C# 服务，仅用作参考（同名 `CineReel.Service`，分层结构完整）。
+- `apps/service` — ASP.NET Core Web 项目（`Cinereel`），约定见 `apps/service/AGENTS.md`
 - `jellyfin/` —  Jellyfin 源码，仅用做架构参考（已在 `.gitignore` 中忽略，不入库）
 - `packages/` — pnpm workspace 预留目录（当前无内容）
 - `.agents/skills/` — 仓库内置 Agent 技能
@@ -39,9 +38,9 @@ Web 前端：
 
 C# 服务：
 
-- 构建：`dotnet build apps/service/CineReel.Service.csproj`
-- 运行：`dotnet run --project apps/service`
-- 测试：`dotnet test`（约定见 `apps/service/AGENTS.md`）
+- 构建：`dotnet build apps/service/Cinereel.csproj`
+- 运行：`dotnet run --project apps/service/Cinereel.csproj`
+- 测试：`dotnet test apps/service/tests/Cinereel.Tests/Cinereel.Tests.csproj`
 
 ## 通用约定
 

@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.4",
   "info": {
-    "title": "CineReel.Service | v1",
+    "title": "Cinereel | v1",
     "version": "1.0.0"
   },
   "servers": [
@@ -13,7 +13,7 @@
     "/api/health": {
       "get": {
         "tags": [
-          "CineReel.Service"
+          "Cinereel"
         ],
         "responses": {
           "200": {
@@ -592,7 +592,7 @@
   },
   "tags": [
     {
-      "name": "CineReel.Service"
+      "name": "Cinereel"
     },
     {
       "name": "Meta"

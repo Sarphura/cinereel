@@ -1,6 +1,6 @@
 # @cinereel/hyper-client
 
-`hyper-sdk` (Corestore / Hyperdrive / Hyperswarm) REST hyper client for CineReel.
+`hyper-sdk` (Corestore / Hyperdrive / Hyperswarm) REST hyper client for Cinereel.
 A single Node + NestJS process that exposes hyper SDK operations over a
 loopback HTTP API. **Only** consumed by `@cinereel/service` (C# / ASP.NET Core).
 

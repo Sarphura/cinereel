@@ -40,7 +40,7 @@ async function main(): Promise<void> {
   if (!isProd) {
     const config = new DocumentBuilder()
       .setTitle('Hyper Client API')
-      .setDescription('Hyper SDK REST API for CineReel')
+      .setDescription('Hyper SDK REST API for Cinereel')
       .setVersion('0.0.2')
       .build()
     

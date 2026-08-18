@@ -1,7 +1,7 @@
 {
   "name": "@cinereel/hyper-client",
   "version": "0.0.2",
-  "description": "Hyper SDK (Corestore/Hyperdrive/Hyperswarm) REST Hyper Client for CineReel.",
+  "description": "Hyper SDK (Corestore/Hyperdrive/Hyperswarm) REST Hyper Client for Cinereel.",
   "private": true,
   "type": "module",
   "engines": {
