@@ -1,18 +1,37 @@
 namespace Cinereel.Features.Publish;
 
-public sealed record CreatePublishDriveRequest(
-    string Name,
-    string ContentType)
+public sealed record PublicationResponse(
+    Guid Id,
+    string DriveId,
+    string Status,
+    PublicationFailureResponse? Failure,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset StatusChangedAt)
 {
-    internal CreatePublishDriveCommand ToCommand() => new(Name, ContentType);
+    internal static PublicationResponse From(Publication publication) =>
+        new(
+            publication.Id,
+            publication.DriveId,
+            publication.Status.ToString(),
+            PublicationFailureResponse.From(publication.Failure),
+            publication.CreatedAt,
+            publication.StatusChangedAt);
 }
 
-public sealed record PublishDriveResponse(
-    string DriveKey,
-    string Name,
-    string ContentType,
-    DateTimeOffset CreatedAt)
+public sealed record PublicationFailureResponse(
+    string Action,
+    string Code,
+    string Message,
+    DateTimeOffset FailedAt,
+    int AttemptCount)
 {
-    internal static PublishDriveResponse From(PublishedDrive drive) =>
-        new(drive.DriveKey, drive.Name, drive.ContentType, drive.CreatedAt);
+    internal static PublicationFailureResponse? From(PublicationFailure? failure) =>
+        failure is null
+            ? null
+            : new(
+                failure.Action.ToString(),
+                failure.Code,
+                failure.Message,
+                failure.FailedAt,
+                failure.AttemptCount);
 }

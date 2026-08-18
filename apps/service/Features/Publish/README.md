@@ -1,28 +1,38 @@
 # Publish Feature
 
-本目录当前只定义 Publish Feature 的代码结构和调用形状，不包含发布业务逻辑。
+本目录定义 Publish Module 的 HTTP Interface、应用 Interface 和 Implementation 模板。领域规则以根目录 `CONTEXT.md` 和 `docs/adr/0001-publish-publication-state-machine.md` 为准。
 
 ## 调用链
 
 ```text
-PublishModule
+HTTP 请求
   -> PublishController
   -> IPublishService
   -> PublishService
-  -> 后续确定的持久化与 Hyper Client Adapter
+  -> 后续实现的持久化与 Hyper Client Adapter
 ```
 
-## 当前文件
+`IPublishService` 是 Controller 与应用逻辑之间的 Seam。Controller 只负责 HTTP DTO 和状态码映射；Publication 状态机、幂等、并发仲裁、可靠异步受理和重试全部属于 `PublishService` 的 Implementation。
 
-- `PublishModule.cs`：唯一公开的组合入口。
+## 端点模板
+
+- `GET /api/drives/{driveId}/publication`：查询 Drive 的唯一 Publication。
+- `POST /api/drives/{driveId}/publication/publish`：受理 Publish。
+- `POST /api/drives/{driveId}/publication/unpublish`：受理 Unpublish。
+
+新操作被可靠受理时返回 `202 Accepted` 和当前 Publication；幂等重复命令返回 `200 OK` 和未改变的 Publication。不存在返回 `404 ProblemDetails`，状态冲突返回 `409 ProblemDetails`。
+
+## 文件职责
+
 - `PublishController.cs`：由 ASP.NET Core MVC 发现的 HTTP Adapter。
-- `IPublishService.cs`：端点依赖的应用逻辑 Interface。
-- `PublishService.cs`：应用逻辑模板及内部命令、结果模型。
-- `PublishDtos.cs`：HTTP 请求与响应 DTO。
+- `IPublishService.cs`：应用 Interface 及其公开结果模型。
+- `PublishService.cs`：应用逻辑的内部 Implementation 模板。
+- `PublishDtos.cs`：HTTP 响应 DTO 与映射。
+- `PublishModule.cs`：依赖注册入口。
 
 ## 当前限制
 
-- 尚未在 `Program.cs` 调用 `AddControllers()`、`MapControllers()` 和 `AddPublishFeature()`，不会改变现有运行行为。
-- `PublishService` 的方法会抛出 `NotImplementedException`，仅用于固定下一步需要实现的调用形状。
-- 尚未决定持久化方式、Hyper Client Interface、输入校验和错误映射。
-- 路由暂定为 `/api/published-drives`，需在接入前与 Web 调用契约一并确认。
+- 尚未在 `Program.cs` 调用 `AddControllers()`、`MapControllers()` 和 `AddPublishFeature()`，端点当前不会改变运行行为。
+- `PublishService` 尚未实现，调用时会抛出 `NotImplementedException`。
+- 尚未选择持久化方案、可靠任务机制或 Hyper Client Adapter。
+- 本阶段不包含自动重试、Hyper Client 确认处理和 Drive 删除约束的代码。
