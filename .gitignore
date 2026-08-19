@@ -87,5 +87,8 @@ test/
 .sidecar-store
 .demo
 
-/jellyfin
+jellyfin/
+
+.DS_Store
+
 
