@@ -16,6 +16,19 @@
 
 不要预先创建顶层 `Controllers`、`Services`、`Repositories` 或 `Dtos` 目录。Controller、Interface、Implementation 和 DTO 均放在所属 Feature 内。Feature 规模较小时保持扁平；只有出现多个用例或独立领域逻辑后，才在 Feature 内继续分组。
 
+## 命名
+
+- 后端命名必须遵循 [`NAMING.md`](NAMING.md)。新增类型、移动文件或重构现有 Feature 时，应同时检查文件名、类型名、目录和 namespace。
+- 保留垂直切片：先按 `Features/<Feature>/` 聚合，再在规模足够时使用 `Controller/`、`Service/`、`Dto/`、`Entity/`、`Repository/`、`Model/`、`Client/`、`Configuration/` 与 `Job/` 等单数 PascalCase 子目录。
+- 子目录只表达物理职责，不进入 namespace；同一 Feature 默认统一使用 `Cinereel.Features.<Feature>`。
+- 每个可独立复用或查找的顶层类型使用独立文件，文件名与类型名一致；不要新增聚合式 `Contracts.cs`、`Types.cs` 或 `Dtos.cs`。
+- 业务 Interface 与 Implementation 使用 C# 标准形式 `IXxxService` / `XxxService`，不得使用 `XxxServiceImpl`。
+- 输入、输出和带分支的执行结果分别使用 `XxxRequest`、`XxxResponse`、`XxxResult`；结果枚举使用 `XxxResultCode`。
+- EF Core 持久化类型使用 `XxxEntity`；生命周期枚举使用 `XxxStatus`，分类枚举使用 `XxxType`。
+- 外部进程 Client 按远程系统命名，例如 `IHyperClient` / `HyperClient`；只有出现多个真实传输 Adapter 时，才在具体 Adapter 名称中加入 `Http`、`Grpc` 等传输标识。
+- 依赖注册和 EF Core 映射使用 `XxxConfiguration`；后台恢复或调度任务使用 `XxxJob`。
+- Exception 跟随职责放置，不建立统一的 `Exception/` 杂项目录。
+
 ## 编码约定
 
 - 使用 ASP.NET Core MVC Controller，不混用 Minimal API 业务端点。

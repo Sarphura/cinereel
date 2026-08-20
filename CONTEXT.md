@@ -5,11 +5,55 @@
 ## 语言
 
 **Drive**：
-拥有独立身份并承载文件内容的数据集合。Drive 可以在未发布状态下独立存在，创建 Drive 不等于发布。关联的 Publication 处于 `Publishing`、`Published`、`Unpublishing` 或 `Failed` 时，Drive 不可删除，必须先显式 Unpublish 并等待进入 `Unpublished`；只有从未产生 Publication 或 Publication 已处于 `Unpublished` 的 Drive 才可删除。
+拥有独立 `DriveId`、规范 Name，通过 `DriveKey` 关联 Hyperdrive 内容，并持有一个必填 DriveContentTypeId 的数据集合。Drive 本身不区分 `Local` 或 `Subscribed`；DriveOwnership 与 Subscription 分别表达当前 Cinereel 对 Drive 的可写控制关系和订阅访问关系。Drive 可以在未发布状态下独立存在，创建 Drive 不等于发布。用户主动删除 Drive 时必须持有 DriveOwnership，且关联的 Publication 从未产生或已处于 `Unpublished`；没有任何持久化引用的 OrphanedDrive 则由独立异步流程回收。
 _避免使用_：PublishedDrive、PublishDrive
 
+**DriveId**：
+由 Cinereel 分配并用于识别 Drive 的稳定身份。DriveId 独立于 Hyperdrive 的公钥和存储实现；Cinereel 的 HTTP Interface 与其他 Feature 均使用 DriveId 引用 Drive。
+_避免使用_：DriveKey、HyperdriveKey
+
+**DriveKey**：
+Hyperdrive 用于定位和访问文件内容的公钥。DriveKey 是 Drive 关联的技术标识，不是 Drive 的领域身份；同一个值不得同时关联多个 Drive。
+_避免使用_：DriveId
+
+**DriveContentType**：
+在稳定 DriveContentTypeId 下定义的内容类别，用于提供该类内容的展示信息和文件扫描机制。当前 Cinereel 只支持电影、剧集、音乐与通用四种内置类型；命名空间标识为未来官方或第三方扩展保留兼容方向，但当前不提供扩展发现、安装或动态加载能力。
+_避免使用_：HyperdriveType、BlobType、MediaKind
+
+**DriveContentTypeId**：
+Drive 持久化的必填、稳定且可跨 Cinereel 实例交换的内容类型标识，使用命名空间字符串为未来扩展避免命名冲突。当前支持的标识只有 `cinereel.movie`、`cinereel.series`、`cinereel.music` 与 `cinereel.generic`。持有 DriveOwnership 可以修改 DriveContentTypeId；真正变更时，类型更新、旧扫描结果失效与 DriveScan 的可靠受理必须保持一致。重复设置当前值不使结果失效，也不启动 DriveScan。DriveContentTypeId 不使用安装时生成的 Guid、C# 类型名或展示名称。
+_避免使用_：DriveTypeGuid、ScannerTypeName、ContentTypeDisplayName
+
+**DriveScan**：
+使用 Drive 当前 DriveContentTypeId 对全部文件执行扫描并生成派生结果的异步流程。调用方在 DriveScan 可靠受理后即可返回，并通过独立状态观察结果；同一 Drive 同时最多存在一个未完成的 DriveScan，在它进入成功或失败终态前，修改 DriveContentTypeId 必须返回冲突。扫描失败时保留当前 DriveContentTypeId，旧派生结果继续无效，记录安全的失败摘要并允许显式重试，不隐式回滚类型或改用 `cinereel.generic`。
+_避免使用_：RefreshDrive、ScanRequest
+
+**DriveOwnership**：
+当前 Cinereel 对一个 Drive 持有可写控制能力的关系，在当前 Cinereel 创建 Drive 时建立。只有持有 DriveOwnership，才能修改 Drive 的 Name 与内容，或者 Publish、删除 Drive；DriveOwnership 可以保存当前 Cinereel 私有的 Remark。DriveOwnership 通过 DriveId 引用 Drive，不是 Drive 的类型或状态。同一 Drive 的 DriveOwnership 与 Subscription 互斥，已有其中一种关系时不能建立另一种关系。
+_避免使用_：LocalDrive、IsLocal、IsWritable
+
+**CreateDrive**：
+用户要求当前 Cinereel 创建一个新 Drive 并取得 DriveOwnership 的显式动作。调用方必须提供 IdempotencyKey；相同 IdempotencyKey 与相同规范化请求只能驱动同一次 CreateDrive，并返回同一个创建结果，相同 IdempotencyKey 对应不同请求时拒绝执行。只有 Hyper Client 已创建对应内容，且本地 Drive 与 DriveOwnership 已在同一事务中持久化后，CreateDrive 才成功返回；本地事务失败时必须补偿删除刚创建的 Hyperdrive，补偿失败则交由可恢复的异步任务继续处理，不能向调用方返回一个 Cinereel 无法识别的 Drive。
+_避免使用_：CreatePublishedDrive、PublishDrive
+
+**IdempotencyKey**：
+由调用方提供、用于识别一次 CreateDrive 意图的稳定标识。相同 IdempotencyKey 重试同一规范化请求时复用已有创建操作和结果，不创建第二个 Drive；相同 IdempotencyKey 用于不同请求时返回冲突。成功创建使用过的 IdempotencyKey 永久保留且不可复用；Drive 删除后仅保留墓碑，同一请求再次使用该 key 时返回已删除结果。
+_避免使用_：DriveId、RequestId、CorrelationId
+
+**Subscription**：
+当前 Cinereel 通过 `DriveKey` 找到一个已有 Drive，并与该 Drive 建立的访问关系。Subscription 可以保存当前 Cinereel 私有的 Remark，但不能修改 Drive 的规范 Name；Subscription 引用 DriveId，不是 Drive 的类型或状态。删除 Subscription 只结束该访问关系，不删除 Drive。同一 Drive 的 Subscription 与 DriveOwnership 互斥，已有其中一种关系时不能建立另一种关系。
+_避免使用_：SubscribedDrive、RemoteDrive
+
+**Remark**：
+当前 Cinereel 在 DriveOwnership 或 Subscription 上保存的可选私有备注，用于覆盖该关系下的 Drive 显示名称。Remark 不属于 Drive，不修改规范 Name，也不发布给其他 Cinereel 实例；没有 Remark 时显示 Drive 的 Name。
+_避免使用_：DriveName、PublishedName
+
+**OrphanedDrive**：
+既没有 DriveOwnership、Subscription、Publication，也没有其他持久化关系引用的 Drive。删除最后一个关系的事务提交后，Drive 立即具备异步回收资格，不设置宽限期；关系删除本身不删除 Drive。独立异步回收流程必须在删除 Drive 记录和本地缓存前重新确认它仍然没有任何引用。
+_避免使用_：DeletedDrive、UnsubscribedDrive
+
 **Publish**：
-用户针对一个已经存在的本地 Drive 创建或恢复其唯一 Publication 的显式动作。Publish 不负责创建 Drive；Publication 进入 `Publishing` 且发布任务已可靠受理后，Publish 即向调用方返回，不等待 Hyper Client 确认。只有后续确认 announce 完成才代表发布成功。当 Publication 已处于 `Publishing` 或 `Published` 时，重复 Publish 直接返回当前 Publication，不启动新的发布任务。Publication 处于 `Unpublishing` 时拒绝 Publish，用户须等待 Unpublish 完成后再执行。
+用户针对一个已经存在且当前 Cinereel 持有 DriveOwnership 的 Drive 创建或恢复其唯一 Publication 的显式动作。Publish 不负责创建 Drive；Publication 进入 `Publishing` 且发布任务已可靠受理后，Publish 即向调用方返回，不等待 Hyper Client 确认。只有后续确认 announce 完成才代表发布成功。当 Publication 已处于 `Publishing` 或 `Published` 时，重复 Publish 直接返回当前 Publication，不启动新的发布任务。Publication 处于 `Unpublishing` 时拒绝 Publish，用户须等待 Unpublish 完成后再执行。
 _避免使用_：CreateDrive
 
 **Unpublish**：
@@ -17,7 +61,7 @@ _避免使用_：CreateDrive
 _避免使用_：DeletePublication
 
 **Publication**：
-本地 Drive 唯一的发布关系记录，拥有独立身份和 `Publishing`、`Published`、`Unpublishing`、`Failed`、`Unpublished` 生命周期；一个 Drive 最多关联一个 Publication，不会因重试或重新发布产生重复记录。只有 Hyper Client 确认 announce 完成才从 `Publishing` 进入 `Published`，确认 unannounce 完成才从 `Unpublishing` 进入 `Unpublished`；`Failed` 表示 Publish 重试耗尽且没有收到成功确认，外部发布状态仍可能不确定。调用方使用 `DriveId` 查询该 Drive 的唯一 Publication，并通过轮询观察异步操作的最终状态。Drive 从未执行 Publish 时不存在 Publication，查询结果必须与真实存在的 `Unpublished` Publication 区分。Publish 和 Unpublish 均进行有限自动重试，Publish 重试耗尽后进入 `Failed`，Unpublish 重试耗尽后回到 `Published` 并记录错误，用户可再次执行对应动作；`Unpublished` 的 Publication 会随 Drive 删除且不作为永久审计记录保留。
+当前 Cinereel 持有 DriveOwnership 的 Drive 的唯一发布关系记录，拥有独立身份和 `Publishing`、`Published`、`Unpublishing`、`Failed`、`Unpublished` 生命周期；一个 Drive 最多关联一个 Publication，不会因重试或重新发布产生重复记录。只有 Hyper Client 确认 announce 完成才从 `Publishing` 进入 `Published`，确认 unannounce 完成才从 `Unpublishing` 进入 `Unpublished`；`Failed` 表示 Publish 重试耗尽且没有收到成功确认，外部状态仍可能不确定。调用方使用 `DriveId` 查询该 Drive 的唯一 Publication，并通过轮询观察异步操作的最终状态。Drive 从未执行 Publish 时不存在 Publication，查询结果必须与真实存在的 `Unpublished` Publication 区分。Publish 和 Unpublish 均进行有限自动重试，Publish 重试耗尽后进入 `Failed`，Unpublish 重试耗尽后回到 `Published` 并记录错误，用户可再次执行对应动作；`Unpublished` 的 Publication 会随 Drive 删除且不作为永久审计记录保留。
 _避免使用_：PublishedDrive、DrivePublishedState
 
 **PublicationFailure**：

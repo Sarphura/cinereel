@@ -2,6 +2,8 @@
 
 这个目录是 Cinereel 垂直切片结构的最小样板。
 
+> 本文描述当前文件职责，不作为新类型的命名样板。后端命名统一遵循 [`apps/service/NAMING.md`](../../NAMING.md)；现有 `SystemInfoModule` 属于待随代码改动迁移的历史名称，新的依赖注册类型使用 `XxxConfiguration`。
+
 ## 文件职责
 
 - `SystemInfoModule.cs`：唯一公开的组合入口。

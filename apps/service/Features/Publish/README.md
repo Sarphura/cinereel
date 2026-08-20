@@ -2,6 +2,8 @@
 
 本目录定义 Publish Module 的 HTTP Interface、应用 Interface 和 Implementation 模板。领域规则以根目录 `CONTEXT.md` 和 `docs/adr/0001-publish-publication-state-machine.md` 为准。
 
+> 本文描述当前模板状态，后端命名统一遵循 [`apps/service/NAMING.md`](../../NAMING.md)。继续实现 Publish 前，应把 `PublishModule` 迁移为 `PublishConfiguration`，并把聚合的 `PublishDtos.cs` 按顶层类型拆入 `Dto/`；不要复制这些历史名称创建新 Feature。
+
 ## 调用链
 
 ```text
@@ -25,9 +27,9 @@ HTTP 请求
 ## 文件职责
 
 - `PublishController.cs`：由 ASP.NET Core MVC 发现的 HTTP Adapter。
-- `IPublishService.cs`：应用 Interface 及其公开结果模型。
+- `IPublishService.cs`：仅定义应用 Interface。
 - `PublishService.cs`：应用逻辑的内部 Implementation 模板。
-- `PublishDtos.cs`：HTTP 响应 DTO 与映射。
+- `PublishDtos.cs`：应用数据模型、命令结果、HTTP 响应 DTO 与映射。
 - `PublishModule.cs`：依赖注册入口。
 
 ## 当前限制
