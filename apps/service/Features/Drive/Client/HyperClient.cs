@@ -4,7 +4,7 @@ namespace Cinereel.Features.Drive;
 
 internal sealed class HyperClient(HttpClient httpClient) : IHyperClient
 {
-    public async Task<DriveKey> CreateAsync(
+    public async Task<DriveKey> EnsureDriveAsync(
         DriveId driveId,
         DriveName name,
         CancellationToken cancellationToken)

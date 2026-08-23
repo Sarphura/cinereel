@@ -2,7 +2,7 @@ namespace Cinereel.Features.Drive;
 
 internal interface IHyperClient
 {
-    Task<DriveKey> CreateAsync(
+    Task<DriveKey> EnsureDriveAsync(
         DriveId driveId,
         DriveName name,
         CancellationToken cancellationToken);

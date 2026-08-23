@@ -5,7 +5,7 @@
 ## 语言
 
 **Drive**：
-拥有独立 `DriveId`、规范 Name，通过 `DriveKey` 关联 Hyperdrive 内容，并持有一个必填 DriveContentTypeId 的数据集合。Drive 使用 `RelationType` 保存当前 Cinereel 与它的关系：`None` 表示没有访问关系，`Ownership` 表示可写控制关系，`Subscription` 表示订阅访问关系；该字段描述当前实例的关系，不是 Drive 的内容类型。Drive 可以在未发布状态下独立存在，创建 Drive 不等于发布。用户主动删除 Drive 时 `RelationType` 必须为 `Ownership`，且关联的 Publication 从未产生或已处于 `Unpublished`；没有任何持久化引用的 OrphanedDrive 则由独立异步流程回收。
+拥有独立 `DriveId`、规范 Name，通过可选的 `DriveKey` 关联 Hyperdrive 内容，并持有一个必填 DriveContentTypeId 的数据集合。Drive 使用 `Status` 表达 `Pending`、`Ready`、`Failed`、`Deleted` 创建与可用生命周期，使用 `RelationType` 保存当前 Cinereel 与它的关系：`None` 表示没有访问关系，`Ownership` 表示可写控制关系，`Subscription` 表示订阅访问关系；两个字段相互正交。只有 `Ready` Drive 必须具有 `DriveKey` 并允许访问内容。Drive 可以在未发布状态下独立存在，创建 Drive 不等于发布。用户主动删除 Drive 时 `RelationType` 必须为 `Ownership`，且关联的 Publication 从未产生或已处于 `Unpublished`；删除后记录转为 `Deleted` 并保留幂等墓碑。没有任何持久化引用的 OrphanedDrive 则由独立异步流程回收。
 _避免使用_：PublishedDrive、PublishDrive
 
 **DriveId**：
@@ -33,11 +33,11 @@ _避免使用_：RefreshDrive、ScanRequest
 _避免使用_：LocalDrive、IsLocal、IsWritable
 
 **CreateDrive**：
-用户要求当前 Cinereel 创建一个新 Drive 并取得 DriveOwnership 的显式动作。调用方必须提供 IdempotencyKey；相同 IdempotencyKey 与相同规范化请求只能驱动同一次 CreateDrive，并返回同一个创建结果，相同 IdempotencyKey 对应不同请求时拒绝执行。只有 Hyper Client 已创建对应内容，且本地 Drive 已以 `RelationType = Ownership` 持久化后，CreateDrive 才成功返回；本地事务失败时必须补偿删除刚创建的 Hyperdrive，补偿失败则交由可恢复的异步任务继续处理，不能向调用方返回一个 Cinereel 无法识别的 Drive。
+用户要求当前 Cinereel 创建一个新 Drive 并取得 DriveOwnership 的显式动作。调用方必须提供 IdempotencyKey；相同 IdempotencyKey 与相同规范化请求只能驱动同一次 CreateDrive，并返回同一个 Drive，相同 IdempotencyKey 对应不同请求时拒绝执行。CreateDrive 先在本地可靠持久化 `Status = Pending`、`RelationType = Ownership` 的 Drive，再以 `202 Accepted` 返回；后台任务通过具有确保语义的 Hyper Client 调用创建或取得对应内容，成功后写入 `DriveKey` 并转为 `Ready`，失败后转为 `Failed` 并允许显式重试。调用方可以读取 Pending 与 Failed Drive，但只有 Ready Drive 可以执行内容相关操作。
 _避免使用_：CreatePublishedDrive、PublishDrive
 
 **IdempotencyKey**：
-由调用方提供、用于识别一次 CreateDrive 意图的稳定标识。相同 IdempotencyKey 重试同一规范化请求时复用已有创建操作和结果，不创建第二个 Drive；相同 IdempotencyKey 用于不同请求时返回冲突。成功创建使用过的 IdempotencyKey 永久保留且不可复用；Drive 删除后仅保留墓碑，同一请求再次使用该 key 时返回已删除结果。
+由调用方提供、用于识别一次 CreateDrive 意图的稳定标识。相同 IdempotencyKey 重试同一规范化请求时复用已有 Drive，不创建第二个 Drive；相同 IdempotencyKey 用于不同请求时返回冲突。成功创建使用过的 IdempotencyKey 永久保留且不可复用；Drive 删除后保留墓碑，同一请求再次使用该 key 时返回已删除结果。
 _避免使用_：DriveId、RequestId、CorrelationId
 
 **Subscription**：

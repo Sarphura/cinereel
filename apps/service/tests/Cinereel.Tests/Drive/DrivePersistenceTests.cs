@@ -17,6 +17,15 @@ public sealed class DrivePersistenceTests
     }
 
     [Fact]
+    public void StatusValuesAreStable()
+    {
+        Assert.Equal(0, (int)DriveStatus.Pending);
+        Assert.Equal(1, (int)DriveStatus.Ready);
+        Assert.Equal(2, (int)DriveStatus.Failed);
+        Assert.Equal(3, (int)DriveStatus.Deleted);
+    }
+
+    [Fact]
     public async Task DrivePersistsRelationState()
     {
         await using var fixture = await SqliteFixture.CreateAsync();
@@ -28,6 +37,7 @@ public sealed class DrivePersistenceTests
             Key = new string('a', 64),
             Name = "电影资料",
             ContentTypeId = DriveContentTypeId.MovieValue,
+            Status = DriveStatus.Ready,
             RelationType = DriveRelationType.Ownership,
             Remark = "我的电影",
             CreatedAt = now,
@@ -64,6 +74,7 @@ public sealed class DrivePersistenceTests
             Key = key,
             Name = "Drive",
             ContentTypeId = DriveContentTypeId.GenericValue,
+            Status = DriveStatus.Ready,
             CreatedAt = now,
             UpdatedAt = now
         };

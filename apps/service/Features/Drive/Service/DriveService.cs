@@ -1,4 +1,3 @@
-using System.Runtime.ExceptionServices;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Cinereel.Infrastructure.Persistence;
@@ -7,7 +6,6 @@ namespace Cinereel.Features.Drive;
 
 internal sealed class DriveService(
     IDriveRepository driveRepository,
-    IDriveCreationOperationRepository operationRepository,
     IUnitOfWork unitOfWork,
     IHyperClient hyperClient,
     DriveCreationLock creationLock,
@@ -29,117 +27,57 @@ internal sealed class DriveService(
             idempotencyKey.Value,
             cancellationToken);
         var requestHash = ComputeRequestHash(name, contentTypeId);
-        var operation = await GetOrCreateOperationAsync(
-            idempotencyKey,
-            name,
-            contentTypeId,
-            requestHash,
+        var existing = await driveRepository.FindByIdempotencyKeyAsync(
+            idempotencyKey.Value,
             cancellationToken);
 
-        if (!string.Equals(operation.RequestHash, requestHash, StringComparison.Ordinal))
+        if (existing is not null && !string.Equals(
+                existing.CreationRequestHash,
+                requestHash,
+                StringComparison.Ordinal))
         {
             return new CreateDriveResult(CreateDriveResultCode.IdempotencyConflict, null);
         }
 
-        if (operation.Status == DriveCreationOperationStatus.Tombstoned)
+        if (existing?.Status == DriveStatus.Deleted)
         {
             return new CreateDriveResult(CreateDriveResultCode.Gone, null);
         }
 
-        if (operation.Status == DriveCreationOperationStatus.Completed)
+        if (existing?.Status == DriveStatus.Ready)
         {
-            var replayedDrive = await LoadRequiredDriveAsync(
-                operation.DriveId,
-                cancellationToken);
-            return new CreateDriveResult(CreateDriveResultCode.Replayed, replayedDrive);
+            return new CreateDriveResult(CreateDriveResultCode.Replayed, ToResponse(existing));
         }
 
-        if (operation.Status == DriveCreationOperationStatus.CompensationPending)
+        if (existing is not null)
         {
-            var compensated = await TryCompensateAsync(operation, CancellationToken.None);
-
-            if (!compensated)
+            if (existing.Status == DriveStatus.Failed)
             {
-                throw new DriveCreationRecoveryPendingException();
+                existing.Status = DriveStatus.Pending;
+                existing.Key = null;
+                existing.UpdatedAt = GetUtcNow();
+                await unitOfWork.SaveChangesAsync(cancellationToken);
             }
+
+            return new CreateDriveResult(CreateDriveResultCode.Accepted, ToResponse(existing));
         }
 
-        if (operation.Status == DriveCreationOperationStatus.Compensated)
+        var now = GetUtcNow();
+        var drive = new DriveEntity
         {
-            operation.Status = DriveCreationOperationStatus.Pending;
-            operation.DriveKey = null;
-            operation.UpdatedAt = GetUtcNow();
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
-        DriveKey? createdDriveKey = null;
-
-        try
-        {
-            createdDriveKey = await EnsureHyperDriveCreatedAsync(
-                operation,
-                name,
-                cancellationToken);
-            await PersistCompletedDriveAsync(
-                operation,
-                createdDriveKey.Value,
-                cancellationToken);
-        }
-        catch (Exception exception)
-        {
-            unitOfWork.ClearTrackedEntities();
-            DriveResponse? committedDrive;
-
-            try
-            {
-                committedDrive = await TryLoadCompletedDriveAsync(
-                    operation.IdempotencyKey,
-                    CancellationToken.None);
-            }
-            catch (Exception verificationException)
-            {
-                logger.LogWarning(
-                    verificationException,
-                    "无法确认 Drive 创建操作 {IdempotencyKey} 是否已提交，将由恢复任务继续处理。",
-                    operation.IdempotencyKey);
-                ExceptionDispatchInfo.Capture(exception).Throw();
-                throw;
-            }
-
-            if (committedDrive is not null)
-            {
-                return new CreateDriveResult(CreateDriveResultCode.Created, committedDrive);
-            }
-
-            if (createdDriveKey is not null)
-            {
-                try
-                {
-                    var persistedOperation = await operationRepository.FindByIdAsync(
-                        operation.IdempotencyKey,
-                        CancellationToken.None);
-
-                    if (persistedOperation is not null)
-                    {
-                        persistedOperation.DriveKey = createdDriveKey.Value.Value;
-                        await TryCompensateAsync(persistedOperation, CancellationToken.None);
-                    }
-                }
-                catch (Exception recoveryException)
-                {
-                    logger.LogWarning(
-                        recoveryException,
-                        "无法立即补偿 Drive 创建操作 {IdempotencyKey}，将由恢复任务继续处理。",
-                        operation.IdempotencyKey);
-                }
-            }
-
-            ExceptionDispatchInfo.Capture(exception).Throw();
-            throw;
-        }
-
-        var drive = await LoadRequiredDriveAsync(operation.DriveId, cancellationToken);
-        return new CreateDriveResult(CreateDriveResultCode.Created, drive);
+            Id = DriveId.New().Value,
+            Name = name.Value,
+            ContentTypeId = contentTypeId.Value,
+            IdempotencyKey = idempotencyKey.Value,
+            CreationRequestHash = requestHash,
+            Status = DriveStatus.Pending,
+            RelationType = DriveRelationType.Ownership,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        driveRepository.Add(drive);
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return new CreateDriveResult(CreateDriveResultCode.Accepted, ToResponse(drive));
     }
 
     public async Task<DriveResponse?> GetAsync(
@@ -171,6 +109,51 @@ internal sealed class DriveService(
             .ToArray();
     }
 
+    public async Task<RetryDriveCreationResultCode> RetryCreationAsync(
+        DriveId driveId,
+        CancellationToken cancellationToken)
+    {
+        var drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
+
+        if (drive is null || drive.RelationType != DriveRelationType.Ownership ||
+            drive.Status == DriveStatus.Deleted)
+        {
+            return RetryDriveCreationResultCode.NotFound;
+        }
+
+        if (drive.Status == DriveStatus.Pending)
+        {
+            return RetryDriveCreationResultCode.Accepted;
+        }
+
+        if (drive.Status != DriveStatus.Failed)
+        {
+            return RetryDriveCreationResultCode.NotFailed;
+        }
+
+        var idempotencyKey = drive.IdempotencyKey ?? throw new InvalidOperationException(
+            $"Drive {drive.Id:D} 缺少创建幂等键。");
+        using var lease = await creationLock.AcquireAsync(idempotencyKey, cancellationToken);
+        unitOfWork.ClearTrackedEntities();
+        drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
+
+        if (drive is null || drive.Status == DriveStatus.Deleted)
+        {
+            return RetryDriveCreationResultCode.NotFound;
+        }
+
+        if (drive.Status == DriveStatus.Ready)
+        {
+            return RetryDriveCreationResultCode.NotFailed;
+        }
+
+        drive.Status = DriveStatus.Pending;
+        drive.Key = null;
+        drive.UpdatedAt = GetUtcNow();
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return RetryDriveCreationResultCode.Accepted;
+    }
+
     public async Task<UpdateDriveRemarkResultCode> UpdateRemarkAsync(
         DriveId driveId,
         DriveRemark remark,
@@ -197,41 +180,46 @@ internal sealed class DriveService(
         var drive = await driveRepository.FindByIdAsync(
             driveId.Value,
             cancellationToken);
-        if (drive is null || drive.RelationType != DriveRelationType.Ownership)
+        if (drive is null || drive.RelationType != DriveRelationType.Ownership ||
+            drive.Status == DriveStatus.Deleted)
         {
             return DeleteDriveResultCode.NotFound;
         }
 
-        var operation = await operationRepository.FindByDriveIdAsync(
-            driveId.Value,
-            cancellationToken) ?? throw new InvalidOperationException(
-                $"Drive {driveId} 缺少创建操作记录。");
+        var idempotencyKey = drive.IdempotencyKey ?? throw new InvalidOperationException(
+            $"Drive {driveId} 缺少创建幂等键。");
+        using var lease = await creationLock.AcquireAsync(idempotencyKey, cancellationToken);
+        unitOfWork.ClearTrackedEntities();
+        drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
 
+        if (drive is null || drive.RelationType != DriveRelationType.Ownership ||
+            drive.Status == DriveStatus.Deleted)
+        {
+            return DeleteDriveResultCode.NotFound;
+        }
+
+        drive.Status = DriveStatus.Deleted;
         drive.RelationType = DriveRelationType.None;
         drive.Remark = null;
-        operation.Status = DriveCreationOperationStatus.Tombstoned;
-        operation.UpdatedAt = GetUtcNow();
+        drive.UpdatedAt = GetUtcNow();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         return DeleteDriveResultCode.Deleted;
     }
 
-    internal async Task RecoverIncompleteCreationsAsync(CancellationToken cancellationToken)
+    internal async Task ProcessPendingCreationsAsync(CancellationToken cancellationToken)
     {
-        var operations = await operationRepository.FindAllAsync(cancellationToken);
-        var idempotencyKeys = operations
-            .Where(operation =>
-                operation.Status == DriveCreationOperationStatus.Pending ||
-                operation.Status == DriveCreationOperationStatus.HyperDriveCreated ||
-                operation.Status == DriveCreationOperationStatus.CompensationPending)
-            .Select(operation => operation.IdempotencyKey)
+        var driveIds = (await driveRepository.FindAllByStatusAsync(
+                DriveStatus.Pending,
+                cancellationToken))
+            .Select(drive => drive.Id)
             .ToArray();
 
-        foreach (var idempotencyKey in idempotencyKeys)
+        foreach (var driveId in driveIds)
         {
             try
             {
-                await RecoverIncompleteCreationAsync(idempotencyKey, cancellationToken);
+                await ProcessPendingCreationAsync(driveId, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -241,178 +229,69 @@ internal sealed class DriveService(
             {
                 logger.LogWarning(
                     exception,
-                    "恢复 Drive 创建操作 {IdempotencyKey} 失败，将在下一轮重试。",
-                    idempotencyKey);
+                    "处理 Pending Drive {DriveId} 失败。",
+                    driveId);
             }
         }
     }
 
-    private async Task RecoverIncompleteCreationAsync(
-        string idempotencyKey,
-        CancellationToken cancellationToken)
-    {
-        using var lease = await creationLock.AcquireAsync(idempotencyKey, cancellationToken);
-        unitOfWork.ClearTrackedEntities();
-        var operation = await operationRepository.FindByIdAsync(
-            idempotencyKey,
-            cancellationToken) ?? throw new InvalidOperationException(
-                $"找不到 Drive 创建操作 {idempotencyKey}。");
-
-        if (operation.Status == DriveCreationOperationStatus.Pending)
-        {
-            if (!DriveName.TryCreate(operation.Name, out var name))
-            {
-                throw new InvalidOperationException(
-                    $"创建操作 {idempotencyKey} 保存了无效的 Drive Name。");
-            }
-
-            var driveKey = await hyperClient.CreateAsync(
-                new DriveId(operation.DriveId),
-                name,
-                cancellationToken);
-            operation.DriveKey = driveKey.Value;
-            operation.Status = DriveCreationOperationStatus.HyperDriveCreated;
-            operation.UpdatedAt = GetUtcNow();
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-        }
-
-        if (operation.Status is DriveCreationOperationStatus.HyperDriveCreated or
-            DriveCreationOperationStatus.CompensationPending)
-        {
-            await TryCompensateAsync(operation, cancellationToken);
-        }
-    }
-
-    private async Task<DriveCreationOperationEntity> GetOrCreateOperationAsync(
-        IdempotencyKey idempotencyKey,
-        DriveName name,
-        DriveContentTypeId contentTypeId,
-        string requestHash,
-        CancellationToken cancellationToken)
-    {
-        var existing = await operationRepository.FindByIdAsync(
-            idempotencyKey.Value,
-            cancellationToken);
-
-        if (existing is not null)
-        {
-            return existing;
-        }
-
-        var now = GetUtcNow();
-        var created = new DriveCreationOperationEntity
-        {
-            IdempotencyKey = idempotencyKey.Value,
-            RequestHash = requestHash,
-            DriveId = DriveId.New().Value,
-            Name = name.Value,
-            ContentTypeId = contentTypeId.Value,
-            Status = DriveCreationOperationStatus.Pending,
-            CreatedAt = now,
-            UpdatedAt = now
-        };
-        operationRepository.Add(created);
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return created;
-    }
-
-    private async Task<DriveKey> EnsureHyperDriveCreatedAsync(
-        DriveCreationOperationEntity operation,
-        DriveName name,
-        CancellationToken cancellationToken)
-    {
-        if (operation.Status == DriveCreationOperationStatus.HyperDriveCreated &&
-            DriveKey.TryCreate(operation.DriveKey, out var existingDriveKey))
-        {
-            return existingDriveKey;
-        }
-
-        var driveKey = await hyperClient.CreateAsync(
-            new DriveId(operation.DriveId),
-            name,
-            cancellationToken);
-        operation.DriveKey = driveKey.Value;
-        operation.Status = DriveCreationOperationStatus.HyperDriveCreated;
-        operation.UpdatedAt = GetUtcNow();
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        return driveKey;
-    }
-
-    private async Task PersistCompletedDriveAsync(
-        DriveCreationOperationEntity operation,
-        DriveKey driveKey,
-        CancellationToken cancellationToken)
-    {
-        var now = GetUtcNow();
-        driveRepository.Add(new DriveEntity
-        {
-            Id = operation.DriveId,
-            Key = driveKey.Value,
-            Name = operation.Name,
-            ContentTypeId = operation.ContentTypeId,
-            RelationType = DriveRelationType.Ownership,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        operation.Status = DriveCreationOperationStatus.Completed;
-        operation.UpdatedAt = now;
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-    }
-
-    private async Task<bool> TryCompensateAsync(
-        DriveCreationOperationEntity operation,
-        CancellationToken cancellationToken)
-    {
-        if (!DriveKey.TryCreate(operation.DriveKey, out var driveKey))
-        {
-            return false;
-        }
-
-        operation.Status = DriveCreationOperationStatus.CompensationPending;
-        operation.CompensationAttemptCount++;
-        operation.UpdatedAt = GetUtcNow();
-
-        try
-        {
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            await hyperClient.DeleteAsync(driveKey, cancellationToken);
-            operation.Status = DriveCreationOperationStatus.Compensated;
-            operation.UpdatedAt = GetUtcNow();
-            await unitOfWork.SaveChangesAsync(cancellationToken);
-            return true;
-        }
-        catch (Exception exception)
-        {
-            logger.LogWarning(
-                exception,
-                "补偿 Drive 创建操作 {IdempotencyKey} 失败，第 {AttemptCount} 次尝试未完成。",
-                operation.IdempotencyKey,
-                operation.CompensationAttemptCount);
-            return false;
-        }
-    }
-
-    private async Task<DriveResponse?> TryLoadCompletedDriveAsync(
-        string idempotencyKey,
-        CancellationToken cancellationToken)
-    {
-        var operation = await operationRepository.FindByIdAsync(
-            idempotencyKey,
-            cancellationToken);
-
-        return operation?.Status != DriveCreationOperationStatus.Completed
-            ? null
-            : await GetAsync(new DriveId(operation.DriveId), cancellationToken);
-    }
-
-    private async Task<DriveResponse> LoadRequiredDriveAsync(
+    private async Task ProcessPendingCreationAsync(
         Guid driveId,
         CancellationToken cancellationToken)
     {
-        var drive = await GetAsync(new DriveId(driveId), cancellationToken);
+        var drive = await driveRepository.FindByIdAsync(driveId, cancellationToken);
 
-        return drive ?? throw new InvalidOperationException(
-            $"已完成的创建操作缺少 Drive {driveId:D}。");
+        if (drive?.Status != DriveStatus.Pending)
+        {
+            return;
+        }
+
+        var idempotencyKey = drive.IdempotencyKey ?? throw new InvalidOperationException(
+            $"Pending Drive {driveId:D} 缺少创建幂等键。");
+        using var lease = await creationLock.AcquireAsync(idempotencyKey, cancellationToken);
+        unitOfWork.ClearTrackedEntities();
+        drive = await driveRepository.FindByIdAsync(driveId, cancellationToken);
+
+        if (drive?.Status != DriveStatus.Pending)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!DriveName.TryCreate(drive.Name, out var name))
+            {
+                throw new InvalidOperationException(
+                    $"Pending Drive {driveId:D} 保存了无效的 Name。");
+            }
+
+            var driveKey = await hyperClient.EnsureDriveAsync(
+                new DriveId(drive.Id),
+                name,
+                cancellationToken);
+            drive.Key = driveKey.Value;
+            drive.Status = DriveStatus.Ready;
+            drive.UpdatedAt = GetUtcNow();
+            await unitOfWork.SaveChangesAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            unitOfWork.ClearTrackedEntities();
+            drive = await driveRepository.FindByIdAsync(driveId, CancellationToken.None);
+
+            if (drive?.Status == DriveStatus.Pending)
+            {
+                drive.Status = DriveStatus.Failed;
+                drive.UpdatedAt = GetUtcNow();
+                await unitOfWork.SaveChangesAsync(CancellationToken.None);
+            }
+
+            logger.LogWarning(exception, "创建 Drive {DriveId} 失败。", driveId);
+        }
     }
 
     private static string ComputeRequestHash(
@@ -432,20 +311,37 @@ internal sealed class DriveService(
 
     private static DriveResponse ToResponse(DriveEntity entity)
     {
-        if (!DriveKey.TryCreate(entity.Key, out var key) ||
-            !DriveName.TryCreate(entity.Name, out var name) ||
+        if (!DriveName.TryCreate(entity.Name, out var name) ||
             !DriveContentTypeId.TryCreate(entity.ContentTypeId, out var contentTypeId))
         {
             throw new InvalidOperationException($"Drive {entity.Id:D} 的持久化数据无效。");
         }
 
+        DriveKey? key = null;
+
+        if (entity.Key is not null)
+        {
+            if (!DriveKey.TryCreate(entity.Key, out var parsedKey))
+            {
+                throw new InvalidOperationException($"Drive {entity.Id:D} 保存了无效的 DriveKey。");
+            }
+
+            key = parsedKey;
+        }
+
+        if (entity.Status == DriveStatus.Ready && key is null)
+        {
+            throw new InvalidOperationException($"Ready Drive {entity.Id:D} 缺少 DriveKey。");
+        }
+
         return new DriveResponse(
             entity.Id,
-            key.Value,
+            key?.Value,
             name.Value,
             contentTypeId.Value,
             entity.Remark,
             ToResponseValue(entity.RelationType),
+            ToResponseValue(entity.Status),
             entity.CreatedAt,
             entity.UpdatedAt);
     }
@@ -456,6 +352,15 @@ internal sealed class DriveService(
         DriveRelationType.Ownership => "ownership",
         DriveRelationType.Subscription => "subscription",
         _ => throw new ArgumentOutOfRangeException(nameof(relationType))
+    };
+
+    private static string ToResponseValue(DriveStatus status) => status switch
+    {
+        DriveStatus.Pending => "pending",
+        DriveStatus.Ready => "ready",
+        DriveStatus.Failed => "failed",
+        DriveStatus.Deleted => "deleted",
+        _ => throw new ArgumentOutOfRangeException(nameof(status))
     };
 
     private sealed record RequestIdentity(string Name, string ContentTypeId);

@@ -12,33 +12,16 @@ namespace Cinereel.Infrastructure.Persistence.Migrations
         protected override void Up(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.CreateTable(
-                name: "DriveCreationOperations",
-                columns: table => new
-                {
-                    IdempotencyKey = table.Column<string>(type: "TEXT", maxLength: 128, nullable: false),
-                    RequestHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    DriveId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    ContentTypeId = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
-                    State = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
-                    DriveKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true),
-                    CompensationAttemptCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    CreatedAt = table.Column<long>(type: "INTEGER", nullable: false),
-                    UpdatedAt = table.Column<long>(type: "INTEGER", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_DriveCreationOperations", x => x.IdempotencyKey);
-                });
-
-            migrationBuilder.CreateTable(
                 name: "Drives",
                 columns: table => new
                 {
                     Id = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Key = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    Key = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true),
                     Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
                     ContentTypeId = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    IdempotencyKey = table.Column<string>(type: "TEXT", maxLength: 128, nullable: true),
+                    CreationRequestHash = table.Column<string>(type: "TEXT", maxLength: 64, nullable: true),
+                    Status = table.Column<string>(type: "TEXT", maxLength: 32, nullable: false),
                     RelationType = table.Column<int>(type: "INTEGER", nullable: false),
                     Remark = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
                     CreatedAt = table.Column<long>(type: "INTEGER", nullable: false),
@@ -50,9 +33,9 @@ namespace Cinereel.Infrastructure.Persistence.Migrations
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_DriveCreationOperations_DriveId",
-                table: "DriveCreationOperations",
-                column: "DriveId",
+                name: "IX_Drives_IdempotencyKey",
+                table: "Drives",
+                column: "IdempotencyKey",
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -65,9 +48,6 @@ namespace Cinereel.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropTable(
-                name: "DriveCreationOperations");
-
             migrationBuilder.DropTable(
                 name: "Drives");
         }

@@ -8,9 +8,6 @@ internal sealed class CinereelDbContext(
 {
     internal DbSet<DriveEntity> Drives => Set<DriveEntity>();
 
-    internal DbSet<DriveCreationOperationEntity> DriveCreationOperations =>
-        Set<DriveCreationOperationEntity>();
-
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(CinereelDbContext).Assembly);

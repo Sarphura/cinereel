@@ -14,6 +14,10 @@ public interface IDriveService
     Task<IReadOnlyList<DriveResponse>> ListAsync(
         CancellationToken cancellationToken);
 
+    Task<RetryDriveCreationResultCode> RetryCreationAsync(
+        DriveId driveId,
+        CancellationToken cancellationToken);
+
     Task<UpdateDriveRemarkResultCode> UpdateRemarkAsync(
         DriveId driveId,
         DriveRemark remark,

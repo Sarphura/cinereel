@@ -6,7 +6,7 @@
 
 ## 背景
 
-Cinereel 当前以单实例媒体服务运行，需要持久化 Drive 及其当前 RelationType、Publication、可靠异步操作和永久 IdempotencyKey 墓碑。CreateDrive 要求本地 Drive 以 `RelationType = Ownership` 与创建操作在同一事务中提交，类型变更与扫描任务受理、Publication 状态与任务受理也需要事务一致性。
+Cinereel 当前以单实例媒体服务运行，需要持久化 Drive 及其当前 RelationType、DriveStatus、Publication、可靠异步操作和永久 IdempotencyKey 墓碑。CreateDrive 要求本地 Drive 以 `Status = Pending`、`RelationType = Ownership` 和幂等请求信息在同一事务中提交，类型变更与扫描任务受理、Publication 状态与任务受理也需要事务一致性。
 
 当前 C# 服务尚未引入持久化依赖。持久化方案既要支持事务、唯一约束、迁移和并发检查，也应保持本地部署简单，并允许测试覆盖真实的关系数据库行为。
 
@@ -14,12 +14,12 @@ Cinereel 当前以单实例媒体服务运行，需要持久化 Drive 及其当�
 
 - 使用 EF Core 10 与 SQLite 持久化 Cinereel 本地关系状态。
 - 使用共享的 `CinereelDbContext` 作为技术设施；各 Feature 仍拥有自己的实体映射、领域规则与应用 Implementation。
-- Drive Module 按持久化 Entity 分别定义内部 Repository Interface：`IDriveRepository` 与 `IDriveCreationOperationRepository`；每个 Interface 由同名 EF Core Repository Adapter 实现。DriveOwnership 与 Subscription 由 `DriveEntity.RelationType` 表达，不建立独立 Repository Seam。
+- Drive Module 为 `DriveEntity` 定义内部 `IDriveRepository`，并由 `DriveRepository` EF Core Adapter 实现。DriveOwnership 与 Subscription 由 `DriveEntity.RelationType` 表达，创建生命周期由 `DriveEntity.Status` 表达，均不建立独立 Repository Seam。
 - 不定义 Generic Repository，也不使用一个聚合全部 Drive 持久化对象的 Feature Repository。Repository Interface 只提供所属 Entity 的 `FindByIdAsync`、`FindAllAsync`、`Add` 与 `Remove` 等集合操作。
 - Repository 不提供 `Update`、`Save` 或 `SaveAsync`。已查询 Entity 的修改由 EF Core 自动跟踪，Repository 方法本身不得提交数据库。
-- `DriveService` 负责 CreateDrive 的幂等判断、状态迁移、Hyper Client 调用和补偿编排；Repository 负责 EF Core 查询与集合访问，不隐藏或执行用例状态机。
+- `DriveService` 负责 CreateDrive 的幂等判断、状态迁移和 Hyper Client 调用编排；Repository 负责 EF Core 查询与集合访问，不隐藏或执行用例状态机。
 - 使用 `Infrastructure/Persistence` 中共享的内部 `IUnitOfWork` 作为唯一提交入口。它统一提交当前 Scoped `CinereelDbContext` 的更改，并允许失败恢复流程清除不再可信的 EF Core 跟踪状态。
-- 一次 `SaveChangesAsync` 在同一个本地事务中提交 Drive、RelationType 与 DriveCreationOperation 的相关状态变化；不得在 Repository Adapter 内独立提交。
+- 一次 `SaveChangesAsync` 在同一个本地事务中提交 Drive、DriveStatus、RelationType 与幂等请求信息的相关状态变化；不得在 Repository Adapter 内独立提交。
 - 使用数据库主键、唯一索引和外键落实可以由数据库保证的不变量；同一进程内针对相同 `Idempotency-Key` 的并发创建由 Singleton `DriveCreationLock` 串行化。
 - 持久化类型统一使用 `Entity` 后缀，放在所属 Feature 的 `Entity/`；Repository Interface 与 Adapter 放在 `Repository/`；EF Core 映射放在 `Configuration/`，并使用独立的 `IEntityTypeConfiguration<TEntity>`。
 - `CinereelDbContext` 通过 `ApplyConfigurationsFromAssembly` 加载各 Feature 的 Entity Configuration，避免把所有映射集中到共享 `OnModelCreating`。
@@ -42,16 +42,12 @@ Drive Module 的持久化相关文件采用以下结构：
 Features/Drive/
 ├── Entity/
 │   ├── DriveEntity.cs
-│   ├── DriveCreationOperationEntity.cs
-│   └── DriveCreationOperationStatus.cs
+│   └── DriveStatus.cs
 ├── Repository/
 │   ├── IDriveRepository.cs
-│   ├── DriveRepository.cs
-│   ├── IDriveCreationOperationRepository.cs
-│   └── DriveCreationOperationRepository.cs
+│   └── DriveRepository.cs
 └── Configuration/
-    ├── DriveEntityConfiguration.cs
-    └── DriveCreationOperationEntityConfiguration.cs
+    └── DriveEntityConfiguration.cs
 
 Infrastructure/Persistence/
 ├── CinereelDbContext.cs
@@ -84,11 +80,11 @@ Infrastructure/Persistence/
 
 但 Cinereel 当前是单实例本地服务，引入独立数据库进程会显著增加安装与运行成本。现阶段没有需要 PostgreSQL 的并发或部署需求，因此不采用。
 
-### 使用一个 Feature Repository
+### 为创建过程保留独立 Repository
 
-此方案由一个 `IDriveRepository` 同时管理 Drive 与 DriveCreationOperation，并可以在 Repository 内协调提交。
+此方案为 DriveCreationOperation 建立独立 Entity 与 Repository，由 DriveService 协调 Drive 和创建操作的提交。
 
-但 Repository 方法会混合多个 Entity 的查询和状态操作，随着 Drive 用例增加而持续膨胀。当前选择每种 Entity 一个 Repository，并由共享 `IUnitOfWork` 明确表达跨 Repository 的提交位置，因此不采用。
+但创建状态本身就是用户可观察的 Drive 生命周期，独立 Operation 会重复保存 DriveId、Name、内容类型和幂等信息，并引入双表一致性。当前选择由 `DriveEntity.Status` 表达创建过程，因此不采用。
 
 ### 使用 Generic Repository
 
@@ -98,21 +94,21 @@ Infrastructure/Persistence/
 
 ### Repository 使用领域状态迁移方法
 
-此方案让 Repository 提供 `MarkHyperDriveCreatedAsync`、`CompleteCreationAsync`、`MarkCompensatedAsync` 等方法，把创建操作状态持久化细节隐藏起来。
+此方案让 Repository 提供 `MarkReadyAsync`、`MarkFailedAsync` 等方法，把创建状态持久化细节隐藏起来。
 
-但 CreateDrive 的状态迁移还需要协调 Hyper Client 调用、异常处理与补偿，拆入 Repository 会把同一个用例流程分散到两个位置。当前选择由 `DriveService` 集中编排状态机，Repository 只管理 Entity 集合，因此不采用。
+但 CreateDrive 的状态迁移还需要协调 Hyper Client 调用与异常处理，拆入 Repository 会把同一个用例流程分散到两个位置。当前选择由 `DriveService` 集中编排状态机，Repository 只管理 Entity 集合，因此不采用。
 
 ### 每个 Repository 独立提交
 
 此方案让单个 Repository 方法可以自行完成持久化，调用方不需要显式使用 `IUnitOfWork`。
 
-但 Drive 的 RelationType 与 DriveCreationOperation 必须作为一个本地一致性单元提交。各 Repository 独立提交会产生部分成功，并破坏 CreateDrive 的同步完成与补偿语义，因此不采用。
+但 Drive 的 Status、RelationType 与幂等请求信息必须作为一个本地一致性单元提交。Repository 独立提交会产生部分成功，并破坏 CreateDrive 的可靠异步受理语义，因此不采用。
 
 ### 引入 ABP 或其他企业应用框架
 
 此方案可以提供 Repository、Unit of Work、审计、权限、Module、后台任务与统一异常处理等约定能力。
 
-但 Cinereel 当前是单实例本地媒体服务，核心复杂度来自 Hyper Client 集成、跨资源补偿、DriveScan 与 Publication 状态机；完整企业框架不能消除这些领域规则，却会接管 Entity、应用层和项目结构。当前继续使用 ASP.NET Core、EF Core 与按需编写的薄装配层，因此不采用。
+但 Cinereel 当前是单实例本地媒体服务，核心复杂度来自 Hyper Client 集成、Drive 创建、DriveScan 与 Publication 状态机；完整企业框架不能消除这些领域规则，却会接管 Entity、应用层和项目结构。当前继续使用 ASP.NET Core、EF Core 与按需编写的薄装配层，因此不采用。
 
 ## 后果
 
@@ -121,7 +117,7 @@ Infrastructure/Persistence/
 - 单文件 SQLite 保持本地部署简单，同时提供真实关系事务与约束。
 - EF Core migration 为后续 Feature 提供统一的结构演进方式。
 - 测试与生产使用同一种数据库引擎，能覆盖唯一约束、外键和事务行为。
-- Repository Interface 把持久化访问集中在 Drive Module 内部，`DriveService` 可以专注于用例编排和补偿状态机。
+- Repository Interface 把持久化访问集中在 Drive Module 内部，`DriveService` 可以专注于用例编排和 Drive 状态机。
 - `IUnitOfWork` 让跨 Repository 的一次提交以及失败后的跟踪状态清理具有统一位置。
 - 每种 Entity 的查询和集合操作拥有固定位置，Java/Spring Data 开发者可以沿 `Controller -> Service -> Repository -> Entity` 调用链定位代码，同时 Feature 文件仍保持聚合。
 - 独立 Entity Configuration 让每个 Feature 拥有自己的表结构映射，共享 `CinereelDbContext` 不会随 Feature 增长形成大型映射方法。
@@ -132,7 +128,7 @@ Infrastructure/Persistence/
 
 - SQLite 的写入并发有限，长事务和后台任务必须保持短小。
 - Repository Interface 当前只有 EF Core Adapter，且多数方法与 `DbSet` 操作接近，会增加内部 Interface、依赖注入和测试装配样板。
-- 一个 Drive 用例可能同时依赖多个 Repository 与 `IUnitOfWork`，调用链和构造函数参数会比直接操作 `CinereelDbContext` 更长。
+- Drive 用例同时依赖 Repository 与 `IUnitOfWork`，调用链和构造函数参数会比直接操作 `CinereelDbContext` 更长。
 - `IUnitOfWork` 与所有 Repository 必须共享同一个 Scoped `CinereelDbContext`；错误的生命周期配置会破坏原子提交和跟踪状态清理。
 - `DriveCreationLock` 只协调单个进程，不能替代数据库唯一约束，也不支持多实例写入协调。
 - EF Core 实体与领域结果需要明确映射，不能把可变跟踪实体直接返回给调用方。

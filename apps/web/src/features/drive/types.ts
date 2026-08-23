@@ -8,9 +8,12 @@ export type DriveContentTypeId =
   | 'cinereel.music'
   | 'cinereel.generic';
 
+export type DriveStatus = 'pending' | 'ready' | 'failed' | 'deleted';
+
 export type DriveRecord = {
   driveId?: string;
   driveKey: string;
+  status?: DriveStatus;
   name: string;
   type: DriveContentType;
   remark?: string;

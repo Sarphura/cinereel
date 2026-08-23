@@ -30,6 +30,10 @@ export function PublishDetailHeader({
     return null;
   }
 
+  if ((drive.status ?? 'ready') !== 'ready') {
+    return <DriveSummaryHeader drive={drive} />;
+  }
+
   const handleSubmit = async () => {
     setError(null);
 

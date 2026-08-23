@@ -22,7 +22,7 @@ public sealed class HyperClientTests
         });
         var client = CreateClient(handler);
 
-        var driveKey = await client.CreateAsync(driveId, name, CancellationToken.None);
+        var driveKey = await client.EnsureDriveAsync(driveId, name, CancellationToken.None);
 
         var request = Assert.Single(handler.Requests);
         Assert.Equal(HttpMethod.Post, request.Method);
@@ -64,7 +64,7 @@ public sealed class HyperClientTests
         Assert.True(DriveName.TryCreate("Drive", out var name));
 
         await Assert.ThrowsAsync<HyperClientException>(() =>
-            client.CreateAsync(DriveId.New(), name, CancellationToken.None));
+            client.EnsureDriveAsync(DriveId.New(), name, CancellationToken.None));
     }
 
     private static HyperClient CreateClient(HttpMessageHandler handler)

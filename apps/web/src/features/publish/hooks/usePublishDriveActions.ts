@@ -8,6 +8,7 @@ import {
   publishedDrivesQueryOptions,
   refreshPublishedDriveTree,
   renamePublishedDrive,
+  retryPublishedDriveCreation,
   savePublishedDriveRemark,
 } from '../api/api';
 import { mountDrive, mountMovieManually, type ManualMovieMountInput } from '../../jobs/api';
@@ -29,6 +30,7 @@ export interface PublishDriveActions {
   renaming: boolean;
   refreshing: boolean;
   savingRemark: boolean;
+  retryingCreation: boolean;
   // Errors
   error: string | null;
   setError: (error: string | null) => void;
@@ -39,6 +41,7 @@ export interface PublishDriveActions {
   handlePublish: (targetPath: string) => Promise<void>;
   handleManualMovieMount: (input: ManualMovieMountInput) => Promise<void>;
   handleSaveRemark: (driveId: string, remark: string) => Promise<void>;
+  handleRetryCreation: () => Promise<void>;
   handleRefresh: (selectedDriveKey: string | null) => Promise<void>;
 }
 
@@ -57,6 +60,7 @@ export function usePublishDriveActions({
   const [renaming, setRenaming] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [savingRemark, setSavingRemark] = useState(false);
+  const [retryingCreation, setRetryingCreation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const invalidatePublishData = async (driveKey?: string | null) => {
@@ -152,6 +156,14 @@ export function usePublishDriveActions({
     },
   });
 
+  const retryCreationMutation = useMutation({
+    mutationFn: retryPublishedDriveCreation,
+    onSuccess: async (_, driveId) => {
+      await invalidatePublishData(driveId);
+      setError(null);
+    },
+  });
+
   const handleCreateDrive = async (label: string, contentTypeId: DriveContentTypeId) => {
     const nextLabel = label.trim();
 
@@ -242,6 +254,20 @@ export function usePublishDriveActions({
     }
   };
 
+  const handleRetryCreation = async () => {
+    if (!selectedDrive?.driveId) {
+      return;
+    }
+
+    setRetryingCreation(true);
+
+    try {
+      await retryCreationMutation.mutateAsync(selectedDrive.driveId);
+    } finally {
+      setRetryingCreation(false);
+    }
+  };
+
   const handleRefresh = async (selectedDriveKey: string | null) => {
     setRefreshing(true);
 
@@ -268,6 +294,7 @@ export function usePublishDriveActions({
     renaming,
     refreshing,
     savingRemark,
+    retryingCreation,
     error,
     setError,
     handleCreateDrive,
@@ -276,6 +303,7 @@ export function usePublishDriveActions({
     handlePublish,
     handleManualMovieMount,
     handleSaveRemark,
+    handleRetryCreation,
     handleRefresh,
   };
 }

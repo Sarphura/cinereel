@@ -31,7 +31,7 @@ internal sealed class TestHyperClient : IHyperClient
 
     internal Exception? DeleteException { get; set; }
 
-    public Task<DriveKey> CreateAsync(
+    public Task<DriveKey> EnsureDriveAsync(
         DriveId driveId,
         DriveName name,
         CancellationToken cancellationToken)

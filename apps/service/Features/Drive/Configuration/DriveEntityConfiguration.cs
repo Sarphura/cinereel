@@ -11,8 +11,7 @@ internal sealed class DriveEntityConfiguration : IEntityTypeConfiguration<DriveE
         builder.HasKey(drive => drive.Id);
 
         builder.Property(drive => drive.Key)
-            .HasMaxLength(64)
-            .IsRequired();
+            .HasMaxLength(64);
         builder.HasIndex(drive => drive.Key).IsUnique();
 
         builder.Property(drive => drive.Name)
@@ -20,6 +19,15 @@ internal sealed class DriveEntityConfiguration : IEntityTypeConfiguration<DriveE
             .IsRequired();
         builder.Property(drive => drive.ContentTypeId)
             .HasMaxLength(200)
+            .IsRequired();
+        builder.Property(drive => drive.IdempotencyKey)
+            .HasMaxLength(IdempotencyKey.MaxLength);
+        builder.HasIndex(drive => drive.IdempotencyKey).IsUnique();
+        builder.Property(drive => drive.CreationRequestHash)
+            .HasMaxLength(64);
+        builder.Property(drive => drive.Status)
+            .HasConversion<string>()
+            .HasMaxLength(32)
             .IsRequired();
         builder.Property(drive => drive.RelationType)
             .IsRequired();

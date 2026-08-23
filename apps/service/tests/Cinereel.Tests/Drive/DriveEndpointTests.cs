@@ -20,22 +20,28 @@ public sealed class DriveEndpointTests : IClassFixture<CinereelWebApplicationFac
         var idempotencyKey = $"test:{Guid.NewGuid():N}";
         var createResponse = await CreateAsync(idempotencyKey, "  电影资料  ");
 
-        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Accepted, createResponse.StatusCode);
         var created = await createResponse.Content.ReadFromJsonAsync<DriveBody>();
         Assert.NotNull(created);
         Assert.Equal("电影资料", created.Name);
         Assert.Equal(DriveContentTypeId.MovieValue, created.ContentTypeId);
         Assert.Equal("ownership", created.Relation);
+        Assert.Equal("pending", created.Status);
+        Assert.Null(created.DriveKey);
         Assert.Equal(
             $"/api/drives/{created.DriveId:D}",
             createResponse.Headers.Location?.AbsolutePath);
 
         var getResponse = await _client.GetAsync($"/api/drives/{created.DriveId:D}");
         Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
-        Assert.Equal(created, await getResponse.Content.ReadFromJsonAsync<DriveBody>());
+        var found = await getResponse.Content.ReadFromJsonAsync<DriveBody>();
+        Assert.NotNull(found);
+        Assert.Equal(created.DriveId, found.DriveId);
 
         var listed = await _client.GetFromJsonAsync<DriveBody[]>("/api/drives");
-        Assert.Contains(created, Assert.IsType<DriveBody[]>(listed));
+        Assert.Contains(
+            Assert.IsType<DriveBody[]>(listed),
+            drive => drive.DriveId == created.DriveId);
     }
 
     [Fact]
@@ -48,8 +54,10 @@ public sealed class DriveEndpointTests : IClassFixture<CinereelWebApplicationFac
         var repeatedResponse = await CreateAsync(idempotencyKey, "电影资料");
         var repeated = await repeatedResponse.Content.ReadFromJsonAsync<DriveBody>();
 
-        Assert.Equal(HttpStatusCode.OK, repeatedResponse.StatusCode);
-        Assert.Equal(first, repeated);
+        Assert.Contains(
+            repeatedResponse.StatusCode,
+            new[] { HttpStatusCode.Accepted, HttpStatusCode.OK });
+        Assert.Equal(first!.DriveId, repeated!.DriveId);
     }
 
     [Fact]
@@ -106,11 +114,12 @@ public sealed class DriveEndpointTests : IClassFixture<CinereelWebApplicationFac
 
     private sealed record DriveBody(
         Guid DriveId,
-        string DriveKey,
+        string? DriveKey,
         string Name,
         string ContentTypeId,
         string? Remark,
         string Relation,
+        string Status,
         DateTimeOffset CreatedAt,
         DateTimeOffset UpdatedAt);
 }

@@ -10,45 +10,44 @@ namespace Cinereel.Tests.Drive;
 public sealed class DriveServiceTests
 {
     [Fact]
-    public async Task CreatePersistsDriveAndOwnership()
+    public async Task CreatePersistsPendingDriveWithoutCallingHyperClient()
     {
         await using var fixture = await DriveServiceFixture.CreateAsync();
-        var input = CreateInput("create:one", "电影资料");
+        var input = CreateInput("create:pending", "电影资料");
 
         var result = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
             CancellationToken.None);
 
-        Assert.Equal(CreateDriveResultCode.Created, result.ResultCode);
+        Assert.Equal(CreateDriveResultCode.Accepted, result.ResultCode);
         Assert.NotNull(result.Drive);
-        Assert.Equal(input.Request.Name, result.Drive.Name);
-        Assert.Equal(input.Request.ContentTypeId, result.Drive.ContentTypeId);
-        Assert.Equal("ownership", result.Drive.Relation);
-        Assert.Single(fixture.HyperClient.CreateCalls);
-        Assert.Equal(result.Drive.DriveId, fixture.HyperClient.CreateCalls[0].DriveId.Value);
-        var saved = await fixture.DbContext.Drives.SingleAsync();
-        Assert.Equal(DriveRelationType.Ownership, saved.RelationType);
+        Assert.Equal("pending", result.Drive.Status);
+        Assert.Null(result.Drive.DriveKey);
+        Assert.Empty(fixture.HyperClient.CreateCalls);
+        var saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
+        Assert.Equal(DriveStatus.Pending, saved.Status);
+        Assert.Equal(input.IdempotencyKey.Value, saved.IdempotencyKey);
     }
 
     [Fact]
-    public async Task SameIdempotencyKeyAndRequestReplaysResult()
+    public async Task SameIdempotencyKeyAndRequestReturnsSamePendingDrive()
     {
         await using var fixture = await DriveServiceFixture.CreateAsync();
-        var input = CreateInput("create:replay", "电影资料");
+        var input = CreateInput("create:replay-pending", "电影资料");
 
-        var created = await fixture.Service.CreateAsync(
+        var first = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
             CancellationToken.None);
-        var replayed = await fixture.Service.CreateAsync(
+        var repeated = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
             CancellationToken.None);
 
-        Assert.Equal(CreateDriveResultCode.Replayed, replayed.ResultCode);
-        Assert.Equal(created.Drive, replayed.Drive);
-        Assert.Single(fixture.HyperClient.CreateCalls);
+        Assert.Equal(CreateDriveResultCode.Accepted, repeated.ResultCode);
+        Assert.Equal(first.Drive, repeated.Drive);
+        Assert.Equal(1, await fixture.DbContext.Drives.CountAsync());
     }
 
     [Fact]
@@ -69,127 +68,97 @@ public sealed class DriveServiceTests
 
         Assert.Equal(CreateDriveResultCode.IdempotencyConflict, result.ResultCode);
         Assert.Null(result.Drive);
-        Assert.Single(fixture.HyperClient.CreateCalls);
+        Assert.Empty(fixture.HyperClient.CreateCalls);
     }
 
     [Fact]
-    public async Task LocalCommitFailureDeletesCreatedHyperDrive()
+    public async Task JobCompletesPendingDrive()
     {
         await using var fixture = await DriveServiceFixture.CreateAsync();
-        await fixture.RejectDriveInsertsAsync();
-
-        var input = CreateInput("create:compensate", "电影资料");
-        await Assert.ThrowsAsync<DbUpdateException>(() => fixture.Service.CreateAsync(
+        var input = CreateInput("create:ready", "电影资料");
+        var accepted = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
-            CancellationToken.None));
+            CancellationToken.None);
 
-        Assert.Single(fixture.HyperClient.DeleteCalls);
-        Assert.Equal(0, await fixture.DbContext.Drives.CountAsync());
-        var operation = await fixture.DbContext.DriveCreationOperations
-            .AsNoTracking()
-            .SingleAsync();
-        Assert.Equal(DriveCreationOperationStatus.Compensated, operation.Status);
-        Assert.Equal(1, operation.CompensationAttemptCount);
-    }
+        await fixture.Service.ProcessPendingCreationsAsync(CancellationToken.None);
 
-    [Fact]
-    public async Task FailedCompensationRemainsRecoverable()
-    {
-        await using var fixture = await DriveServiceFixture.CreateAsync();
-        await fixture.RejectDriveInsertsAsync();
-        fixture.HyperClient.DeleteException = new HttpRequestException("不可用");
+        var found = await fixture.Service.GetAsync(
+            new DriveId(accepted.Drive!.DriveId),
+            CancellationToken.None);
+        Assert.NotNull(found);
+        Assert.Equal("ready", found.Status);
+        Assert.NotNull(found.DriveKey);
+        Assert.Equal(accepted.Drive.DriveId, Assert.Single(fixture.HyperClient.CreateCalls).DriveId.Value);
 
-        var input = CreateInput("create:recover", "电影资料");
-        await Assert.ThrowsAsync<DbUpdateException>(() => fixture.Service.CreateAsync(
+        var replayed = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
-            CancellationToken.None));
-
-        fixture.HyperClient.DeleteException = null;
-        await fixture.Service.RecoverIncompleteCreationsAsync(CancellationToken.None);
-
-        Assert.Equal(2, fixture.HyperClient.DeleteCalls.Count);
-        var operation = await fixture.DbContext.DriveCreationOperations
-            .AsNoTracking()
-            .SingleAsync();
-        Assert.Equal(DriveCreationOperationStatus.Compensated, operation.Status);
-        Assert.Equal(2, operation.CompensationAttemptCount);
+            CancellationToken.None);
+        Assert.Equal(CreateDriveResultCode.Replayed, replayed.ResultCode);
+        Assert.Equal(found, replayed.Drive);
     }
 
     [Fact]
-    public async Task RecoveryContinuesAfterOneOperationFails()
+    public async Task FailedDriveCanBeRetried()
     {
         await using var fixture = await DriveServiceFixture.CreateAsync();
-        var now = DateTimeOffset.UtcNow;
-        var driveKey = new string('d', 64);
-        fixture.DbContext.DriveCreationOperations.AddRange(
-            new DriveCreationOperationEntity
-            {
-                IdempotencyKey = "recover:invalid",
-                RequestHash = new string('0', 64),
-                DriveId = Guid.NewGuid(),
-                Name = string.Empty,
-                ContentTypeId = DriveContentTypeId.MovieValue,
-                Status = DriveCreationOperationStatus.Pending,
-                CreatedAt = now,
-                UpdatedAt = now
-            },
-            new DriveCreationOperationEntity
-            {
-                IdempotencyKey = "recover:valid",
-                RequestHash = new string('1', 64),
-                DriveId = Guid.NewGuid(),
-                Name = "电影资料",
-                ContentTypeId = DriveContentTypeId.MovieValue,
-                Status = DriveCreationOperationStatus.HyperDriveCreated,
-                DriveKey = driveKey,
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        await fixture.DbContext.SaveChangesAsync();
+        var input = CreateInput("create:retry", "电影资料");
+        var accepted = await fixture.Service.CreateAsync(
+            input.IdempotencyKey,
+            input.Request,
+            CancellationToken.None);
+        fixture.HyperClient.CreateException = new HttpRequestException("不可用");
 
-        await fixture.Service.RecoverIncompleteCreationsAsync(CancellationToken.None);
+        await fixture.Service.ProcessPendingCreationsAsync(CancellationToken.None);
 
-        Assert.Equal(driveKey, Assert.Single(fixture.HyperClient.DeleteCalls).Value);
-        var recovered = await fixture.DbContext.DriveCreationOperations
-            .AsNoTracking()
-            .SingleAsync(operation => operation.IdempotencyKey == "recover:valid");
-        Assert.Equal(DriveCreationOperationStatus.Compensated, recovered.Status);
+        var failed = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
+        Assert.Equal(DriveStatus.Failed, failed.Status);
+
+        fixture.HyperClient.CreateException = null;
+        var retryResult = await fixture.Service.RetryCreationAsync(
+            new DriveId(accepted.Drive!.DriveId),
+            CancellationToken.None);
+        Assert.Equal(RetryDriveCreationResultCode.Accepted, retryResult);
+
+        await fixture.Service.ProcessPendingCreationsAsync(CancellationToken.None);
+        var ready = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
+        Assert.Equal(DriveStatus.Ready, ready.Status);
+        Assert.NotNull(ready.Key);
     }
 
     [Fact]
-    public async Task ListAndGetReturnOwnedDrives()
+    public async Task ListAndGetIncludePendingDrives()
     {
         await using var fixture = await DriveServiceFixture.CreateAsync();
         var input = CreateInput("create:query", "电影资料");
-        var created = await fixture.Service.CreateAsync(
+        var accepted = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
             CancellationToken.None);
 
         var found = await fixture.Service.GetAsync(
-            new DriveId(created.Drive!.DriveId),
+            new DriveId(accepted.Drive!.DriveId),
             CancellationToken.None);
         var listed = await fixture.Service.ListAsync(CancellationToken.None);
 
-        Assert.Equal(created.Drive, found);
-        Assert.Equal(created.Drive, Assert.Single(listed));
+        Assert.Equal(accepted.Drive, found);
+        Assert.Equal(accepted.Drive, Assert.Single(listed));
     }
 
     [Fact]
-    public async Task UpdateRemarkPersistsOnOwnedDrive()
+    public async Task UpdateRemarkPersistsOnPendingOwnedDrive()
     {
         await using var fixture = await DriveServiceFixture.CreateAsync();
         var input = CreateInput("create:remark", "电影资料");
-        var created = await fixture.Service.CreateAsync(
+        var accepted = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
             CancellationToken.None);
         Assert.True(DriveRemark.TryCreate("我的电影", out var remark));
 
         var result = await fixture.Service.UpdateRemarkAsync(
-            new DriveId(created.Drive!.DriveId),
+            new DriveId(accepted.Drive!.DriveId),
             remark,
             CancellationToken.None);
 
@@ -199,32 +168,33 @@ public sealed class DriveServiceTests
     }
 
     [Fact]
-    public async Task DeleteClearsRelationAndKeepsDrive()
+    public async Task DeleteMarksDriveDeletedAndPreservesIdempotencyTombstone()
     {
         await using var fixture = await DriveServiceFixture.CreateAsync();
         var input = CreateInput("create:delete", "电影资料");
-        var created = await fixture.Service.CreateAsync(
+        var accepted = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
             CancellationToken.None);
-        Assert.True(DriveRemark.TryCreate("待删除", out var remark));
-        await fixture.Service.UpdateRemarkAsync(
-            new DriveId(created.Drive!.DriveId),
-            remark,
-            CancellationToken.None);
 
         var result = await fixture.Service.DeleteAsync(
-            new DriveId(created.Drive.DriveId),
+            new DriveId(accepted.Drive!.DriveId),
             CancellationToken.None);
 
         Assert.Equal(DeleteDriveResultCode.Deleted, result);
         var saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
+        Assert.Equal(DriveStatus.Deleted, saved.Status);
         Assert.Equal(DriveRelationType.None, saved.RelationType);
-        Assert.Null(saved.Remark);
         Assert.Null(await fixture.Service.GetAsync(
-            new DriveId(created.Drive.DriveId),
+            new DriveId(accepted.Drive.DriveId),
             CancellationToken.None));
         Assert.Empty(await fixture.Service.ListAsync(CancellationToken.None));
+
+        var replayed = await fixture.Service.CreateAsync(
+            input.IdempotencyKey,
+            input.Request,
+            CancellationToken.None);
+        Assert.Equal(CreateDriveResultCode.Gone, replayed.ResultCode);
     }
 
     private static CreateDriveInput CreateInput(string idempotencyKey, string name)
@@ -270,11 +240,9 @@ public sealed class DriveServiceTests
                 .Options;
             var dbContext = new CinereelDbContext(options);
             await dbContext.Database.MigrateAsync();
-            Assert.True(DriveKey.TryCreate(new string('c', 64), out var driveKey));
-            var hyperClient = new TestHyperClient(driveKey);
+            var hyperClient = new TestHyperClient();
             var service = new DriveService(
                 new DriveRepository(dbContext),
-                new DriveCreationOperationRepository(dbContext),
                 new UnitOfWork(dbContext),
                 hyperClient,
                 new DriveCreationLock(),
@@ -282,15 +250,6 @@ public sealed class DriveServiceTests
                 NullLogger<DriveService>.Instance);
             return new DriveServiceFixture(connection, dbContext, hyperClient, service);
         }
-
-        internal Task RejectDriveInsertsAsync() => DbContext.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TRIGGER RejectDriveInsert
-            BEFORE INSERT ON Drives
-            BEGIN
-                SELECT RAISE(FAIL, '测试本地提交失败');
-            END;
-            """);
 
         public async ValueTask DisposeAsync()
         {

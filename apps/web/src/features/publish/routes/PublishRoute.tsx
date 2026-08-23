@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { getRouteApi } from '@tanstack/react-router';
-import { IconPlus } from '../../../components/icons/Icons';
+import { IconPlus, IconRefresh } from '../../../components/icons/Icons';
 import { ConfirmDialog } from '../../../components/ui/ConfirmDialog';
 import { FormDialog } from '../../../components/ui/FormDialog';
 import { ExplorerDetailHeader, ExplorerPage, ExplorerPanel } from '../../../shared/components/explorer/ExplorerChrome';
@@ -113,6 +113,18 @@ export function PublishRouteView() {
     replaceAndInvalidate,
     onClosePreview: preview.closePreview,
   });
+
+  const hasPendingDrive = drives.some((drive) => drive.status === 'pending');
+
+  React.useEffect(() => {
+    if (!hasPendingDrive) return;
+
+    const timer = window.setInterval(() => {
+      void router.invalidate();
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [hasPendingDrive, router]);
 
   // 切换 Drive 时重置选中节点
   const prevDriveKeyRef = React.useRef(selectedDriveKey);
@@ -245,30 +257,50 @@ export function PublishRouteView() {
                 ) : null}
               </ExplorerDetailHeader>
 
-              <PublishDriveExplorer
-                resourceTree={resourceTree}
-                refreshing={actions.refreshing}
-                onRefresh={() => void actions.handleRefresh(selectedDriveKey)}
-                onPreviewNode={handlePreviewNode}
-                isPreviewableNode={(node) => getPreviewKind(node) !== null}
-                preview={preview.preview}
-                previewLabel={preview.previewLabel}
-                previewLoadState={preview.previewLoadState}
-                previewError={preview.previewError}
-                onClosePreview={preview.closePreview}
-                onPreviewError={(message) => {
-                  preview.setPreviewLoadState('failed');
-                  preview.setPreviewError(message);
-                }}
-                requiresStreamingPlayer={requiresStreamingVideoPreview}
-                onSelectNode={setSelectedNode}
-                selectedNodePath={selectedNode?.path ?? null}
-                onRenameNode={handleRenameNode}
-                onMoveNode={handleMoveNode}
-                onCopyNode={handleCopyNode}
-                onCreateFolder={handleCreateFolder}
-                onDeleteNode={handleDeleteNode}
-              />
+              {selectedDrive && (selectedDrive.status ?? 'ready') !== 'ready' ? (
+                <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                  <div className={`size-2 rounded-full ${selectedDrive.status === 'failed' ? 'bg-[#ef4444]' : 'animate-pulse bg-[#f59e0b]'}`} />
+                  <p className="text-sm font-medium text-[#d4d4d8]">
+                    {selectedDrive.status === 'failed' ? 'Drive 创建失败' : 'Drive 正在创建'}
+                  </p>
+                  {selectedDrive.status === 'failed' ? (
+                    <button
+                      type="button"
+                      onClick={() => void actions.handleRetryCreation()}
+                      disabled={actions.retryingCreation}
+                      className="inline-flex h-8 items-center gap-2 rounded bg-white/8 px-3 text-xs font-medium text-[#d4d4d8] transition-colors hover:bg-white/12 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <IconRefresh className="size-3.5" />
+                      {actions.retryingCreation ? '重试中' : '重试'}
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <PublishDriveExplorer
+                  resourceTree={resourceTree}
+                  refreshing={actions.refreshing}
+                  onRefresh={() => void actions.handleRefresh(selectedDriveKey)}
+                  onPreviewNode={handlePreviewNode}
+                  isPreviewableNode={(node) => getPreviewKind(node) !== null}
+                  preview={preview.preview}
+                  previewLabel={preview.previewLabel}
+                  previewLoadState={preview.previewLoadState}
+                  previewError={preview.previewError}
+                  onClosePreview={preview.closePreview}
+                  onPreviewError={(message) => {
+                    preview.setPreviewLoadState('failed');
+                    preview.setPreviewError(message);
+                  }}
+                  requiresStreamingPlayer={requiresStreamingVideoPreview}
+                  onSelectNode={setSelectedNode}
+                  selectedNodePath={selectedNode?.path ?? null}
+                  onRenameNode={handleRenameNode}
+                  onMoveNode={handleMoveNode}
+                  onCopyNode={handleCopyNode}
+                  onCreateFolder={handleCreateFolder}
+                  onDeleteNode={handleDeleteNode}
+                />
+              )}
             </ExplorerPanel>
           </>
         )}

@@ -18,6 +18,24 @@ const movieDrive: DriveRecord = {
 };
 
 describe('PublishDetailHeader', () => {
+  it.each([
+    ['pending', '创建中'],
+    ['failed', '创建失败'],
+  ] as const)('%s Drive 只显示状态，不提供挂载入口', (status, statusLabel) => {
+    render(
+      <PublishDetailHeader
+        drive={{ ...movieDrive, driveKey: '', status }}
+        submitting={false}
+        onMount={vi.fn()}
+        onManualMovieMount={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(statusLabel)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '手动挂载' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '自动挂载' })).not.toBeInTheDocument();
+  });
+
   it('仅为电影 Drive 拆分手动和自动挂载按钮', () => {
     const props = {
       submitting: false,

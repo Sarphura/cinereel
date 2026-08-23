@@ -2,7 +2,7 @@ namespace Cinereel.Features.Drive;
 
 public enum CreateDriveResultCode
 {
-    Created,
+    Accepted,
     Replayed,
     IdempotencyConflict,
     Gone

@@ -7,13 +7,11 @@ namespace Cinereel.Features.Drive;
 public sealed class DriveController(IDriveService driveService) : ControllerBase
 {
     [HttpPost]
-    [ProducesResponseType<DriveResponse>(StatusCodes.Status201Created)]
+    [ProducesResponseType<DriveResponse>(StatusCodes.Status202Accepted)]
     [ProducesResponseType<DriveResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status410Gone)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status502BadGateway)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
     public async Task<ActionResult<DriveResponse>> Create(
         [FromHeader(Name = "Idempotency-Key")] string? idempotencyKey,
         [FromBody] CreateDriveRequest request,
@@ -28,47 +26,26 @@ public sealed class DriveController(IDriveService driveService) : ControllerBase
 
         IdempotencyKey.TryCreate(idempotencyKey, out var parsedIdempotencyKey);
 
-        try
-        {
-            var result = await driveService.CreateAsync(
-                parsedIdempotencyKey,
-                request,
-                cancellationToken);
+        var result = await driveService.CreateAsync(
+            parsedIdempotencyKey,
+            request,
+            cancellationToken);
 
-            return result.ResultCode switch
-            {
-                CreateDriveResultCode.Created => CreatedAtAction(
-                    nameof(Get),
-                    new { driveId = result.Drive!.DriveId },
-                    result.Drive),
-                CreateDriveResultCode.Replayed => Ok(result.Drive!),
-                CreateDriveResultCode.IdempotencyConflict => Problem(
-                    statusCode: StatusCodes.Status409Conflict,
-                    title: "Idempotency-Key 已用于不同的创建请求。"),
-                CreateDriveResultCode.Gone => Problem(
-                    statusCode: StatusCodes.Status410Gone,
-                    title: "该创建请求对应的 Drive 已被删除。"),
-                _ => throw new ArgumentOutOfRangeException(nameof(result))
-            };
-        }
-        catch (HyperClientException)
+        return result.ResultCode switch
         {
-            return Problem(
-                statusCode: StatusCodes.Status502BadGateway,
-                title: "Hyper Client 返回了无效响应。");
-        }
-        catch (HttpRequestException)
-        {
-            return Problem(
-                statusCode: StatusCodes.Status502BadGateway,
-                title: "无法完成 Hyper Client 请求。");
-        }
-        catch (DriveCreationRecoveryPendingException)
-        {
-            return Problem(
-                statusCode: StatusCodes.Status503ServiceUnavailable,
-                title: "上一次 Drive 创建仍在恢复中。");
-        }
+            CreateDriveResultCode.Accepted => AcceptedAtAction(
+                nameof(Get),
+                new { driveId = result.Drive!.DriveId },
+                result.Drive),
+            CreateDriveResultCode.Replayed => Ok(result.Drive!),
+            CreateDriveResultCode.IdempotencyConflict => Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "Idempotency-Key 已用于不同的创建请求。"),
+            CreateDriveResultCode.Gone => Problem(
+                statusCode: StatusCodes.Status410Gone,
+                title: "该创建请求对应的 Drive 已被删除。"),
+            _ => throw new ArgumentOutOfRangeException(nameof(result))
+        };
     }
 
     [HttpGet("{driveId}")]
@@ -102,6 +79,39 @@ public sealed class DriveController(IDriveService driveService) : ControllerBase
     {
         var drives = await driveService.ListAsync(cancellationToken);
         return Ok(drives);
+    }
+
+    [HttpPost("{driveId}/creation/retry")]
+    [ProducesResponseType(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> RetryCreation(
+        string driveId,
+        CancellationToken cancellationToken)
+    {
+        if (!DriveId.TryParse(driveId, out var parsedDriveId))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "driveId 必须是非空 Guid。");
+        }
+
+        var resultCode = await driveService.RetryCreationAsync(
+            parsedDriveId,
+            cancellationToken);
+
+        return resultCode switch
+        {
+            RetryDriveCreationResultCode.Accepted => Accepted(),
+            RetryDriveCreationResultCode.NotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Drive 不存在。"),
+            RetryDriveCreationResultCode.NotFailed => Problem(
+                statusCode: StatusCodes.Status409Conflict,
+                title: "只有创建失败的 Drive 可以重试。"),
+            _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
+        };
     }
 
     [HttpPut("{driveId}/remark")]

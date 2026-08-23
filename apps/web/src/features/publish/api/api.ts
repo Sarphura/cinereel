@@ -2,16 +2,17 @@ import { queryOptions } from '@tanstack/react-query';
 import { requestJson } from '../../../lib/api';
 import { queryClient } from '../../../lib/queryClient';
 import { toDriveContentType } from '../../drive/contentTypes';
-import type { DriveContentTypeId, DriveExplorerLoaderData, DriveRecord, ResourceTreeNode } from '../../drive/types';
-import { filterDrivesByScope, resolveSelectedDriveKey } from '../../drive/utils';
+import type { DriveContentTypeId, DriveExplorerLoaderData, DriveRecord, DriveStatus, ResourceTreeNode } from '../../drive/types';
+import { filterDrivesByScope, getDriveSelectionKey, resolveSelectedDriveKey } from '../../drive/utils';
 
 type DriveResponse = {
   driveId: string;
-  driveKey: string;
+  driveKey: string | null;
   name: string;
   contentTypeId: string;
   remark: string | null;
   relation: string;
+  status: DriveStatus;
   createdAt: string;
   updatedAt: string;
 };
@@ -43,7 +44,8 @@ function createIdempotencyKey() {
 function normalizeDriveResponse(drive: DriveResponse): DriveRecord {
   return {
     driveId: drive.driveId,
-    driveKey: drive.driveKey,
+    driveKey: drive.driveKey ?? '',
+    status: drive.status,
     name: drive.name,
     type: toDriveContentType(drive.contentTypeId),
     remark: drive.remark ?? undefined,
@@ -105,7 +107,8 @@ export function publishedDriveTreeQueryOptions(driveKey: string) {
 export async function loadPublishedExplorerData(requestedDriveKey?: string): Promise<DriveExplorerLoaderData> {
   const drives = await queryClient.ensureQueryData(publishedDrivesQueryOptions());
   const selectedDriveKey = resolveSelectedDriveKey(drives, requestedDriveKey);
-  const resourceTree = selectedDriveKey
+  const selectedDrive = drives.find((drive) => getDriveSelectionKey(drive) === selectedDriveKey);
+  const resourceTree = selectedDriveKey && (selectedDrive?.status ?? 'ready') === 'ready'
     ? await queryClient.ensureQueryData(publishedDriveTreeQueryOptions(selectedDriveKey))
     : null;
 
@@ -144,6 +147,12 @@ export async function savePublishedDriveRemark(driveId: string, remark: string) 
   await requestJson(`/api/drives/${driveId}/remark`, {
     method: 'PUT',
     body: JSON.stringify({ remark }),
+  });
+}
+
+export async function retryPublishedDriveCreation(driveId: string) {
+  await requestJson(`/api/drives/${driveId}/creation/retry`, {
+    method: 'POST',
   });
 }
 

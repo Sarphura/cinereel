@@ -61,6 +61,9 @@ junit.xml
 # Project Specific - Test Data and Temp Storage
 apps/server/test/.tmp/
 apps/server/cache/
+apps/service/cinereel.db
+apps/service/cinereel.db-shm
+apps/service/cinereel.db-wal
 tmp/
 temp/
 
@@ -90,5 +93,4 @@ test/
 jellyfin/
 
 .DS_Store
-
 

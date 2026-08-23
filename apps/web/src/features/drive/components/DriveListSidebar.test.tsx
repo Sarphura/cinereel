@@ -54,4 +54,32 @@ describe('DriveListSidebar', () => {
     expect(screen.getByText('电影')).toBeInTheDocument();
     expect(screen.queryByText('正常')).not.toBeInTheDocument();
   });
+
+  it('创建中的 Drive 显示生命周期状态而不是节点数', () => {
+    render(
+      <DriveListSidebar
+        title="本地 Drive"
+        items={[{
+          driveId: 'pending-drive-id',
+          driveKey: '',
+          status: 'pending',
+          name: '正在创建的资源库',
+          type: 'generic',
+          createdAt: Date.UTC(2026, 7, 23),
+          updatedAt: Date.UTC(2026, 7, 23),
+          fileCount: 0,
+          totalSize: 0,
+          publicationCount: 0,
+          peerCount: 7,
+          isLocal: true,
+        }]}
+        selectedDriveKey="pending-drive-id"
+        emptyText="empty"
+        onSelect={() => {}}
+      />,
+    );
+
+    expect(screen.getByText('创建中')).toBeInTheDocument();
+    expect(screen.queryByText('7')).not.toBeInTheDocument();
+  });
 });

@@ -23,14 +23,13 @@ public static class DriveConfiguration
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<DriveCreationLock>();
         services.AddScoped<IDriveRepository, DriveRepository>();
-        services.AddScoped<IDriveCreationOperationRepository, DriveCreationOperationRepository>();
         services.AddScoped<DriveService>();
         services.AddScoped<IDriveService>(provider =>
             provider.GetRequiredService<DriveService>());
         services.TryAddScoped<IPublishService, PublishService>();
         services.AddHttpClient<IHyperClient, HyperClient>(client =>
             client.BaseAddress = normalizedBaseAddress);
-        services.AddHostedService<DriveCreationRecoveryJob>();
+        services.AddHostedService<DriveCreationJob>();
         return services;
     }
 }

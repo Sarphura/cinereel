@@ -41,12 +41,12 @@ Features/<Feature>/
 | `Controller/` | ASP.NET Core MVC HTTP Adapter | `DriveController` |
 | `Service/` | 应用 Interface、用例编排及其内部协作者 | `IDriveService`、`DriveService`、`DriveCreationLock` |
 | `Dto/` | 用例输入、输出和执行结果 | `CreateDriveRequest`、`DriveResponse` |
-| `Entity/` | EF Core 持久化 Entity 与其状态类型 | `DriveEntity`、`DriveCreationOperationStatus` |
+| `Entity/` | EF Core 持久化 Entity 与其状态类型 | `DriveEntity`、`DriveStatus` |
 | `Repository/` | 每种 Entity 的 Repository Interface 与 EF Core Adapter | `IDriveRepository`、`DriveRepository` |
 | `Model/` | 值对象、领域标识和分类类型 | `DriveId`、`DriveContentTypeId` |
 | `Client/` | 外部进程或第三方依赖的 Client Interface 与 Adapter | `IHyperClient`、`HyperClient` |
 | `Configuration/` | Feature 依赖注册和 EF Core Entity Configuration | `DriveConfiguration`、`DriveEntityConfiguration` |
-| `Job/` | 后台调度、恢复或补偿任务 | `DriveCreationRecoveryJob` |
+| `Job/` | 后台调度、恢复或补偿任务 | `DriveCreationJob` |
 
 目录只用于物理导航，不形成子 namespace。Drive Feature 中上述文件统一使用：
 
@@ -72,8 +72,8 @@ HTTP
   -> IPublishService
   -> PublishService
 
-DriveCreationRecoveryJob -> DriveService 的内部恢复操作
-Configuration            -> 只负责组合和依赖注册
+DriveCreationJob -> DriveService 的 Pending Drive 处理操作
+Configuration    -> 只负责组合和依赖注册
 ```
 
 必须遵守以下约束：
@@ -85,7 +85,7 @@ Configuration            -> 只负责组合和依赖注册
 - `Client/` 封装远程协议，不反向依赖 Controller、Service Implementation、Repository 或 Entity。
 - `Dto/` 与 `Model/` 不依赖 ASP.NET Core、EF Core 或具体 Adapter，保证它们可以跨 Controller 与 Service 使用。
 - `Entity/` 只表达持久化状态与关系，不依赖 Controller、Job、Client 或 Service。
-- `Job/` 只触发后台用例，不复制 Service 中的业务状态机；当前 Drive 恢复任务调用 `DriveService` 的内部恢复操作。
+- `Job/` 只触发后台用例，不复制 Service 中的业务状态机；当前 Drive 创建任务调用 `DriveService` 的 Pending Drive 处理操作。
 - `Configuration/` 是组合位置，可以引用本 Feature 的 Interface 与 Implementation，但不承载业务逻辑。
 - `Infrastructure/` 只保存确实被多个 Feature 共享的技术设施，Feature 专属类型不得为了“看起来通用”提前上移。
 
@@ -151,7 +151,7 @@ DriveContracts
 
 - EF Core 持久化模型统一使用 `Entity` 后缀，例如 `DriveEntity`。
 - 不使用无后缀领域名冒充当前贫血持久化模型，也不使用 `PO` 后缀。
-- 生命周期或处理阶段使用 `Status`，例如 `DriveCreationOperationStatus`。
+- 生命周期或处理阶段使用 `Status`，例如 `DriveStatus`。
 - 分类使用 `Type`，例如 `DriveRelationType`。
 - 用例结果分支使用 `ResultCode`，例如 `CreateDriveResultCode`。
 - 不在同类语义中混用 `Kind`、`State` 与 `Outcome`。
@@ -174,6 +174,7 @@ Entity 保存持久化数据，Configuration 保存表名、长度、索引、�
 - 所有 Repository 共享同一个 Scoped `CinereelDbContext`，由共享 `IUnitOfWork` 统一提交。
 - 不创建 `IRepository<TEntity, TId>` 或其他 Generic Repository 基础框架。
 - DriveOwnership 与 Subscription 通过 `DriveEntity.RelationType` 表达，不建立独立 Entity、Configuration 或 Repository。
+- Drive 的创建过程通过 `DriveEntity.Status` 表达，不建立独立 Operation Entity、Configuration 或 Repository。
 
 完整持久化决策见 [`ADR-0006`](../../docs/adr/0006-use-ef-core-with-sqlite-for-local-persistence.md)。
 
@@ -208,9 +209,9 @@ DriveEntityConfiguration
 
 ## Job 与 Exception
 
-- 继承 `BackgroundService` 的恢复、补偿或定时任务使用 `Job` 后缀，例如 `DriveCreationRecoveryJob`。
+- 继承 `BackgroundService` 的恢复、补偿或定时任务使用 `Job` 后缀，例如 `DriveCreationJob`。
 - 不使用 `Worker` 或 `Service` 后缀表达后台任务。
-- Exception 跟随所属职责放置，例如 `Client/HyperClientException.cs` 与 `Service/DriveCreationRecoveryPendingException.cs`。
+- Exception 跟随所属职责放置，例如 `Client/HyperClientException.cs`。
 - 不创建统一 `Exception/` 目录，也不把多个不相关 Exception 合并进 `DriveExceptions.cs`。
 
 ## 重命名映射
@@ -224,11 +225,9 @@ DriveEntityConfiguration
 | `CreateDriveCommand` | `CreateDriveRequest` |
 | `CreateDriveOutcome` | `CreateDriveResultCode` |
 | `DriveRelationKind` | `DriveRelationType` |
-| `DriveCreationOperationState` | `DriveCreationOperationStatus` |
 | `IHyperDriveClient` | `IHyperClient` |
 | `HyperDriveHttpClient` | `HyperClient` |
 | `HyperDriveProtocolException` | `HyperClientException` |
-| `DriveCreationRecoveryWorker` | `DriveCreationRecoveryJob` |
 | `DriveModule` | `DriveConfiguration` |
 | `PersistenceModule` | `PersistenceConfiguration` |
 

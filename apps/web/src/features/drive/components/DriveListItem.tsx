@@ -1,5 +1,5 @@
 import React from 'react';
-import type { DriveContentType } from '../types';
+import type { DriveContentType, DriveStatus } from '../types';
 import { getDriveTypeLabel } from '../utils';
 
 type DriveListItemProps = {
@@ -10,6 +10,7 @@ type DriveListItemProps = {
   size?: string;
   peerNumber?: string;
   driveType?: DriveContentType;
+  status?: DriveStatus;
   isHovered?: boolean;
   active?: boolean;
   onClick?: () => void;
@@ -27,6 +28,7 @@ const DriveListItem: React.FC<DriveListItemProps> = ({
   size = "320 GB",
   peerNumber = "210",
   driveType = 'generic',
+  status = 'ready',
   active = false,
   onClick,
   onContextMenu,
@@ -34,6 +36,11 @@ const DriveListItem: React.FC<DriveListItemProps> = ({
   titleSuffix,
   titleAction,
 }) => {
+  const statusMeta = status === 'pending'
+    ? { label: '创建中', dot: 'bg-[#f59e0b]', ping: 'bg-[#f59e0b]/30', text: 'text-[#d97706]' }
+    : status === 'failed'
+      ? { label: '创建失败', dot: 'bg-[#ef4444]', ping: '', text: 'text-[#ef4444]' }
+      : { label: peerNumber, dot: 'bg-[#00bc7d]', ping: 'bg-[#00bc7d]/30', text: 'text-[#52525c]' };
   const titleNode = onTitleClick ? (
     <button
       type="button"
@@ -82,10 +89,10 @@ const DriveListItem: React.FC<DriveListItemProps> = ({
         </div>
         <div className="flex items-center gap-1.5 min-w-0">
           <div className="relative size-1.5 shrink-0">
-            <div className="absolute inset-0 bg-[#00bc7d]/30 rounded-full animate-ping" />
-            <div className="absolute inset-0 bg-[#00bc7d] rounded-full ring-1 ring-white/10" />
+            {statusMeta.ping ? <div className={`absolute inset-0 ${statusMeta.ping} rounded-full animate-ping`} /> : null}
+            <div className={`absolute inset-0 ${statusMeta.dot} rounded-full ring-1 ring-white/10`} />
           </div>
-          <span className="text-[10px] text-[#52525c] font-medium transition-colors group-hover:text-[#a1a1aa]">{peerNumber}</span>
+          <span className={`text-[10px] ${statusMeta.text} font-medium transition-colors group-hover:text-[#a1a1aa]`}>{statusMeta.label}</span>
         </div>
       </div>
     </div>

@@ -13,9 +13,12 @@ export function DriveSummaryHeader({
   const [copied, setCopied] = useState(false);
   const primaryText = drive.remark ?? drive.name;
   const driveTypeLabel = getDriveTypeLabel(drive.type);
+  const status = drive.status ?? 'ready';
+  const statusLabel = status === 'pending' ? '创建中' : status === 'failed' ? '创建失败' : '可用';
 
   const handleCopyDriveKey = async () => {
     try {
+      if (!drive.driveKey) return;
       await navigator.clipboard.writeText(drive.driveKey);
       setCopied(true);
       window.setTimeout(() => {
@@ -30,6 +33,7 @@ export function DriveSummaryHeader({
     <div className="flex min-w-0 flex-col gap-1.5">
       <div className="flex min-w-0 items-center gap-2">
         <span className="shrink-0 text-[#00bc7d] text-[10px] font-bold tracking-wider">{driveTypeLabel}</span>
+        <span className={`shrink-0 text-[10px] font-medium ${status === 'failed' ? 'text-[#ef4444]' : status === 'pending' ? 'text-[#d97706]' : 'text-[#00bc7d]'}`}>{statusLabel}</span>
         <div className="group flex min-w-0 items-center gap-1.5">
           <span className="truncate text-[13px] text-[#f5f5f5] font-semibold">{primaryText}</span>
           {onEditRemark ? (
@@ -65,18 +69,22 @@ export function DriveSummaryHeader({
           <span className="uppercase text-[9px] tracking-widest font-bold opacity-50">日期</span>
           <span className="text-[#a1a1aa] font-medium">{formatDate(drive.updatedAt || drive.createdAt || Date.now())}</span>
         </div>
-        <span className="text-white/10">|</span>
-        <div className="flex items-center gap-1.5">
-          <span className="uppercase text-[9px] tracking-widest font-bold opacity-50">Key</span>
-          <button
-            type="button"
-            onClick={() => void handleCopyDriveKey()}
-            className="rounded px-1.5 py-0.5 text-[#a1a1aa] font-medium hover:bg-white/5 hover:text-white transition-colors"
-            title={copied ? '已复制完整 Key' : `点击复制完整 Key：${drive.driveKey}`}
-          >
-            {copied ? '已复制' : drive.driveKey.slice(0, 8)}
-          </button>
-        </div>
+        {drive.driveKey ? (
+          <>
+            <span className="text-white/10">|</span>
+            <div className="flex items-center gap-1.5">
+              <span className="uppercase text-[9px] tracking-widest font-bold opacity-50">Key</span>
+              <button
+                type="button"
+                onClick={() => void handleCopyDriveKey()}
+                className="rounded px-1.5 py-0.5 text-[#a1a1aa] font-medium hover:bg-white/5 hover:text-white transition-colors"
+                title={copied ? '已复制完整 Key' : `点击复制完整 Key：${drive.driveKey}`}
+              >
+                {copied ? '已复制' : drive.driveKey.slice(0, 8)}
+              </button>
+            </div>
+          </>
+        ) : null}
       </div>
     </div>
   );
