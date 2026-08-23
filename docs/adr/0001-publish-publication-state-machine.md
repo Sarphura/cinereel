@@ -19,6 +19,12 @@ Drive 可以独立存在，创建 Drive 并不代表发布。发布关系还需�
 - 从未 Publish 的 Drive 不存在 Publication；这与真实存在的 `Unpublished` Publication 是不同事实。
 - 单个 Publication 通过 `DriveId` 查询，调用方通过轮询观察异步结果。
 
+### 实现组织
+
+- Publication 物理实现归入 Drive Feature，与 Drive、DriveOwnership 和后续删除约束保持同一 Module 的 Locality。
+- Publish 状态机仍由独立 `IPublishService` / `PublishService` 承载，不合并进 `DriveService` 或 `DriveEntity`。
+- HTTP Interface 继续使用 `/api/drives/{driveId}/publication`，表达 Publication 通过 DriveId 访问。
+
 ### 状态机
 
 Publication 使用以下状态：
