@@ -1,7 +1,7 @@
 import React from 'react';
 import DriveListItem from './DriveListItem';
 import type { DriveRecord } from '../types';
-import { formatBytes, formatDate } from '../utils';
+import { formatBytes, formatDate, getDriveSelectionKey } from '../utils';
 
 export type DriveListSidebarItemMeta = {
   title?: string;
@@ -38,11 +38,12 @@ export function DriveListSidebar({
         {items.length ? (
           items.map((drive) => {
             const itemMeta = getItemMeta?.(drive);
+            const selectionKey = getDriveSelectionKey(drive);
 
             return (
               <DriveListItem
-                key={drive.driveKey}
-                active={drive.driveKey === selectedDriveKey}
+                key={selectionKey}
+                active={selectionKey === selectedDriveKey}
                 title={itemMeta?.title ?? drive.name}
                 titleSuffix={itemMeta?.titleSuffix}
                 subtitle={itemMeta?.subtitle}
@@ -51,7 +52,7 @@ export function DriveListSidebar({
                 size={formatBytes(drive.totalSize)}
                 peerNumber={String(Number.isFinite(drive.peerCount) ? drive.peerCount : 0)}
                 driveType={drive.type}
-                onClick={() => onSelect(drive.driveKey)}
+                onClick={() => onSelect(selectionKey)}
                 onContextMenu={itemMeta?.onContextMenu}
                 onTitleClick={itemMeta?.onTitleClick}
                 titleAction={itemMeta?.titleAction}

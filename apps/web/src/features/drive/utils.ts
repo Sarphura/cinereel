@@ -1,5 +1,7 @@
-import type { DriveContentType, DriveRecord, DriveScope, ResourceTreeNode } from './types';
+import type { DriveRecord, DriveScope, ResourceTreeNode } from './types';
 import { API_BASE_URL } from '../../lib/api';
+
+export { getDriveTypeLabel } from './contentTypes';
 
 export type PreviewKind = 'image' | 'pdf' | 'audio' | 'video';
 
@@ -31,17 +33,6 @@ export function formatBytes(size: number) {
 
   const digits = current >= 100 || unitIndex === 0 ? 0 : 1;
   return `${current.toFixed(digits)} ${units[unitIndex]}`;
-}
-
-const DRIVE_TYPE_LABELS: Record<DriveContentType, string> = {
-  movie: '电影',
-  series: '剧集',
-  music: '音乐',
-  generic: '未分类',
-};
-
-export function getDriveTypeLabel(type: DriveContentType) {
-  return DRIVE_TYPE_LABELS[type];
 }
 
 export function getPreviewKind(node: ResourceTreeNode): PreviewKind | null {
@@ -88,12 +79,16 @@ export function filterDrivesByScope(drives: DriveRecord[], scope: DriveScope) {
   return drives.filter((drive) => (scope === 'local' ? drive.isLocal : !drive.isLocal));
 }
 
+export function getDriveSelectionKey(drive: DriveRecord) {
+  return drive.driveId ?? drive.driveKey;
+}
+
 export function resolveSelectedDriveKey(drives: DriveRecord[], requestedDriveKey?: string) {
-  if (requestedDriveKey && drives.some((drive) => drive.driveKey === requestedDriveKey)) {
+  if (requestedDriveKey && drives.some((drive) => getDriveSelectionKey(drive) === requestedDriveKey)) {
     return requestedDriveKey;
   }
 
-  return drives[0]?.driveKey ?? null;
+  return drives[0] ? getDriveSelectionKey(drives[0]) : null;
 }
 
 /** 判断该节点是否可下载：尚未同步到本地目录的文件才需要下载。 */

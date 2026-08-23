@@ -7,6 +7,7 @@ export function ConfirmDialog({
   description,
   confirmLabel,
   confirmingLabel,
+  error,
   tone = 'danger',
   disabled,
   onClose,
@@ -17,6 +18,7 @@ export function ConfirmDialog({
   description: string;
   confirmLabel: string;
   confirmingLabel: string;
+  error?: string | null;
   tone?: 'danger' | 'primary';
   disabled?: boolean;
   onClose: () => void;
@@ -54,6 +56,7 @@ export function ConfirmDialog({
       )}
     >
       <div className="text-sm text-[#e4e4e7]">{description}</div>
+      {error ? <div className="mt-3 text-xs text-[#fca5a5]">{error}</div> : null}
     </Dialog>
   );
 }

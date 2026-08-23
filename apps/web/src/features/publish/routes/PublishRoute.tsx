@@ -8,7 +8,7 @@ import { DriveListSidebar } from '../../drive/components/DriveListSidebar';
 import { DriveRemarkDialog, type DriveRemarkEditorState } from '../../drive/components/DriveRemarkDialog';
 import { useDriveSearchSync } from '../../drive/hooks/useDriveSearchSync';
 import { useDrivePreview } from '../../drive/hooks/useDrivePreview';
-import { getPreviewKind, requiresStreamingVideoPreview } from '../../drive/utils';
+import { getDriveSelectionKey, getPreviewKind, requiresStreamingVideoPreview } from '../../drive/utils';
 import type { DriveRecord, ResourceTreeNode } from '../../drive/types';
 import { usePublishDriveActions } from '../hooks/usePublishDriveActions';
 import { copyDriveFile, createDriveFolder, deleteDriveFile, moveDriveFile } from '../api/api';
@@ -90,7 +90,7 @@ export function PublishRouteView() {
   const search = routeApi.useSearch();
   const { drives, selectedDriveKey, resourceTree, error: loaderError } = routeApi.useLoaderData();
   const { router, setDriveKey, replaceAndInvalidate } = useDriveSearchSync('/publish', selectedDriveKey, search.driveKey);
-  const selectedDrive = drives.find((drive) => drive.driveKey === selectedDriveKey) ?? null;
+  const selectedDrive = drives.find((drive) => getDriveSelectionKey(drive) === selectedDriveKey) ?? null;
   const preview = useDrivePreview(selectedDriveKey);
 
   // 当前 tree 中选中的节点（用于确定默认挂载路径）
@@ -124,18 +124,18 @@ export function PublishRouteView() {
   const defaultMountPath = selectedNode?.localDirPath ?? null;
 
   const openRemarkEditor = (drive: DriveRecord) => {
-    setRemarkEditor({ driveKey: drive.driveKey, label: drive.name, remark: drive.remark ?? '' });
+    setRemarkEditor({ driveKey: getDriveSelectionKey(drive), label: drive.name, remark: drive.remark ?? '' });
   };
 
   const openRenameDialog = (drive: DriveRecord) => {
-    setDriveKey(drive.driveKey);
+    setDriveKey(getDriveSelectionKey(drive));
     setRenameLabel(drive.name);
     setRenameError(null);
     setShowRenameDialog(true);
   };
 
   const openDeleteDialog = (drive: DriveRecord) => {
-    setDriveKey(drive.driveKey);
+    setDriveKey(getDriveSelectionKey(drive));
     setDeleteError(null);
     setShowDeleteDialog(true);
   };
@@ -146,7 +146,7 @@ export function PublishRouteView() {
       return;
     }
 
-    const opened = preview.openPreview(selectedDrive.driveKey, node);
+    const opened = preview.openPreview(getDriveSelectionKey(selectedDrive), node);
 
     if (!opened) {
       actions.setError('当前文件暂不支持预览，或尚未同步到本地。');
@@ -224,7 +224,7 @@ export function PublishRouteView() {
                 subtitlePrefix: '',
                 onContextMenu: (event) => {
                   event.preventDefault();
-                  setDriveKey(drive.driveKey);
+                  setDriveKey(getDriveSelectionKey(drive));
                   setContextMenuState({ drive, x: event.clientX, y: event.clientY });
                 },
               })}
@@ -297,7 +297,7 @@ export function PublishRouteView() {
         onSubmit={async () => {
           if (!selectedDrive) return;
           try {
-            await actions.handleRenameDrive(selectedDrive.driveKey, renameLabel);
+            await actions.handleRenameDrive(getDriveSelectionKey(selectedDrive), renameLabel);
             setShowRenameDialog(false);
           } catch (err) {
             setRenameError(err instanceof Error ? err.message : 'Drive 改名失败。');
@@ -311,6 +311,7 @@ export function PublishRouteView() {
         description={selectedDrive ? `确定删除"${selectedDrive.name}"吗？此操作会移除当前 Drive。` : '确定删除当前 Drive 吗？'}
         confirmLabel="删除"
         confirmingLabel="删除中..."
+        error={deleteError}
         disabled={actions.deleting}
         onClose={() => { setDeleteError(null); setShowDeleteDialog(false); }}
         onConfirm={async () => {

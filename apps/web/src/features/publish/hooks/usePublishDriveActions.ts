@@ -11,7 +11,8 @@ import {
   savePublishedDriveRemark,
 } from '../api/api';
 import { mountDrive, mountMovieManually, type ManualMovieMountInput } from '../../jobs/api';
-import type { DriveContentType, DriveRecord, ResourceTreeNode } from '../../drive/types';
+import type { DriveContentTypeId, DriveRecord, ResourceTreeNode } from '../../drive/types';
+import { getDriveSelectionKey } from '../../drive/utils';
 
 interface UsePublishDriveActionsOptions {
   drives: DriveRecord[];
@@ -32,7 +33,7 @@ export interface PublishDriveActions {
   error: string | null;
   setError: (error: string | null) => void;
   // Handlers
-  handleCreateDrive: (label: string, type: DriveContentType) => Promise<void>;
+  handleCreateDrive: (label: string, contentTypeId: DriveContentTypeId) => Promise<void>;
   handleRenameDrive: (driveKey: string, name: string) => Promise<void>;
   handleDelete: () => Promise<void>;
   handlePublish: (targetPath: string) => Promise<void>;
@@ -73,15 +74,16 @@ export function usePublishDriveActions({
     onSuccess: async (drive) => {
       queryClient.setQueryData<DriveRecord[]>(publishedDrivesQueryOptions().queryKey, (current) => {
         const nextDrives = current ?? drives;
+        const createdDriveKey = getDriveSelectionKey(drive);
 
-        if (nextDrives.some((item) => item.driveKey === drive.driveKey)) {
-          return nextDrives.map((item) => (item.driveKey === drive.driveKey ? drive : item));
+        if (nextDrives.some((item) => getDriveSelectionKey(item) === createdDriveKey)) {
+          return nextDrives.map((item) => (getDriveSelectionKey(item) === createdDriveKey ? drive : item));
         }
 
         return [drive, ...nextDrives];
       });
 
-      await replaceAndInvalidate(drive.driveKey);
+      await replaceAndInvalidate(getDriveSelectionKey(drive));
       await queryClient.refetchQueries({ queryKey: publishedDrivesQueryOptions().queryKey, exact: true });
       setError(null);
     },
@@ -91,9 +93,9 @@ export function usePublishDriveActions({
     mutationFn: ({ driveKey, name }: { driveKey: string; name: string }) => renamePublishedDrive(driveKey, name),
     onSuccess: async (updatedDrive, variables) => {
       queryClient.setQueryData(publishedDrivesQueryOptions().queryKey, (current: DriveRecord[] | undefined) =>
-        current?.map((drive) => (drive.driveKey === variables.driveKey ? { ...drive, ...updatedDrive } : drive)) ?? current,
+        current?.map((drive) => (getDriveSelectionKey(drive) === variables.driveKey ? { ...drive, ...updatedDrive } : drive)) ?? current,
       );
-      queryClient.setQueryData(publishedDriveTreeQueryOptions(variables.driveKey).queryKey, (current: ResourceTreeNode | undefined) => {
+      queryClient.setQueryData(publishedDriveTreeQueryOptions(variables.driveKey).queryKey, (current: ResourceTreeNode | null | undefined) => {
         if (!current) {
           return current;
         }
@@ -112,8 +114,8 @@ export function usePublishDriveActions({
     mutationFn: deletePublishedDrive,
     onSuccess: async (_, deletedDriveKey) => {
       const currentDrives = queryClient.getQueryData<DriveRecord[]>(publishedDrivesQueryOptions().queryKey) ?? drives;
-      const nextDrives = currentDrives.filter((drive) => drive.driveKey !== deletedDriveKey);
-      const currentIndex = currentDrives.findIndex((drive) => drive.driveKey === deletedDriveKey);
+      const nextDrives = currentDrives.filter((drive) => getDriveSelectionKey(drive) !== deletedDriveKey);
+      const currentIndex = currentDrives.findIndex((drive) => getDriveSelectionKey(drive) === deletedDriveKey);
       const fallback = nextDrives[currentIndex] ?? nextDrives[currentIndex - 1] ?? null;
 
       queryClient.setQueryData(publishedDrivesQueryOptions().queryKey, nextDrives);
@@ -121,7 +123,7 @@ export function usePublishDriveActions({
         await queryClient.removeQueries({ queryKey: publishedDriveTreeQueryOptions(deletedDriveKey).queryKey });
       }
       onClosePreview();
-      await replaceAndInvalidate(fallback?.driveKey ?? null);
+      await replaceAndInvalidate(fallback ? getDriveSelectionKey(fallback) : null);
       setError(null);
     },
   });
@@ -150,7 +152,7 @@ export function usePublishDriveActions({
     },
   });
 
-  const handleCreateDrive = async (label: string, type: DriveContentType) => {
+  const handleCreateDrive = async (label: string, contentTypeId: DriveContentTypeId) => {
     const nextLabel = label.trim();
 
     if (!nextLabel) {
@@ -160,7 +162,7 @@ export function usePublishDriveActions({
     setCreating(true);
 
     try {
-      await createDriveMutation.mutateAsync({ name: nextLabel, type });
+      await createDriveMutation.mutateAsync({ name: nextLabel, contentTypeId });
     } finally {
       setCreating(false);
     }
@@ -190,7 +192,7 @@ export function usePublishDriveActions({
     setDeleting(true);
 
     try {
-      await deletePublishedDriveMutation.mutateAsync(selectedDrive.driveKey);
+      await deletePublishedDriveMutation.mutateAsync(getDriveSelectionKey(selectedDrive));
     } finally {
       setDeleting(false);
     }
@@ -210,7 +212,7 @@ export function usePublishDriveActions({
     setSubmitting(true);
 
     try {
-      await mountDriveMutation.mutateAsync({ driveKey: selectedDrive.driveKey, targetPath: nextTargetPath });
+      await mountDriveMutation.mutateAsync({ driveKey: getDriveSelectionKey(selectedDrive), targetPath: nextTargetPath });
     } finally {
       setSubmitting(false);
     }
@@ -224,7 +226,7 @@ export function usePublishDriveActions({
     setSubmitting(true);
 
     try {
-      await mountMovieManuallyMutation.mutateAsync({ driveKey: selectedDrive.driveKey, input });
+      await mountMovieManuallyMutation.mutateAsync({ driveKey: getDriveSelectionKey(selectedDrive), input });
     } finally {
       setSubmitting(false);
     }

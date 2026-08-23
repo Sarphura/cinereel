@@ -1,34 +1,28 @@
 import React, { useState } from 'react';
 import { Dialog } from '../../../components/ui/Dialog';
-import type { DriveContentType } from '../../drive/types';
-
-const DRIVE_TYPE_OPTIONS: Array<{ value: DriveContentType; label: string }> = [
-  { value: 'movie', label: '电影' },
-  { value: 'series', label: '剧集' },
-  { value: 'music', label: '音乐' },
-  { value: 'generic', label: '未分类' },
-];
+import { DRIVE_CONTENT_TYPES } from '../../drive/contentTypes';
+import type { DriveContentTypeId } from '../../drive/types';
 
 interface CreatePublishDriveDialogProps {
   open: boolean;
   drivesCount: number;
   creating: boolean;
   onClose: () => void;
-  onCreate: (label: string, type: DriveContentType) => Promise<void>;
+  onCreate: (label: string, contentTypeId: DriveContentTypeId) => Promise<void>;
 }
 
 export function CreatePublishDriveDialog({ open, drivesCount, creating, onClose, onCreate }: CreatePublishDriveDialogProps) {
   const [label, setLabel] = useState(`我的 Drive ${drivesCount + 1}`);
-  const [type, setType] = useState<DriveContentType>('generic');
+  const [contentTypeId, setContentTypeId] = useState<DriveContentTypeId>('cinereel.generic');
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
     setError(null);
 
     try {
-      await onCreate(label, type);
+      await onCreate(label, contentTypeId);
       setLabel(`我的 Drive ${drivesCount + 2}`);
-      setType('generic');
+      setContentTypeId('cinereel.generic');
       onClose();
     } catch (err) {
       setError(err instanceof Error ? err.message : '新建订阅源失败。');
@@ -83,13 +77,14 @@ export function CreatePublishDriveDialog({ open, drivesCount, creating, onClose,
       <div className="mt-4">
         <div className="text-[11px] font-medium uppercase tracking-[0.5px] text-[#71717b]">Drive 类型</div>
         <div className="mt-2 grid grid-cols-4 gap-2">
-          {DRIVE_TYPE_OPTIONS.map((option) => (
+          {DRIVE_CONTENT_TYPES.map((option) => (
             <button
-              key={option.value}
+              key={option.contentTypeId}
               type="button"
-              onClick={() => setType(option.value)}
+              aria-pressed={contentTypeId === option.contentTypeId}
+              onClick={() => setContentTypeId(option.contentTypeId)}
               className={`rounded-lg border px-2 py-2 text-xs font-medium transition-colors ${
-                type === option.value
+                contentTypeId === option.contentTypeId
                   ? 'border-[#c47e09] bg-[#c47e09]/15 text-[#f5c46b]'
                   : 'border-white/10 bg-[#111114] text-[#a1a1aa] hover:border-white/20 hover:text-white'
               }`}

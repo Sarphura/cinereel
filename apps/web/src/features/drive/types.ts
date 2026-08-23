@@ -2,7 +2,14 @@ import type { ExplorerNode } from '../../shared/components/explorer/types';
 
 export type DriveContentType = 'movie' | 'series' | 'music' | 'generic';
 
+export type DriveContentTypeId =
+  | 'cinereel.movie'
+  | 'cinereel.series'
+  | 'cinereel.music'
+  | 'cinereel.generic';
+
 export type DriveRecord = {
+  driveId?: string;
   driveKey: string;
   name: string;
   type: DriveContentType;

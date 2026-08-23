@@ -1,32 +1,91 @@
 import { queryOptions } from '@tanstack/react-query';
 import { requestJson } from '../../../lib/api';
 import { queryClient } from '../../../lib/queryClient';
-import type { DriveContentType, DriveExplorerLoaderData, DriveRecord, ResourceTreeNode } from '../../drive/types';
+import { toDriveContentType } from '../../drive/contentTypes';
+import type { DriveContentTypeId, DriveExplorerLoaderData, DriveRecord, ResourceTreeNode } from '../../drive/types';
 import { filterDrivesByScope, resolveSelectedDriveKey } from '../../drive/utils';
 
-function normalizeDriveRecord(drive: DriveRecord): DriveRecord {
+type DriveResponse = {
+  driveId: string;
+  driveKey: string;
+  name: string;
+  contentTypeId: string;
+  remark: string | null;
+  relation: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+function toTimestamp(value: string) {
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : Date.now();
+}
+
+function createEmptyDriveTree(drive: DriveRecord): ResourceTreeNode {
   return {
-    ...drive,
-    type: drive.type ?? 'generic',
-    peerCount: Number.isFinite(drive.peerCount) ? drive.peerCount : 0,
+    path: '/',
+    name: drive.name,
+    type: 'directory',
+    size: 0,
+    updatedAt: drive.updatedAt,
+    children: [],
+  };
+}
+
+function createIdempotencyKey() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return `web:${crypto.randomUUID()}`;
+  }
+
+  return `web:${Date.now().toString(36)}:${Math.random().toString(36).slice(2)}`;
+}
+
+function normalizeDriveResponse(drive: DriveResponse): DriveRecord {
+  return {
+    driveId: drive.driveId,
+    driveKey: drive.driveKey,
+    name: drive.name,
+    type: toDriveContentType(drive.contentTypeId),
+    remark: drive.remark ?? undefined,
+    createdAt: toTimestamp(drive.createdAt),
+    updatedAt: toTimestamp(drive.updatedAt),
+    fileCount: 0,
+    totalSize: 0,
+    publicationCount: 0,
+    peerCount: 0,
+    isLocal: drive.relation === 'ownership',
   };
 }
 
 export async function listPublishedDrives() {
-  const response = await requestJson<{ data: DriveRecord[] }>('/api/drives');
-  return filterDrivesByScope(response.data.map(normalizeDriveRecord), 'local');
+  const response = await requestJson<DriveResponse[]>('/api/drives');
+  return filterDrivesByScope(response.map(normalizeDriveResponse), 'local');
 }
 
 export async function getPublishedDriveTree(driveKey: string) {
-  const response = await requestJson<{ data: ResourceTreeNode }>(`/api/drives/${driveKey}/tree`);
-  return response.data;
+  const drives = queryClient.getQueryData<DriveRecord[]>(publishedDrivesQueryOptions().queryKey) ?? [];
+  const selectedDrive = drives.find((drive) => (drive.driveId ?? drive.driveKey) === driveKey);
+
+  try {
+    const response = await requestJson<ResourceTreeNode>(`/api/drives/${driveKey}/tree`);
+    return response;
+  } catch {
+    return selectedDrive ? createEmptyDriveTree(selectedDrive) : null;
+  }
 }
 
 export async function refreshPublishedDriveTree(driveKey: string) {
-  const response = await requestJson<{ data: ResourceTreeNode }>(`/api/drives/${driveKey}/refresh`, {
-    method: 'POST',
-  });
-  return response.data;
+  const drives = queryClient.getQueryData<DriveRecord[]>(publishedDrivesQueryOptions().queryKey) ?? [];
+  const selectedDrive = drives.find((drive) => (drive.driveId ?? drive.driveKey) === driveKey);
+
+  try {
+    const response = await requestJson<ResourceTreeNode>(`/api/drives/${driveKey}/refresh`, {
+      method: 'POST',
+    });
+    return response;
+  } catch {
+    return selectedDrive ? createEmptyDriveTree(selectedDrive) : null;
+  }
 }
 
 export function publishedDrivesQueryOptions() {
@@ -57,22 +116,28 @@ export async function loadPublishedExplorerData(requestedDriveKey?: string): Pro
   };
 }
 
-export async function createPublishedDrive(input: { name: string; type: DriveContentType }) {
-  const response = await requestJson<{ data: DriveRecord }>('/api/drives', {
+export async function createPublishedDrive(input: { name: string; contentTypeId: DriveContentTypeId }) {
+  const response = await requestJson<DriveResponse>('/api/drives', {
     method: 'POST',
-    body: JSON.stringify(input),
+    headers: {
+      'Idempotency-Key': createIdempotencyKey(),
+    },
+    body: JSON.stringify({
+      name: input.name,
+      contentTypeId: input.contentTypeId,
+    }),
   });
 
-  return normalizeDriveRecord(response.data);
+  return normalizeDriveResponse(response);
 }
 
 export async function renamePublishedDrive(driveKey: string, name: string) {
-  const response = await requestJson<{ data: DriveRecord }>(`/api/drives/${driveKey}`, {
+  const response = await requestJson<DriveResponse>(`/api/drives/${driveKey}`, {
     method: 'PATCH',
     body: JSON.stringify({ name }),
   });
 
-  return normalizeDriveRecord(response.data);
+  return normalizeDriveResponse(response);
 }
 
 export async function savePublishedDriveRemark(driveKey: string, remark: string) {
