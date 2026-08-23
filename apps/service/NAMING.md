@@ -68,6 +68,9 @@ HTTP
        -> Repository Interface -> EF Core Repository Adapter -> CinereelDbContext
        -> IUnitOfWork          -> UnitOfWork                 -> CinereelDbContext
        -> IHyperClient         -> HyperClient                -> HttpClient
+  -> PublicationController
+  -> IPublishService
+  -> PublishService
 
 DriveCreationRecoveryJob -> DriveService 的内部恢复操作
 Configuration            -> 只负责组合和依赖注册
@@ -77,6 +80,7 @@ Configuration            -> 只负责组合和依赖注册
 
 - `Controller/` 只依赖应用 Service Interface 和 DTO，不直接依赖 Repository、Entity、`CinereelDbContext` 或外部 Client。
 - `Service/` 负责用例编排，可以依赖 Repository Interface、`IUnitOfWork`、外部 Client Interface、Model 和 DTO，不直接编写 EF Core 查询。
+- Publication 是 Drive Module 内的独立发布关系与状态机；`PublishService` 保留为发布用例 Seam，不合并进 `DriveService` 或 `DriveEntity`。
 - `Repository/` 是 Entity 集合访问的 Seam；EF Core Adapter 可以依赖 `CinereelDbContext`，但不得承载业务用例、调用外部 Client 或提交 Unit of Work。
 - `Client/` 封装远程协议，不反向依赖 Controller、Service Implementation、Repository 或 Entity。
 - `Dto/` 与 `Model/` 不依赖 ASP.NET Core、EF Core 或具体 Adapter，保证它们可以跨 Controller 与 Service 使用。

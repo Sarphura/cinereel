@@ -28,6 +28,7 @@ public static class DriveConfiguration
         services.AddScoped<DriveService>();
         services.AddScoped<IDriveService>(provider =>
             provider.GetRequiredService<DriveService>());
+        services.TryAddScoped<IPublishService, PublishService>();
         services.AddHttpClient<IHyperClient, HyperClient>(client =>
             client.BaseAddress = normalizedBaseAddress);
         services.AddHostedService<DriveCreationRecoveryJob>();

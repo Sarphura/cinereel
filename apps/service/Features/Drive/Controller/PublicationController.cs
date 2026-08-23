@@ -1,14 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 
-namespace Cinereel.Features.Publish;
+namespace Cinereel.Features.Drive;
 
 [ApiController]
 [Route("api/drives/{driveId}/publication")]
-public sealed class PublishController(IPublishService publishService) : ControllerBase
+public sealed class PublicationController(IPublishService publishService) : ControllerBase
 {
     [HttpGet]
-    [ProducesResponseType(typeof(PublicationResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    [ProducesResponseType<PublicationResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PublicationResponse>> GetAsync(
         string driveId,
         CancellationToken cancellationToken)
@@ -23,10 +23,10 @@ public sealed class PublishController(IPublishService publishService) : Controll
     }
 
     [HttpPost("publish")]
-    [ProducesResponseType(typeof(PublicationResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(PublicationResponse), StatusCodes.Status202Accepted)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType<PublicationResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<PublicationResponse>(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<PublicationResponse>> PublishAsync(
         string driveId,
         CancellationToken cancellationToken)
@@ -36,10 +36,10 @@ public sealed class PublishController(IPublishService publishService) : Controll
     }
 
     [HttpPost("unpublish")]
-    [ProducesResponseType(typeof(PublicationResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(PublicationResponse), StatusCodes.Status202Accepted)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType<PublicationResponse>(StatusCodes.Status200OK)]
+    [ProducesResponseType<PublicationResponse>(StatusCodes.Status202Accepted)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<PublicationResponse>> UnpublishAsync(
         string driveId,
         CancellationToken cancellationToken)
@@ -56,31 +56,31 @@ public sealed class PublishController(IPublishService publishService) : Controll
         {
             var response = PublicationResponse.From(result.Publication);
 
-            if (result.Outcome is PublicationCommandOutcome.Accepted)
+            if (result.ResultCode is PublicationCommandResultCode.Accepted)
             {
                 return AcceptedAtAction(nameof(GetAsync), new { driveId }, response);
             }
 
-            if (result.Outcome is PublicationCommandOutcome.Unchanged)
+            if (result.ResultCode is PublicationCommandResultCode.Unchanged)
             {
                 return Ok(response);
             }
         }
 
-        return result.Outcome switch
+        return result.ResultCode switch
         {
-            PublicationCommandOutcome.DriveNotFound => Problem(
+            PublicationCommandResultCode.DriveNotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "Drive 不存在"),
-            PublicationCommandOutcome.PublicationNotFound => Problem(
+            PublicationCommandResultCode.PublicationNotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "Publication 不存在"),
-            PublicationCommandOutcome.Conflict => Problem(
+            PublicationCommandResultCode.Conflict => Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "Publication 当前状态不允许执行该操作"),
             _ => Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
-                title: "Publish Module 返回了无效结果")
+                title: "PublishService 返回了无效结果")
         };
     }
 }

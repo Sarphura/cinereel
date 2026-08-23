@@ -1,4 +1,4 @@
-namespace Cinereel.Features.Publish;
+namespace Cinereel.Features.Drive;
 
 internal sealed class PublishService : IPublishService
 {
