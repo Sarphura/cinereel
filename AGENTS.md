@@ -18,7 +18,7 @@ Cinereel 是一个媒体服务 monorepo（AGPL-3.0）。仓库同时包含 Web �
 
 - `apps/web` — Web 前端（Vite + React + Tailwind），npm 包名 `@cinereel/ui`
 - `apps/hyper-client` — Hyper 客户端，npm 包名 `@cinereel/hyper-client`
-- `apps/service` — ASP.NET Core Web 项目（`Cinereel`），约定见 `apps/service/AGENTS.md`
+- `apps/service` — ASP.NET Core Web 项目（`Cinereel`）；修改或生成后端代码前，必须先阅读 `apps/service/AGENTS.md` 与 `apps/service/NAMING.md`
 - `jellyfin/` —  Jellyfin 源码，仅用做架构参考（已在 `.gitignore` 中忽略，不入库）
 - `packages/` — pnpm workspace 预留目录（当前无内容）
 - `.agents/skills/` — 仓库内置 Agent 技能

@@ -2,6 +2,13 @@
 
 本文定义 `apps/service` 的目录、文件和 C# 类型命名。它是日常开发规范；领域词义以仓库根目录 `CONTEXT.md` 为准，架构选择及取舍以 `docs/adr/` 为准。
 
+## 适用范围与效力
+
+- 本规范适用于所有人工或 Agent 生成的 `apps/service` 代码，不是仅供 Drive Feature 参考的示例。
+- 修改或生成后端代码前必须先阅读本规范；现有代码与本规范冲突时，不得把旧代码继续复制到新 Feature。
+- Drive Feature 当前结构是已经接受的基准结构。除非新的架构决策明确替代本规范，不得重新压平目录、恢复旧名称或引入一套平行命名。
+- 新 Feature 不需要预建所有目录；实际出现某项职责后，必须使用本规范定义的目录、类型后缀和依赖方向。
+
 ## 总体原则
 
 - 先按 `Features/<Feature>/` 聚合业务能力，再在 Feature 内按职责分组，不创建全局 `Controllers/`、`Services/`、`Repositories/` 或 `Dtos/`。
@@ -48,6 +55,35 @@ namespace Cinereel.Features.Drive;
 ```
 
 其他 Feature 对应使用 `Cinereel.Features.<Feature>`。共享技术设施使用 `Cinereel.Infrastructure.<Area>`。
+
+## 依赖方向
+
+Drive Feature 的主要调用与依赖方向为：
+
+```text
+HTTP
+  -> Controller
+  -> IDriveService
+  -> DriveService
+       -> Repository Interface -> EF Core Repository Adapter -> CinereelDbContext
+       -> IUnitOfWork          -> UnitOfWork                 -> CinereelDbContext
+       -> IHyperClient         -> HyperClient                -> HttpClient
+
+DriveCreationRecoveryJob -> DriveService 的内部恢复操作
+Configuration            -> 只负责组合和依赖注册
+```
+
+必须遵守以下约束：
+
+- `Controller/` 只依赖应用 Service Interface 和 DTO，不直接依赖 Repository、Entity、`CinereelDbContext` 或外部 Client。
+- `Service/` 负责用例编排，可以依赖 Repository Interface、`IUnitOfWork`、外部 Client Interface、Model 和 DTO，不直接编写 EF Core 查询。
+- `Repository/` 是 Entity 集合访问的 Seam；EF Core Adapter 可以依赖 `CinereelDbContext`，但不得承载业务用例、调用外部 Client 或提交 Unit of Work。
+- `Client/` 封装远程协议，不反向依赖 Controller、Service Implementation、Repository 或 Entity。
+- `Dto/` 与 `Model/` 不依赖 ASP.NET Core、EF Core 或具体 Adapter，保证它们可以跨 Controller 与 Service 使用。
+- `Entity/` 只表达持久化状态与关系，不依赖 Controller、Job、Client 或 Service。
+- `Job/` 只触发后台用例，不复制 Service 中的业务状态机；当前 Drive 恢复任务调用 `DriveService` 的内部恢复操作。
+- `Configuration/` 是组合位置，可以引用本 Feature 的 Interface 与 Implementation，但不承载业务逻辑。
+- `Infrastructure/` 只保存确实被多个 Feature 共享的技术设施，Feature 专属类型不得为了“看起来通用”提前上移。
 
 ## 文件与类型
 

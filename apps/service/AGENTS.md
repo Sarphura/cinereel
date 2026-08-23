@@ -29,6 +29,14 @@
 - 依赖注册和 EF Core 映射使用 `XxxConfiguration`；后台恢复或调度任务使用 `XxxJob`。
 - Exception 跟随职责放置，不建立统一的 `Exception/` 杂项目录。
 
+## Agent 执行要求
+
+- 任何 Agent 在 `apps/service` 中生成或移动代码前，必须完整阅读本文件和 [`NAMING.md`](NAMING.md)，不得只根据现有相邻文件猜测规范。
+- Drive Feature 当前目录树是已经接受的基准结构，不得重新压平，也不得恢复 `DriveContracts.cs`、`DriveTypes.cs`、`DrivesController`、`IHyperDriveClient` 等旧结构或旧名称。
+- 新 Feature 仍按垂直切片创建；只有出现真实职责时才建立对应子目录，但一旦建立就必须使用 `Controller/`、`Service/`、`Dto/`、`Entity/`、`Repository/`、`Model/`、`Client/`、`Configuration/`、`Job/` 中的规范名称。
+- 修改公共 Interface、Module 边界、Repository/UnitOfWork 规则或目录职责前，必须先说明方案及取舍并取得确认；确认后同步更新 `NAMING.md`，需要记录长期架构取舍时同时更新 ADR。
+- 完成后端代码修改前，必须检查新增文件的位置、文件名与顶层类型名、namespace、依赖方向和旧名称残留，并运行本文件末尾的构建与测试命令。
+
 ## 编码约定
 
 - 使用 ASP.NET Core MVC Controller，不混用 Minimal API 业务端点。
