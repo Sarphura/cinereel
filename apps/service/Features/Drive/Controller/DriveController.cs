@@ -104,6 +104,35 @@ public sealed class DriveController(IDriveService driveService) : ControllerBase
         return Ok(drives);
     }
 
+    [HttpDelete("{driveId}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> Delete(
+        string driveId,
+        CancellationToken cancellationToken)
+    {
+        if (!DriveId.TryParse(driveId, out var parsedDriveId))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "driveId 必须是非空 Guid。");
+        }
+
+        var resultCode = await driveService.DeleteAsync(
+            parsedDriveId,
+            cancellationToken);
+
+        return resultCode switch
+        {
+            DeleteDriveResultCode.Deleted => NoContent(),
+            DeleteDriveResultCode.NotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Drive 不存在或当前 Cinereel 不持有 DriveOwnership。"),
+            _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
+        };
+    }
+
     private static Dictionary<string, string[]> ValidateCreateRequest(
         string? idempotencyKey,
         CreateDriveRequest request)

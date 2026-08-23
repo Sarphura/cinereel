@@ -13,6 +13,13 @@ internal sealed class DriveCreationOperationRepository(CinereelDbContext dbConte
             operation => operation.IdempotencyKey == idempotencyKey,
             cancellationToken);
 
+    public Task<DriveCreationOperationEntity?> FindByDriveIdAsync(
+        Guid driveId,
+        CancellationToken cancellationToken) =>
+        dbContext.DriveCreationOperations.SingleOrDefaultAsync(
+            operation => operation.DriveId == driveId,
+            cancellationToken);
+
     public async Task<IReadOnlyList<DriveCreationOperationEntity>> FindAllAsync(
         CancellationToken cancellationToken) =>
         await dbContext.DriveCreationOperations.ToListAsync(cancellationToken);

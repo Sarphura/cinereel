@@ -178,6 +178,35 @@ internal sealed class DriveService(
             .ToArray();
     }
 
+    public async Task<DeleteDriveResultCode> DeleteAsync(
+        DriveId driveId,
+        CancellationToken cancellationToken)
+    {
+        var drive = await driveRepository.FindByIdAsync(
+            driveId.Value,
+            cancellationToken);
+        var ownership = await driveOwnershipRepository.FindByIdAsync(
+            driveId.Value,
+            cancellationToken);
+
+        if (drive is null || ownership is null)
+        {
+            return DeleteDriveResultCode.NotFound;
+        }
+
+        var operation = await operationRepository.FindByDriveIdAsync(
+            driveId.Value,
+            cancellationToken) ?? throw new InvalidOperationException(
+                $"Drive {driveId} 缺少创建操作记录。");
+
+        driveOwnershipRepository.Remove(ownership);
+        operation.Status = DriveCreationOperationStatus.Tombstoned;
+        operation.UpdatedAt = GetUtcNow();
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+
+        return DeleteDriveResultCode.Deleted;
+    }
+
     internal async Task RecoverIncompleteCreationsAsync(CancellationToken cancellationToken)
     {
         var operations = await operationRepository.FindAllAsync(cancellationToken);

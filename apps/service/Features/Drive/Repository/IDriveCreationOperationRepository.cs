@@ -6,6 +6,10 @@ internal interface IDriveCreationOperationRepository
         string idempotencyKey,
         CancellationToken cancellationToken);
 
+    Task<DriveCreationOperationEntity?> FindByDriveIdAsync(
+        Guid driveId,
+        CancellationToken cancellationToken);
+
     Task<IReadOnlyList<DriveCreationOperationEntity>> FindAllAsync(
         CancellationToken cancellationToken);
 
