@@ -2,11 +2,11 @@
 
 - 状态：已接受
 - 日期：2026-08-20
-- 修订：2026-08-21
+- 修订：2026-08-23
 
 ## 背景
 
-Cinereel 当前以单实例媒体服务运行，需要持久化 Drive、DriveOwnership、Subscription、Publication、可靠异步操作和永久 IdempotencyKey 墓碑。CreateDrive 要求本地 Drive 与 DriveOwnership 在同一事务中提交，类型变更与扫描任务受理、Publication 状态与任务受理也需要事务一致性。
+Cinereel 当前以单实例媒体服务运行，需要持久化 Drive 及其当前 RelationType、Publication、可靠异步操作和永久 IdempotencyKey 墓碑。CreateDrive 要求本地 Drive 以 `RelationType = Ownership` 与创建操作在同一事务中提交，类型变更与扫描任务受理、Publication 状态与任务受理也需要事务一致性。
 
 当前 C# 服务尚未引入持久化依赖。持久化方案既要支持事务、唯一约束、迁移和并发检查，也应保持本地部署简单，并允许测试覆盖真实的关系数据库行为。
 
@@ -14,12 +14,12 @@ Cinereel 当前以单实例媒体服务运行，需要持久化 Drive、DriveOwn
 
 - 使用 EF Core 10 与 SQLite 持久化 Cinereel 本地关系状态。
 - 使用共享的 `CinereelDbContext` 作为技术设施；各 Feature 仍拥有自己的实体映射、领域规则与应用 Implementation。
-- Drive Module 按持久化 Entity 分别定义内部 Repository Interface：`IDriveRepository`、`IDriveOwnershipRepository` 与 `IDriveCreationOperationRepository`；每个 Interface 由同名 EF Core Repository Adapter 实现。
+- Drive Module 按持久化 Entity 分别定义内部 Repository Interface：`IDriveRepository` 与 `IDriveCreationOperationRepository`；每个 Interface 由同名 EF Core Repository Adapter 实现。DriveOwnership 与 Subscription 由 `DriveEntity.RelationType` 表达，不建立独立 Repository Seam。
 - 不定义 Generic Repository，也不使用一个聚合全部 Drive 持久化对象的 Feature Repository。Repository Interface 只提供所属 Entity 的 `FindByIdAsync`、`FindAllAsync`、`Add` 与 `Remove` 等集合操作。
 - Repository 不提供 `Update`、`Save` 或 `SaveAsync`。已查询 Entity 的修改由 EF Core 自动跟踪，Repository 方法本身不得提交数据库。
 - `DriveService` 负责 CreateDrive 的幂等判断、状态迁移、Hyper Client 调用和补偿编排；Repository 负责 EF Core 查询与集合访问，不隐藏或执行用例状态机。
 - 使用 `Infrastructure/Persistence` 中共享的内部 `IUnitOfWork` 作为唯一提交入口。它统一提交当前 Scoped `CinereelDbContext` 的更改，并允许失败恢复流程清除不再可信的 EF Core 跟踪状态。
-- 一次 `SaveChangesAsync` 在同一个本地事务中提交 Drive、DriveOwnership 与 DriveCreationOperation 的相关状态变化；不得在 Repository Adapter 内独立提交。
+- 一次 `SaveChangesAsync` 在同一个本地事务中提交 Drive、RelationType 与 DriveCreationOperation 的相关状态变化；不得在 Repository Adapter 内独立提交。
 - 使用数据库主键、唯一索引和外键落实可以由数据库保证的不变量；同一进程内针对相同 `Idempotency-Key` 的并发创建由 Singleton `DriveCreationLock` 串行化。
 - 持久化类型统一使用 `Entity` 后缀，放在所属 Feature 的 `Entity/`；Repository Interface 与 Adapter 放在 `Repository/`；EF Core 映射放在 `Configuration/`，并使用独立的 `IEntityTypeConfiguration<TEntity>`。
 - `CinereelDbContext` 通过 `ApplyConfigurationsFromAssembly` 加载各 Feature 的 Entity Configuration，避免把所有映射集中到共享 `OnModelCreating`。
@@ -42,19 +42,15 @@ Drive Module 的持久化相关文件采用以下结构：
 Features/Drive/
 ├── Entity/
 │   ├── DriveEntity.cs
-│   ├── DriveOwnershipEntity.cs
 │   ├── DriveCreationOperationEntity.cs
 │   └── DriveCreationOperationStatus.cs
 ├── Repository/
 │   ├── IDriveRepository.cs
 │   ├── DriveRepository.cs
-│   ├── IDriveOwnershipRepository.cs
-│   ├── DriveOwnershipRepository.cs
 │   ├── IDriveCreationOperationRepository.cs
 │   └── DriveCreationOperationRepository.cs
 └── Configuration/
     ├── DriveEntityConfiguration.cs
-    ├── DriveOwnershipEntityConfiguration.cs
     └── DriveCreationOperationEntityConfiguration.cs
 
 Infrastructure/Persistence/
@@ -90,7 +86,7 @@ Infrastructure/Persistence/
 
 ### 使用一个 Feature Repository
 
-此方案由一个 `IDriveRepository` 同时管理 Drive、DriveOwnership 与 DriveCreationOperation，并可以在 Repository 内协调提交。
+此方案由一个 `IDriveRepository` 同时管理 Drive 与 DriveCreationOperation，并可以在 Repository 内协调提交。
 
 但 Repository 方法会混合多个 Entity 的查询和状态操作，随着 Drive 用例增加而持续膨胀。当前选择每种 Entity 一个 Repository，并由共享 `IUnitOfWork` 明确表达跨 Repository 的提交位置，因此不采用。
 
@@ -110,7 +106,7 @@ Infrastructure/Persistence/
 
 此方案让单个 Repository 方法可以自行完成持久化，调用方不需要显式使用 `IUnitOfWork`。
 
-但 Drive、DriveOwnership 与 DriveCreationOperation 必须作为一个本地一致性单元提交。各 Repository 独立提交会产生部分成功，并破坏 CreateDrive 的同步完成与补偿语义，因此不采用。
+但 Drive 的 RelationType 与 DriveCreationOperation 必须作为一个本地一致性单元提交。各 Repository 独立提交会产生部分成功，并破坏 CreateDrive 的同步完成与补偿语义，因此不采用。
 
 ### 引入 ABP 或其他企业应用框架
 

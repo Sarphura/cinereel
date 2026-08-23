@@ -2,6 +2,7 @@ namespace Cinereel.Features.Drive;
 
 public enum DriveRelationType
 {
-    Ownership,
-    Subscription
+    None = 0,
+    Ownership = 1,
+    Subscription = 2
 }

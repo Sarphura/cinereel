@@ -104,6 +104,47 @@ public sealed class DriveController(IDriveService driveService) : ControllerBase
         return Ok(drives);
     }
 
+    [HttpPut("{driveId}/remark")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> UpdateRemark(
+        string driveId,
+        [FromBody] UpdateDriveRemarkRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (!DriveId.TryParse(driveId, out var parsedDriveId))
+        {
+            return Problem(
+                statusCode: StatusCodes.Status400BadRequest,
+                title: "driveId 必须是非空 Guid。");
+        }
+
+        if (!DriveRemark.TryCreate(request.Remark, out var remark))
+        {
+            return ValidationProblem(new ValidationProblemDetails(
+                new Dictionary<string, string[]>(StringComparer.Ordinal)
+                {
+                    [nameof(request.Remark)] =
+                        [$"remark 去除首尾空白后不能超过 {DriveRemark.MaxLength} 个字符。"]
+                }));
+        }
+
+        var resultCode = await driveService.UpdateRemarkAsync(
+            parsedDriveId,
+            remark,
+            cancellationToken);
+
+        return resultCode switch
+        {
+            UpdateDriveRemarkResultCode.Updated => NoContent(),
+            UpdateDriveRemarkResultCode.NotFound => Problem(
+                statusCode: StatusCodes.Status404NotFound,
+                title: "Drive 不存在或当前 Cinereel 不持有 DriveOwnership。"),
+            _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
+        };
+    }
+
     [HttpDelete("{driveId}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]

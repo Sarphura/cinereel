@@ -39,30 +39,14 @@ namespace Cinereel.Infrastructure.Persistence.Migrations
                     Key = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
                     Name = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
                     ContentTypeId = table.Column<string>(type: "TEXT", maxLength: 200, nullable: false),
+                    RelationType = table.Column<int>(type: "INTEGER", nullable: false),
+                    Remark = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true),
                     CreatedAt = table.Column<long>(type: "INTEGER", nullable: false),
                     UpdatedAt = table.Column<long>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Drives", x => x.Id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "DriveOwnerships",
-                columns: table => new
-                {
-                    DriveId = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Remark = table.Column<string>(type: "TEXT", maxLength: 500, nullable: true)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_DriveOwnerships", x => x.DriveId);
-                    table.ForeignKey(
-                        name: "FK_DriveOwnerships_Drives_DriveId",
-                        column: x => x.DriveId,
-                        principalTable: "Drives",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
@@ -83,9 +67,6 @@ namespace Cinereel.Infrastructure.Persistence.Migrations
         {
             migrationBuilder.DropTable(
                 name: "DriveCreationOperations");
-
-            migrationBuilder.DropTable(
-                name: "DriveOwnerships");
 
             migrationBuilder.DropTable(
                 name: "Drives");

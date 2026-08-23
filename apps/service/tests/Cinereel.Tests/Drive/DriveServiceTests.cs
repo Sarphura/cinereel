@@ -27,8 +27,8 @@ public sealed class DriveServiceTests
         Assert.Equal("ownership", result.Drive.Relation);
         Assert.Single(fixture.HyperClient.CreateCalls);
         Assert.Equal(result.Drive.DriveId, fixture.HyperClient.CreateCalls[0].DriveId.Value);
-        Assert.Equal(1, await fixture.DbContext.Drives.CountAsync());
-        Assert.Equal(1, await fixture.DbContext.DriveOwnerships.CountAsync());
+        var saved = await fixture.DbContext.Drives.SingleAsync();
+        Assert.Equal(DriveRelationType.Ownership, saved.RelationType);
     }
 
     [Fact]
@@ -86,7 +86,6 @@ public sealed class DriveServiceTests
 
         Assert.Single(fixture.HyperClient.DeleteCalls);
         Assert.Equal(0, await fixture.DbContext.Drives.CountAsync());
-        Assert.Equal(0, await fixture.DbContext.DriveOwnerships.CountAsync());
         var operation = await fixture.DbContext.DriveCreationOperations
             .AsNoTracking()
             .SingleAsync();
@@ -178,6 +177,56 @@ public sealed class DriveServiceTests
         Assert.Equal(created.Drive, Assert.Single(listed));
     }
 
+    [Fact]
+    public async Task UpdateRemarkPersistsOnOwnedDrive()
+    {
+        await using var fixture = await DriveServiceFixture.CreateAsync();
+        var input = CreateInput("create:remark", "电影资料");
+        var created = await fixture.Service.CreateAsync(
+            input.IdempotencyKey,
+            input.Request,
+            CancellationToken.None);
+        Assert.True(DriveRemark.TryCreate("我的电影", out var remark));
+
+        var result = await fixture.Service.UpdateRemarkAsync(
+            new DriveId(created.Drive!.DriveId),
+            remark,
+            CancellationToken.None);
+
+        Assert.Equal(UpdateDriveRemarkResultCode.Updated, result);
+        var saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
+        Assert.Equal("我的电影", saved.Remark);
+    }
+
+    [Fact]
+    public async Task DeleteClearsRelationAndKeepsDrive()
+    {
+        await using var fixture = await DriveServiceFixture.CreateAsync();
+        var input = CreateInput("create:delete", "电影资料");
+        var created = await fixture.Service.CreateAsync(
+            input.IdempotencyKey,
+            input.Request,
+            CancellationToken.None);
+        Assert.True(DriveRemark.TryCreate("待删除", out var remark));
+        await fixture.Service.UpdateRemarkAsync(
+            new DriveId(created.Drive!.DriveId),
+            remark,
+            CancellationToken.None);
+
+        var result = await fixture.Service.DeleteAsync(
+            new DriveId(created.Drive.DriveId),
+            CancellationToken.None);
+
+        Assert.Equal(DeleteDriveResultCode.Deleted, result);
+        var saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
+        Assert.Equal(DriveRelationType.None, saved.RelationType);
+        Assert.Null(saved.Remark);
+        Assert.Null(await fixture.Service.GetAsync(
+            new DriveId(created.Drive.DriveId),
+            CancellationToken.None));
+        Assert.Empty(await fixture.Service.ListAsync(CancellationToken.None));
+    }
+
     private static CreateDriveInput CreateInput(string idempotencyKey, string name)
     {
         Assert.True(IdempotencyKey.TryCreate(idempotencyKey, out var parsedKey));
@@ -225,7 +274,6 @@ public sealed class DriveServiceTests
             var hyperClient = new TestHyperClient(driveKey);
             var service = new DriveService(
                 new DriveRepository(dbContext),
-                new DriveOwnershipRepository(dbContext),
                 new DriveCreationOperationRepository(dbContext),
                 new UnitOfWork(dbContext),
                 hyperClient,

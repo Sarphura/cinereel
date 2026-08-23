@@ -21,6 +21,10 @@ internal sealed class DriveEntityConfiguration : IEntityTypeConfiguration<DriveE
         builder.Property(drive => drive.ContentTypeId)
             .HasMaxLength(200)
             .IsRequired();
+        builder.Property(drive => drive.RelationType)
+            .IsRequired();
+        builder.Property(drive => drive.Remark)
+            .HasMaxLength(DriveRemark.MaxLength);
         builder.Property(drive => drive.CreatedAt)
             .HasConversion(
                 value => value.ToUnixTimeMilliseconds(),
@@ -31,10 +35,5 @@ internal sealed class DriveEntityConfiguration : IEntityTypeConfiguration<DriveE
                 value => value.ToUnixTimeMilliseconds(),
                 value => DateTimeOffset.FromUnixTimeMilliseconds(value))
             .IsRequired();
-
-        builder.HasOne(drive => drive.Ownership)
-            .WithOne(ownership => ownership.Drive)
-            .HasForeignKey<DriveOwnershipEntity>(ownership => ownership.DriveId)
-            .OnDelete(DeleteBehavior.Cascade);
     }
 }

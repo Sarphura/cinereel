@@ -5,7 +5,7 @@
 ## 语言
 
 **Drive**：
-拥有独立 `DriveId`、规范 Name，通过 `DriveKey` 关联 Hyperdrive 内容，并持有一个必填 DriveContentTypeId 的数据集合。Drive 本身不区分 `Local` 或 `Subscribed`；DriveOwnership 与 Subscription 分别表达当前 Cinereel 对 Drive 的可写控制关系和订阅访问关系。Drive 可以在未发布状态下独立存在，创建 Drive 不等于发布。用户主动删除 Drive 时必须持有 DriveOwnership，且关联的 Publication 从未产生或已处于 `Unpublished`；没有任何持久化引用的 OrphanedDrive 则由独立异步流程回收。
+拥有独立 `DriveId`、规范 Name，通过 `DriveKey` 关联 Hyperdrive 内容，并持有一个必填 DriveContentTypeId 的数据集合。Drive 使用 `RelationType` 保存当前 Cinereel 与它的关系：`None` 表示没有访问关系，`Ownership` 表示可写控制关系，`Subscription` 表示订阅访问关系；该字段描述当前实例的关系，不是 Drive 的内容类型。Drive 可以在未发布状态下独立存在，创建 Drive 不等于发布。用户主动删除 Drive 时 `RelationType` 必须为 `Ownership`，且关联的 Publication 从未产生或已处于 `Unpublished`；没有任何持久化引用的 OrphanedDrive 则由独立异步流程回收。
 _避免使用_：PublishedDrive、PublishDrive
 
 **DriveId**：
@@ -29,11 +29,11 @@ _避免使用_：DriveTypeGuid、ScannerTypeName、ContentTypeDisplayName
 _避免使用_：RefreshDrive、ScanRequest
 
 **DriveOwnership**：
-当前 Cinereel 对一个 Drive 持有可写控制能力的关系，在当前 Cinereel 创建 Drive 时建立。只有持有 DriveOwnership，才能修改 Drive 的 Name 与内容，或者 Publish、删除 Drive；DriveOwnership 可以保存当前 Cinereel 私有的 Remark。DriveOwnership 通过 DriveId 引用 Drive，不是 Drive 的类型或状态。同一 Drive 的 DriveOwnership 与 Subscription 互斥，已有其中一种关系时不能建立另一种关系。
+当前 Cinereel 对一个 Drive 持有可写控制能力的关系，在当前 Cinereel 创建 Drive 时以 `Drive.RelationType = Ownership` 建立。只有持有 DriveOwnership，才能修改 Drive 的 Name 与内容，或者 Publish、删除 Drive。DriveOwnership 是 `RelationType` 的一种取值，不使用独立 Entity 或表；同一 Drive 只能保存一个 `RelationType`，因此 DriveOwnership 与 Subscription 互斥。
 _避免使用_：LocalDrive、IsLocal、IsWritable
 
 **CreateDrive**：
-用户要求当前 Cinereel 创建一个新 Drive 并取得 DriveOwnership 的显式动作。调用方必须提供 IdempotencyKey；相同 IdempotencyKey 与相同规范化请求只能驱动同一次 CreateDrive，并返回同一个创建结果，相同 IdempotencyKey 对应不同请求时拒绝执行。只有 Hyper Client 已创建对应内容，且本地 Drive 与 DriveOwnership 已在同一事务中持久化后，CreateDrive 才成功返回；本地事务失败时必须补偿删除刚创建的 Hyperdrive，补偿失败则交由可恢复的异步任务继续处理，不能向调用方返回一个 Cinereel 无法识别的 Drive。
+用户要求当前 Cinereel 创建一个新 Drive 并取得 DriveOwnership 的显式动作。调用方必须提供 IdempotencyKey；相同 IdempotencyKey 与相同规范化请求只能驱动同一次 CreateDrive，并返回同一个创建结果，相同 IdempotencyKey 对应不同请求时拒绝执行。只有 Hyper Client 已创建对应内容，且本地 Drive 已以 `RelationType = Ownership` 持久化后，CreateDrive 才成功返回；本地事务失败时必须补偿删除刚创建的 Hyperdrive，补偿失败则交由可恢复的异步任务继续处理，不能向调用方返回一个 Cinereel 无法识别的 Drive。
 _避免使用_：CreatePublishedDrive、PublishDrive
 
 **IdempotencyKey**：
@@ -41,15 +41,15 @@ _避免使用_：CreatePublishedDrive、PublishDrive
 _避免使用_：DriveId、RequestId、CorrelationId
 
 **Subscription**：
-当前 Cinereel 通过 `DriveKey` 找到一个已有 Drive，并与该 Drive 建立的访问关系。Subscription 可以保存当前 Cinereel 私有的 Remark，但不能修改 Drive 的规范 Name；Subscription 引用 DriveId，不是 Drive 的类型或状态。删除 Subscription 只结束该访问关系，不删除 Drive。同一 Drive 的 Subscription 与 DriveOwnership 互斥，已有其中一种关系时不能建立另一种关系。
+当前 Cinereel 通过 `DriveKey` 找到一个已有 Drive，并以 `Drive.RelationType = Subscription` 保存的访问关系。Subscription 不能修改 Drive 的规范 Name，也不使用独立 Entity 或表。删除 Subscription 会把 `RelationType` 设为 `None` 并清空 Remark，但不删除 Drive。同一 Drive 只能保存一个 `RelationType`，因此 Subscription 与 DriveOwnership 互斥。
 _避免使用_：SubscribedDrive、RemoteDrive
 
 **Remark**：
-当前 Cinereel 在 DriveOwnership 或 Subscription 上保存的可选私有备注，用于覆盖该关系下的 Drive 显示名称。Remark 不属于 Drive，不修改规范 Name，也不发布给其他 Cinereel 实例；没有 Remark 时显示 Drive 的 Name。
+当前 Cinereel 针对 Drive 当前 `RelationType` 保存的可选私有备注，用于覆盖该关系下的 Drive 显示名称。Remark 与 `RelationType` 一同持久化在 Drive 记录中，但不属于 Drive 的规范元数据，不修改规范 Name，也不发布给其他 Cinereel 实例；没有 Remark 时显示 Drive 的 Name，`RelationType` 变为 `None` 时必须清空 Remark。
 _避免使用_：DriveName、PublishedName
 
 **OrphanedDrive**：
-既没有 DriveOwnership、Subscription、Publication，也没有其他持久化关系引用的 Drive。删除最后一个关系的事务提交后，Drive 立即具备异步回收资格，不设置宽限期；关系删除本身不删除 Drive。独立异步回收流程必须在删除 Drive 记录和本地缓存前重新确认它仍然没有任何引用。
+`RelationType` 为 `None`，并且没有 Publication 或其他持久化关系引用的 Drive。清除最后一个关系的事务提交后，Drive 立即具备异步回收资格，不设置宽限期；关系清除本身不删除 Drive。独立异步回收流程必须在删除 Drive 记录和本地缓存前重新确认它仍然没有任何引用。
 _避免使用_：DeletedDrive、UnsubscribedDrive
 
 **Publish**：

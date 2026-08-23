@@ -92,6 +92,13 @@ namespace Cinereel.Infrastructure.Persistence.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("TEXT");
 
+                    b.Property<int>("RelationType")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Remark")
+                        .HasMaxLength(500)
+                        .HasColumnType("TEXT");
+
                     b.Property<long>("UpdatedAt")
                         .HasColumnType("INTEGER");
 
@@ -101,36 +108,6 @@ namespace Cinereel.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Drives", (string)null);
-                });
-
-            modelBuilder.Entity("Cinereel.Features.Drive.DriveOwnershipEntity", b =>
-                {
-                    b.Property<Guid>("DriveId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Remark")
-                        .HasMaxLength(500)
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("DriveId");
-
-                    b.ToTable("DriveOwnerships", (string)null);
-                });
-
-            modelBuilder.Entity("Cinereel.Features.Drive.DriveOwnershipEntity", b =>
-                {
-                    b.HasOne("Cinereel.Features.Drive.DriveEntity", "Drive")
-                        .WithOne("Ownership")
-                        .HasForeignKey("Cinereel.Features.Drive.DriveOwnershipEntity", "DriveId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Drive");
-                });
-
-            modelBuilder.Entity("Cinereel.Features.Drive.DriveEntity", b =>
-                {
-                    b.Navigation("Ownership");
                 });
 #pragma warning restore 612, 618
         }

@@ -140,13 +140,11 @@ export async function renamePublishedDrive(driveKey: string, name: string) {
   return normalizeDriveResponse(response);
 }
 
-export async function savePublishedDriveRemark(driveKey: string, remark: string) {
-  const response = await requestJson<{ data: { driveKey: string; remark?: string } }>(`/api/drives/${driveKey}`, {
-    method: 'PATCH',
+export async function savePublishedDriveRemark(driveId: string, remark: string) {
+  await requestJson(`/api/drives/${driveId}/remark`, {
+    method: 'PUT',
     body: JSON.stringify({ remark }),
   });
-
-  return response.data;
 }
 
 export async function deletePublishedDrive(driveKey: string) {

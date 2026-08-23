@@ -9,7 +9,15 @@ namespace Cinereel.Tests.Drive;
 public sealed class DrivePersistenceTests
 {
     [Fact]
-    public async Task DriveAndOwnershipCommitTogether()
+    public void RelationTypeValuesAreStable()
+    {
+        Assert.Equal(0, (int)DriveRelationType.None);
+        Assert.Equal(1, (int)DriveRelationType.Ownership);
+        Assert.Equal(2, (int)DriveRelationType.Subscription);
+    }
+
+    [Fact]
+    public async Task DrivePersistsRelationState()
     {
         await using var fixture = await SqliteFixture.CreateAsync();
         var now = DateTimeOffset.UtcNow;
@@ -20,22 +28,18 @@ public sealed class DrivePersistenceTests
             Key = new string('a', 64),
             Name = "电影资料",
             ContentTypeId = DriveContentTypeId.MovieValue,
+            RelationType = DriveRelationType.Ownership,
+            Remark = "我的电影",
             CreatedAt = now,
-            UpdatedAt = now,
-            Ownership = new DriveOwnershipEntity
-            {
-                DriveId = driveId
-            }
+            UpdatedAt = now
         };
 
         fixture.DbContext.Drives.Add(drive);
         await fixture.DbContext.SaveChangesAsync();
 
-        var saved = await fixture.DbContext.Drives
-            .Include(item => item.Ownership)
-            .SingleAsync();
-        Assert.NotNull(saved.Ownership);
-        Assert.Equal(driveId, saved.Ownership.DriveId);
+        var saved = await fixture.DbContext.Drives.SingleAsync();
+        Assert.Equal(DriveRelationType.Ownership, saved.RelationType);
+        Assert.Equal("我的电影", saved.Remark);
     }
 
     [Fact]

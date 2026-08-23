@@ -23,7 +23,6 @@ public static class DriveConfiguration
         services.TryAddSingleton(TimeProvider.System);
         services.TryAddSingleton<DriveCreationLock>();
         services.AddScoped<IDriveRepository, DriveRepository>();
-        services.AddScoped<IDriveOwnershipRepository, DriveOwnershipRepository>();
         services.AddScoped<IDriveCreationOperationRepository, DriveCreationOperationRepository>();
         services.AddScoped<DriveService>();
         services.AddScoped<IDriveService>(provider =>

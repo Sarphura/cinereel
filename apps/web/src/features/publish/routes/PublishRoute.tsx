@@ -103,6 +103,7 @@ export function PublishRouteView() {
   const [renameLabel, setRenameLabel] = useState('');
   const [renameError, setRenameError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [remarkError, setRemarkError] = useState<string | null>(null);
   const [remarkEditor, setRemarkEditor] = useState<DriveRemarkEditorState | null>(null);
   const [contextMenuState, setContextMenuState] = useState<DriveContextMenuState | null>(null);
 
@@ -124,6 +125,7 @@ export function PublishRouteView() {
   const defaultMountPath = selectedNode?.localDirPath ?? null;
 
   const openRemarkEditor = (drive: DriveRecord) => {
+    setRemarkError(null);
     setRemarkEditor({ driveKey: getDriveSelectionKey(drive), label: drive.name, remark: drive.remark ?? '' });
   };
 
@@ -327,13 +329,20 @@ export function PublishRouteView() {
       <DriveRemarkDialog
         remarkEditor={remarkEditor}
         saving={actions.savingRemark}
-        error={null}
-        onClose={() => setRemarkEditor(null)}
-        onChange={(value) => setRemarkEditor((current) => (current ? { ...current, remark: value } : current))}
+        error={remarkError}
+        onClose={() => { setRemarkError(null); setRemarkEditor(null); }}
+        onChange={(value) => {
+          setRemarkError(null);
+          setRemarkEditor((current) => (current ? { ...current, remark: value } : current));
+        }}
         onSubmit={async () => {
           if (!remarkEditor) return;
-          await actions.handleSaveRemark(remarkEditor.driveKey, remarkEditor.remark);
-          setRemarkEditor(null);
+          try {
+            await actions.handleSaveRemark(remarkEditor.driveKey, remarkEditor.remark);
+            setRemarkEditor(null);
+          } catch (err) {
+            setRemarkError(err instanceof Error ? err.message : '保存备注失败。');
+          }
         }}
       />
 

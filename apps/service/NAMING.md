@@ -173,6 +173,7 @@ Entity 保存持久化数据，Configuration 保存表名、长度、索引、�
 - Repository 不提供 `Save` 或 `SaveAsync`，也不得自行调用 `SaveChangesAsync`。
 - 所有 Repository 共享同一个 Scoped `CinereelDbContext`，由共享 `IUnitOfWork` 统一提交。
 - 不创建 `IRepository<TEntity, TId>` 或其他 Generic Repository 基础框架。
+- DriveOwnership 与 Subscription 通过 `DriveEntity.RelationType` 表达，不建立独立 Entity、Configuration 或 Repository。
 
 完整持久化决策见 [`ADR-0006`](../../docs/adr/0006-use-ef-core-with-sqlite-for-local-persistence.md)。
 

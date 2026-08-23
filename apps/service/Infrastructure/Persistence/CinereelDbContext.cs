@@ -8,8 +8,6 @@ internal sealed class CinereelDbContext(
 {
     internal DbSet<DriveEntity> Drives => Set<DriveEntity>();
 
-    internal DbSet<DriveOwnershipEntity> DriveOwnerships => Set<DriveOwnershipEntity>();
-
     internal DbSet<DriveCreationOperationEntity> DriveCreationOperations =>
         Set<DriveCreationOperationEntity>();
 

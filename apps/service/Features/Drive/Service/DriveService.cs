@@ -7,7 +7,6 @@ namespace Cinereel.Features.Drive;
 
 internal sealed class DriveService(
     IDriveRepository driveRepository,
-    IDriveOwnershipRepository driveOwnershipRepository,
     IDriveCreationOperationRepository operationRepository,
     IUnitOfWork unitOfWork,
     IHyperClient hyperClient,
@@ -151,31 +150,44 @@ internal sealed class DriveService(
             driveId.Value,
             cancellationToken);
 
-        if (entity is null)
+        if (entity is null || entity.RelationType == DriveRelationType.None)
         {
             return null;
         }
 
-        var ownership = await driveOwnershipRepository.FindByIdAsync(
-            driveId.Value,
-            cancellationToken);
-        return ownership is null ? null : ToResponse(entity, ownership);
+        return ToResponse(entity);
     }
 
     public async Task<IReadOnlyList<DriveResponse>> ListAsync(
         CancellationToken cancellationToken)
     {
         var drives = await driveRepository.FindAllAsync(cancellationToken);
-        var ownerships = await driveOwnershipRepository.FindAllAsync(cancellationToken);
-        var ownershipByDriveId = ownerships.ToDictionary(
-            ownership => ownership.DriveId);
 
         return drives
-            .Where(drive => ownershipByDriveId.ContainsKey(drive.Id))
+            .Where(drive => drive.RelationType != DriveRelationType.None)
             .OrderBy(drive => drive.CreatedAt)
             .ThenBy(drive => drive.Id)
-            .Select(drive => ToResponse(drive, ownershipByDriveId[drive.Id]))
+            .Select(ToResponse)
             .ToArray();
+    }
+
+    public async Task<UpdateDriveRemarkResultCode> UpdateRemarkAsync(
+        DriveId driveId,
+        DriveRemark remark,
+        CancellationToken cancellationToken)
+    {
+        var drive = await driveRepository.FindByIdAsync(
+            driveId.Value,
+            cancellationToken);
+
+        if (drive is null || drive.RelationType != DriveRelationType.Ownership)
+        {
+            return UpdateDriveRemarkResultCode.NotFound;
+        }
+
+        drive.Remark = remark.Value;
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        return UpdateDriveRemarkResultCode.Updated;
     }
 
     public async Task<DeleteDriveResultCode> DeleteAsync(
@@ -185,11 +197,7 @@ internal sealed class DriveService(
         var drive = await driveRepository.FindByIdAsync(
             driveId.Value,
             cancellationToken);
-        var ownership = await driveOwnershipRepository.FindByIdAsync(
-            driveId.Value,
-            cancellationToken);
-
-        if (drive is null || ownership is null)
+        if (drive is null || drive.RelationType != DriveRelationType.Ownership)
         {
             return DeleteDriveResultCode.NotFound;
         }
@@ -199,7 +207,8 @@ internal sealed class DriveService(
             cancellationToken) ?? throw new InvalidOperationException(
                 $"Drive {driveId} 缺少创建操作记录。");
 
-        driveOwnershipRepository.Remove(ownership);
+        drive.RelationType = DriveRelationType.None;
+        drive.Remark = null;
         operation.Status = DriveCreationOperationStatus.Tombstoned;
         operation.UpdatedAt = GetUtcNow();
         await unitOfWork.SaveChangesAsync(cancellationToken);
@@ -341,12 +350,9 @@ internal sealed class DriveService(
             Key = driveKey.Value,
             Name = operation.Name,
             ContentTypeId = operation.ContentTypeId,
+            RelationType = DriveRelationType.Ownership,
             CreatedAt = now,
             UpdatedAt = now
-        });
-        driveOwnershipRepository.Add(new DriveOwnershipEntity
-        {
-            DriveId = operation.DriveId
         });
         operation.Status = DriveCreationOperationStatus.Completed;
         operation.UpdatedAt = now;
@@ -424,9 +430,7 @@ internal sealed class DriveService(
         return DateTimeOffset.FromUnixTimeMilliseconds(now.ToUnixTimeMilliseconds());
     }
 
-    private static DriveResponse ToResponse(
-        DriveEntity entity,
-        DriveOwnershipEntity ownership)
+    private static DriveResponse ToResponse(DriveEntity entity)
     {
         if (!DriveKey.TryCreate(entity.Key, out var key) ||
             !DriveName.TryCreate(entity.Name, out var name) ||
@@ -440,14 +444,15 @@ internal sealed class DriveService(
             key.Value,
             name.Value,
             contentTypeId.Value,
-            ownership.Remark,
-            ToResponseValue(DriveRelationType.Ownership),
+            entity.Remark,
+            ToResponseValue(entity.RelationType),
             entity.CreatedAt,
             entity.UpdatedAt);
     }
 
     private static string ToResponseValue(DriveRelationType relationType) => relationType switch
     {
+        DriveRelationType.None => throw new ArgumentOutOfRangeException(nameof(relationType)),
         DriveRelationType.Ownership => "ownership",
         DriveRelationType.Subscription => "subscription",
         _ => throw new ArgumentOutOfRangeException(nameof(relationType))

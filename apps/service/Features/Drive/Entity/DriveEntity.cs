@@ -10,9 +10,11 @@ internal sealed class DriveEntity
 
     internal string ContentTypeId { get; set; } = string.Empty;
 
+    internal DriveRelationType RelationType { get; set; }
+
+    internal string? Remark { get; set; }
+
     internal DateTimeOffset CreatedAt { get; set; }
 
     internal DateTimeOffset UpdatedAt { get; set; }
-
-    internal DriveOwnershipEntity? Ownership { get; set; }
 }

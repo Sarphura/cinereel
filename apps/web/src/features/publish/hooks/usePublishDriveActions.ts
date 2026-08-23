@@ -38,7 +38,7 @@ export interface PublishDriveActions {
   handleDelete: () => Promise<void>;
   handlePublish: (targetPath: string) => Promise<void>;
   handleManualMovieMount: (input: ManualMovieMountInput) => Promise<void>;
-  handleSaveRemark: (driveKey: string, remark: string) => Promise<void>;
+  handleSaveRemark: (driveId: string, remark: string) => Promise<void>;
   handleRefresh: (selectedDriveKey: string | null) => Promise<void>;
 }
 
@@ -145,9 +145,9 @@ export function usePublishDriveActions({
   });
 
   const saveRemarkMutation = useMutation({
-    mutationFn: ({ driveKey, remark }: { driveKey: string; remark: string }) => savePublishedDriveRemark(driveKey, remark),
+    mutationFn: ({ driveId, remark }: { driveId: string; remark: string }) => savePublishedDriveRemark(driveId, remark),
     onSuccess: async (_, variables) => {
-      await invalidatePublishData(variables.driveKey);
+      await invalidatePublishData(variables.driveId);
       setError(null);
     },
   });
@@ -232,11 +232,11 @@ export function usePublishDriveActions({
     }
   };
 
-  const handleSaveRemark = async (driveKey: string, remark: string) => {
+  const handleSaveRemark = async (driveId: string, remark: string) => {
     setSavingRemark(true);
 
     try {
-      await saveRemarkMutation.mutateAsync({ driveKey, remark });
+      await saveRemarkMutation.mutateAsync({ driveId, remark });
     } finally {
       setSavingRemark(false);
     }

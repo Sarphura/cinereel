@@ -5,7 +5,7 @@
 
 ## 背景
 
-CreateDrive 同时跨越两个不能共享数据库事务的资源：Hyper Client 负责创建 Hyperdrive 并返回 `DriveKey`，Cinereel 负责持久化 Drive 与 DriveOwnership。调用方需要知道一次创建请求何时真正得到可用、可写且能被其他 Feature 引用的 Drive。
+CreateDrive 同时跨越两个不能共享数据库事务的资源：Hyper Client 负责创建 Hyperdrive 并返回 `DriveKey`，Cinereel 负责持久化 `RelationType = Ownership` 的 Drive。调用方需要知道一次创建请求何时真正得到可用、可写且能被其他 Feature 引用的 Drive。
 
 如果任一侧单独成功，系统都会留下半成品：只有本地记录时无法访问内容，只有 Hyperdrive 时 Cinereel 无法通过 `DriveId` 管理它。进程还可能在两个步骤之间终止，因此只依靠请求内的异常处理不足以保证最终清理。
 
@@ -22,9 +22,9 @@ CreateDrive 同时跨越两个不能共享数据库事务的资源：Hyper Clien
 - 成功创建使用过的 `Idempotency-Key` 永久保留且不可用于新的创建意图。
 - Drive 存在期间，相同 key 与相同请求重放原创建结果；Drive 删除后，完整幂等结果缩减为保留 key、请求摘要与原 `DriveId` 的墓碑。
 - 相同请求命中墓碑时返回 `410 Gone`，不同请求复用墓碑中的 key 时仍返回 `409 Conflict`。
-- Hyper Client 创建 Hyperdrive 并返回 `DriveKey` 后，Cinereel 在同一个本地事务中持久化 Drive 与 DriveOwnership。
+- Hyper Client 创建 Hyperdrive 并返回 `DriveKey` 后，Cinereel 在同一个本地事务中持久化 `RelationType = Ownership` 的 Drive 与创建操作状态。
 - 只有 Hyper Client 创建成功且本地事务提交成功后，CreateDrive 才返回新 Drive；HTTP Adapter 使用 `201 Created`。
-- Hyper Client 创建失败时不持久化 Drive 或 DriveOwnership，并向调用方返回失败。
+- Hyper Client 创建失败时不持久化 Drive，并向调用方返回失败。
 - Hyper Client 已创建成功但本地事务失败时，Cinereel 必须尝试删除本次刚创建的 Hyperdrive。
 - 同步补偿失败时，恢复任务必须根据持久化的创建操作依据继续重试清理；不能把无法通过 `DriveId` 管理的 Drive 返回给调用方。
 - 补偿与恢复只能删除本次创建操作产生且尚未交付成功的 Hyperdrive，不得清理已经完成创建的 Drive 内容。
@@ -42,13 +42,13 @@ CreateDrive 同时跨越两个不能共享数据库事务的资源：Hyper Clien
 
 ### Hyper Client 成功后立即返回
 
-此方案的响应速度最快，本地 Drive 与 DriveOwnership 可以在后台补写。
+此方案的响应速度最快，本地 Drive 及其 Ownership 关系状态可以在后台补写。
 
 但调用方可能得到一个 Cinereel 尚不能通过 `DriveId` 查询、授权或 Publish 的 Hyperdrive；补写永久失败时还会形成对调用方可见但系统无法管理的资源，因此不采用。
 
 ### 先持久化 Drive 再调用 Hyper Client
 
-此方案可以先建立 `DriveId` 与 DriveOwnership，再异步或同步补充 `DriveKey`。
+此方案可以先建立 `DriveId` 并把 `RelationType` 设为 `Ownership`，再异步或同步补充 `DriveKey`。
 
 但在 Hyper Client 失败期间，Drive 记录没有可访问的内容，仍然需要公开的中间状态与清理规则，与同步完成的 Interface 不符，因此不采用。
 
