@@ -5,9 +5,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@hyper.api': fileURLToPath(new URL('./src/hyper.api', import.meta.url)),
-      '@hyper.domain': fileURLToPath(
-        new URL('./src/hyper.domain', import.meta.url),
-      ),
       '@hyper.infrastructure': fileURLToPath(
         new URL('./src/hyper.infrastructure', import.meta.url),
       ),

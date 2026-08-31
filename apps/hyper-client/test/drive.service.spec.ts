@@ -9,20 +9,20 @@ const DRIVE_KEYS_FILE = 'drive-keys.json'
 
 describe('DriveService', () => {
   let storagePath: string
-  let originalStorageDir: string | undefined
+  let originalConfigDir: string | undefined
 
   beforeEach(async () => {
-    originalStorageDir = process.env.HYPER_STORAGE_DIR
+    originalConfigDir = process.env.CONFIG_DIR
     storagePath = await mkdtemp(join(tmpdir(), 'cinereel-hyper-client-'))
-    process.env.HYPER_STORAGE_DIR = storagePath
+    process.env.CONFIG_DIR = storagePath
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
   })
 
   afterEach(async () => {
-    if (originalStorageDir === undefined) {
-      delete process.env.HYPER_STORAGE_DIR
+    if (originalConfigDir === undefined) {
+      delete process.env.CONFIG_DIR
     } else {
-      process.env.HYPER_STORAGE_DIR = originalStorageDir
+      process.env.CONFIG_DIR = originalConfigDir
     }
     vi.restoreAllMocks()
     await rm(storagePath, { recursive: true, force: true })

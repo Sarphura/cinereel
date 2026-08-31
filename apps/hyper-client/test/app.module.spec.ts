@@ -4,29 +4,29 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Readable } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
+import { SDK } from 'hyper-sdk'
 import { AppModule } from '../src/app.module.js'
-import { HYPER_SDK } from '../src/hyper.infrastructure/sdk/hyper-sdk.module.js'
 import { DriveService } from '../src/hyper.implementation/drives.service.js'
 import { FileService } from '../src/hyper.implementation/file.service.js'
 
 describe('AppModule', () => {
   let storagePath: string
-  let originalStorageDir: string | undefined
+  let originalConfigDir: string | undefined
   let moduleRef: TestingModule | undefined
 
   beforeEach(async () => {
-    originalStorageDir = process.env.HYPER_STORAGE_DIR
+    originalConfigDir = process.env.CONFIG_DIR
     storagePath = await mkdtemp(join(tmpdir(), 'cinereel-hyper-client-'))
-    process.env.HYPER_STORAGE_DIR = storagePath
+    process.env.CONFIG_DIR = storagePath
     vi.spyOn(console, 'log').mockImplementation(() => undefined)
   })
 
   afterEach(async () => {
     await moduleRef?.close()
-    if (originalStorageDir === undefined) {
-      delete process.env.HYPER_STORAGE_DIR
+    if (originalConfigDir === undefined) {
+      delete process.env.CONFIG_DIR
     } else {
-      process.env.HYPER_STORAGE_DIR = originalStorageDir
+      process.env.CONFIG_DIR = originalConfigDir
     }
     vi.restoreAllMocks()
     await rm(storagePath, { recursive: true, force: true })
@@ -46,7 +46,7 @@ describe('AppModule', () => {
     moduleRef = await Test.createTestingModule({
       imports: [AppModule.forRoot()],
     })
-      .overrideProvider(HYPER_SDK)
+      .overrideProvider(SDK)
       .useValue(sdk)
       .compile()
     await moduleRef.init()

@@ -3,7 +3,7 @@ import { createZodDto } from 'nestjs-zod'
 import {
   isDriveFilePath,
   MAX_DRIVE_FILE_PATH_LENGTH,
-} from '@hyper.domain/model/drive-file-path.js'
+} from '@hyper.implementation/file.service.js'
 
 export const AddFileQuerySchema = z.object({
   path: z

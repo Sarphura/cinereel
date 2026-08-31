@@ -1,11 +1,29 @@
-import { Inject, Injectable } from '@nestjs/common'
-import { isDriveFilePath } from '../hyper.domain/model/drive-file-path.js'
-import { HYPER_SDK } from '@hyper.infrastructure/sdk/hyper-sdk.module.js'
-import type { SDK } from 'hyper-sdk'
+import { Injectable } from '@nestjs/common'
+import { SDK } from 'hyper-sdk'
 import { pipeline } from 'node:stream/promises'
 import type { Readable } from 'node:stream'
 
 const DRIVE_KEY_PATTERN = /^[0-9a-f]{64}$/iu
+
+export const MAX_DRIVE_FILE_PATH_LENGTH = 1024
+
+export function isDriveFilePath(value: string): boolean {
+  if (
+    value.length < 2 ||
+    value.length > MAX_DRIVE_FILE_PATH_LENGTH ||
+    !value.startsWith('/') ||
+    value.endsWith('/') ||
+    value.includes('\\') ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    return false
+  }
+
+  return value
+    .slice(1)
+    .split('/')
+    .every((segment) => segment.length > 0 && segment !== '.' && segment !== '..')
+}
 
 export type AddFileResultCode =
   | 'created'
@@ -16,10 +34,7 @@ export type AddFileResultCode =
 export class FileService {
   private readonly pendingWrites = new Map<string, Promise<void>>()
 
-  constructor(
-    @Inject(HYPER_SDK)
-    private readonly sdk: SDK,
-  ) {}
+  constructor(private readonly sdk: SDK) {}
 
   async addFile(
     driveKey: string,

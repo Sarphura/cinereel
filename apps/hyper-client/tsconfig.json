@@ -19,7 +19,6 @@
     "baseUrl": ".",
     "paths": {
       "@hyper.api/*": ["src/hyper.api/*"],
-      "@hyper.domain/*": ["src/hyper.domain/*"],
       "@hyper.infrastructure/*": ["src/hyper.infrastructure/*"],
       "@hyper.implementation/*": ["src/hyper.implementation/*"]
     }

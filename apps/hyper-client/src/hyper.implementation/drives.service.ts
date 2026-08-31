@@ -1,13 +1,10 @@
-import { Inject, Injectable, type OnModuleInit } from '@nestjs/common'
+import { Injectable, type OnModuleInit } from '@nestjs/common'
 import type {
   CreateDriveRequestDto,
   DriveResponseDto,
 } from '@hyper.api/dto/drives.dto.js'
-import {
-  HYPER_SDK,
-  resolveHyperStoragePath,
-} from '@hyper.infrastructure/sdk/hyper-sdk.module.js'
-import type { SDK } from 'hyper-sdk'
+import { GetConfigPath } from '@hyper.infrastructure/sdk/hyper-sdk.module.js'
+import { SDK } from 'hyper-sdk'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
@@ -17,20 +14,17 @@ const DRIVE_KEYS_FILE = 'drive-keys.json'
 @Injectable()
 export class DriveService implements OnModuleInit {
   private readonly driveKeysPath = resolve(
-    resolveHyperStoragePath(),
+    GetConfigPath(),
     DRIVE_KEYS_FILE,
   )
 
-  constructor(
-    @Inject(HYPER_SDK)
-    private readonly sdk: SDK,
-  ) {}
+  constructor(private readonly sdk: SDK) {}
 
   async onModuleInit(): Promise<void> {
     const keys = await this.readDriveKeys()
     await Promise.all(keys.map((key) => this.sdk.getDrive(key)))
     console.log(
-      `[DriveService] 使用存储目录 ${resolveHyperStoragePath()} 恢复了 ${keys.length} 个 Drive`,
+      `[DriveService] 使用配置目录 ${GetConfigPath()} 恢复了 ${keys.length} 个 Drive`,
     )
   }
 
