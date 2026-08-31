@@ -1,16 +1,12 @@
 /**
- * DrivesController — `/v1/drives` HTTP routes.
- *
- * Handles drive lifecycle operations: list, create, remove.
- * All file operations (read, write, delete, tree, entry) live in
- * `/v1/files/:driveKey/*` (FilesController).
+ * 提供 `/v1/drives` 下的 Drive 生命周期路由。
+ * 文件操作由 `/v1/files/:driveKey` 下的 FileController 处理。
  */
 import {
   Body,
   Controller,
   Delete,
   Get,
-  Inject,
   Param,
   Post,
 } from '@nestjs/common'
@@ -24,7 +20,6 @@ import {
 } from '@nestjs/swagger'
 import { ZodValidationPipe } from 'nestjs-zod'
 import { DriveService } from '@hyper.implementation/drives.service.js'
-import { DRIVE_SERVICE } from './drives.tokens.js'
 import {
   CreateDriveRequestDto,
   DriveResponseDto,
@@ -34,13 +29,8 @@ import {
 // @ApiBearerAuth(SECURITY_BEARER)
 @Controller('v1/drives')
 export class DrivesController {
-  constructor(
-    @Inject(DRIVE_SERVICE) 
-    private readonly driveService: DriveService
-  ) {
-    
-  }
-    
+  constructor(private readonly driveService: DriveService) {}
+
   @Get()
   @ApiOperation({ operationId: 'listDrives' })
   @ApiOkResponse({ type: DriveResponseDto, isArray: true })
@@ -49,9 +39,9 @@ export class DrivesController {
   }
 
   @Post()
-  @ApiOperation({ 
+  @ApiOperation({
     operationId: 'createDrive',
-    summary: 'Create new drive'
+    summary: 'Create new drive',
   })
   @ApiBody({ type: CreateDriveRequestDto })
   @ApiOkResponse({ type: DriveResponseDto })
@@ -72,9 +62,9 @@ export class DrivesController {
   }
 
   @Post(':key/mount')
-  @ApiOperation({ 
+  @ApiOperation({
     operationId: 'mountDrive',
-    summary: '加入 swarm 开始同步此 drive'
+    summary: '加入 swarm 开始同步此 drive',
   })
   @ApiParam({ name: 'key', description: 'Hex64 drive key' })
   @ApiOkResponse({ schema: { example: { ok: true } } })
@@ -84,9 +74,9 @@ export class DrivesController {
   }
 
   @Post(':key/unmount')
-  @ApiOperation({ 
+  @ApiOperation({
     operationId: 'unmountDrive',
-    summary: '离开 swarm 停止同步此 drive'
+    summary: '离开 swarm 停止同步此 drive',
   })
   @ApiParam({ name: 'key', description: 'Hex64 drive key' })
   @ApiOkResponse({ schema: { example: { ok: true } } })

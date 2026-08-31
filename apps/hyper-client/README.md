@@ -11,41 +11,22 @@ loopback HTTP API. **Only** consumed by `@cinereel/service` (C# / ASP.NET Core).
 - `zod` for env-var config parsing
 - The official `hyper-sdk@^6.2.2` npm package wraps Corestore / Hyperdrive / Hyperswarm
 
-## Source layout
+## 源码结构
 
-The hyper-client is organized into a **three-layer architecture**:
+Hyper Client 使用 Feature Service 直接调用共享 `hyper-sdk` 的结构：
 
-| Layer | Path | Responsibility | Forbidden |
-|-------|------|----------------|-----------|
-| `hyper.api/` | `src/hyper.api/**` | HTTP entry layer — controllers, DTOs, middleware, decorators, filters, Swagger/OpenAPI | Business logic, data access |
-| `hyper.domain/` | `src/hyper.domain/**` | Domain layer — services (business rules), repository interfaces, bootstrap orchestration | Fastify, HTTP, direct SDK calls |
-| `hyper.infrastructure/` | `src/hyper.infrastructure/**` | Infrastructure layer — config, logging, SDK wiring, security, persistence implementations, cross-layer types | Business rules |
+```text
+Controller -> DriveService / FileService -> HYPER_SDK
+```
 
-### Layer details
+| Module | 路径 | 职责 |
+|--------|------|------|
+| HTTP 入口 | `src/hyper.api/**` | Controller、DTO 与 OpenAPI 描述 |
+| Feature Implementation | `src/hyper.implementation/**` | Drive 与 File 行为、DTO 转换和业务约束 |
+| SDK 装配 | `src/hyper.infrastructure/sdk/**` | 创建并共享单例 SDK，在应用关闭时释放资源 |
+| 领域模型 | `src/hyper.domain/model/**` | 与传输和 SDK 无关的领域值与校验规则 |
 
-**hyper.api/** (HTTP adapters)
-- `controller/` — feature controllers (drives, files, health, swarm, version)
-- `dto/` — data transfer objects (request/response shapes)
-- `middleware/` — auth middleware, raw-body middleware
-- `decorators/` — parameter decorators (@RawBody, @BodyOptional, @CurrentKeyId)
-- `filters/` — exception filters (HttpExceptionFilter)
-- `swagger/` — OpenAPI document builder
-
-**hyper.domain/** (business logic)
-- `model/` — domain services (DriveService, FileService, SwarmService, DriveRegistry)
-- `interface/drives/` — repository interfaces (DriveRepository, DriveIndexRepository, PeerConnectionRepository)
-- `bootstrap/` — startup orchestration (BootstrapModule, BootstrapService)
-
-**hyper.infrastructure/** (foundation)
-- `config/` — configuration module + env schema
-- `logging/` — logger module (pino)
-- `sdk/` — SDK module + hyper-sdk re-export boundary
-- `security/` — security module + shared-token auth
-- `persistence/in-memory/` — in-memory repository implementations for tests
-- `types/` — cross-layer types (HyperdriveLike, DTO types, key utilities)
-- `exit-codes.ts` — process exit code constants
-
-The composition root (`src/hyper.domain/bootstrap/bootstrap.module.ts`) wires everything together; `src/main.ts` is the entry point.
+`HyperSdkModule` 只负责 SDK 的异步创建、依赖注入和生命周期，不包装或转发 SDK 方法。`DriveService` 与 `FileService` 注入同一个 SDK 实例，并分别保持各自行为的 Locality。`src/app.module.ts` 是 composition root，`src/main.ts` 是进程入口。
 
 ## Configuration
 

@@ -1,5 +1,17 @@
 import { z } from 'zod'
 import { createZodDto } from 'nestjs-zod'
+import {
+  isDriveFilePath,
+  MAX_DRIVE_FILE_PATH_LENGTH,
+} from '@hyper.domain/model/drive-file-path.js'
+
+export const AddFileQuerySchema = z.object({
+  path: z
+    .string()
+    .max(MAX_DRIVE_FILE_PATH_LENGTH)
+    .refine(isDriveFilePath, 'path 必须是规范的 Drive 绝对文件路径。'),
+})
+export class AddFileQueryDto extends createZodDto(AddFileQuerySchema) {}
 
 export const PathQueryRequestSchema = z.object({
     path: z.string(),

@@ -1,63 +1,43 @@
-import { Injectable, OnModuleInit } from '@nestjs/common'
-import type { DriveInterface } from '@hyper.domain/interface/drives/drives.interface.js'
+import { Inject, Injectable, type OnModuleInit } from '@nestjs/common'
 import type {
   CreateDriveRequestDto,
   DriveResponseDto,
 } from '@hyper.api/dto/drives.dto.js'
-import { create } from 'hyper-sdk'
+import {
+  HYPER_SDK,
+  resolveHyperStoragePath,
+} from '@hyper.infrastructure/sdk/hyper-sdk.module.js'
 import type { SDK } from 'hyper-sdk'
-import { resolve } from 'node:path'
-import { readFile, writeFile } from 'node:fs/promises'
 import { existsSync } from 'node:fs'
+import { readFile, writeFile } from 'node:fs/promises'
+import { resolve } from 'node:path'
 
-const DEFAULT_STORAGE_DIR = '.hyper-storage'
 const DRIVE_KEYS_FILE = 'drive-keys.json'
 
 @Injectable()
-export class DriveService implements DriveInterface, OnModuleInit {
-  private sdk!: SDK
-  private driveKeysPath!: string
+export class DriveService implements OnModuleInit {
+  private readonly driveKeysPath = resolve(
+    resolveHyperStoragePath(),
+    DRIVE_KEYS_FILE,
+  )
 
-  async onModuleInit() {
-    const storageDir = process.env.HYPER_STORAGE_DIR || DEFAULT_STORAGE_DIR
-    const storagePath = resolve(process.cwd(), storageDir)
-    this.driveKeysPath = resolve(storagePath, DRIVE_KEYS_FILE)
-    this.sdk = await create({ storage: storagePath })
-    await this.restoreDrives()
-    console.log(`[DriveService] initialized with storage: ${storagePath}`)
-  }
+  constructor(
+    @Inject(HYPER_SDK)
+    private readonly sdk: SDK,
+  ) {}
 
-  private async restoreDrives(): Promise<void> {
+  async onModuleInit(): Promise<void> {
     const keys = await this.readDriveKeys()
     await Promise.all(keys.map((key) => this.sdk.getDrive(key)))
-    console.log(`[DriveService] restored ${keys.length} drive(s) from storage`)
-  }
-
-  private async readDriveKeys(): Promise<string[]> {
-    if (!existsSync(this.driveKeysPath)) return []
-    return JSON.parse(await readFile(this.driveKeysPath, 'utf-8'))
-  }
-
-  private async writeDriveKeys(keys: string[]): Promise<void> {
-    await writeFile(this.driveKeysPath, JSON.stringify(keys, null, 2), 'utf-8')
-  }
-
-  private async appendDriveKey(driveKey: string): Promise<void> {
-    const existing = await this.readDriveKeys()
-    if (!existing.includes(driveKey)) {
-      await this.writeDriveKeys([...existing, driveKey])
-    }
-  }
-
-  private async removeDriveKey(driveKey: string): Promise<void> {
-    const existing = await this.readDriveKeys()
-    await this.writeDriveKeys(existing.filter((k) => k !== driveKey))
+    console.log(
+      `[DriveService] 使用存储目录 ${resolveHyperStoragePath()} 恢复了 ${keys.length} 个 Drive`,
+    )
   }
 
   async createDrive(request: CreateDriveRequestDto): Promise<DriveResponseDto> {
     const drive = await this.sdk.getDrive(request.namespace)
     const driveKeyHex = Buffer.from(drive.key).toString('hex')
-    await this.appendDriveKey(driveKeyHex)
+    await this.rememberDriveKey(driveKeyHex)
     return {
       driveKey: driveKeyHex,
       namespace: driveKeyHex,
@@ -68,7 +48,7 @@ export class DriveService implements DriveInterface, OnModuleInit {
     }
   }
 
-  // Need to use this mount function, if user not open autoJoin setting in SDK
+  // 保留显式 mount 行为，以兼容关闭 SDK autoJoin 后的使用方式。
   async mountDrive(driveKey: string): Promise<Boolean> {
     const drive = await this.sdk.getDrive(driveKey)
     this.sdk.join(drive.discoveryKey)
@@ -77,7 +57,7 @@ export class DriveService implements DriveInterface, OnModuleInit {
 
   async unmountDrive(driveKey: string): Promise<Boolean> {
     const drive = await this.sdk.getDrive(driveKey)
-    this.sdk.leave(drive.discoveryKey)
+    await this.sdk.leave(drive.discoveryKey)
     await drive.close()
     return true
   }
@@ -86,7 +66,7 @@ export class DriveService implements DriveInterface, OnModuleInit {
     const drive = await this.sdk.getDrive(driveKey)
     if (!drive) return false
     await drive.close()
-    await this.sdk.leave(driveKey)
+    await this.sdk.leave(drive.discoveryKey)
     try {
       await drive.core.clear(0, drive.core.length)
       if (drive.blobs?.core) {
@@ -95,7 +75,7 @@ export class DriveService implements DriveInterface, OnModuleInit {
     } catch (err) {
       console.warn('[DriveService] 清除本地数据时出错，但 drive 已取消订阅:', err)
     }
-    await this.removeDriveKey(driveKey)
+    await this.forgetDriveKey(driveKey)
     return true
   }
 
@@ -128,5 +108,26 @@ export class DriveService implements DriveInterface, OnModuleInit {
           createdAt: new Date().toISOString(),
         }
       })
+  }
+
+  private async rememberDriveKey(driveKey: string): Promise<void> {
+    const existing = await this.readDriveKeys()
+    if (!existing.includes(driveKey)) {
+      await this.writeDriveKeys([...existing, driveKey])
+    }
+  }
+
+  private async forgetDriveKey(driveKey: string): Promise<void> {
+    const existing = await this.readDriveKeys()
+    await this.writeDriveKeys(existing.filter((key) => key !== driveKey))
+  }
+
+  private async readDriveKeys(): Promise<string[]> {
+    if (!existsSync(this.driveKeysPath)) return []
+    return JSON.parse(await readFile(this.driveKeysPath, 'utf-8')) as string[]
+  }
+
+  private async writeDriveKeys(keys: string[]): Promise<void> {
+    await writeFile(this.driveKeysPath, JSON.stringify(keys, null, 2), 'utf-8')
   }
 }
