@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "ESNext",
     "module": "ESNext",
-    "moduleResolution": "Node",
+    "moduleResolution": "Bundler",
     "lib": ["ESNext"],
     "strict": true,
     "esModuleInterop": true,
@@ -16,11 +16,10 @@
     "emitDecoratorMetadata": true,
     "useDefineForClassFields": false,
     "types": ["node"],
-    "baseUrl": ".",
     "paths": {
-      "@hyper.api/*": ["src/hyper.api/*"],
-      "@hyper.infrastructure/*": ["src/hyper.infrastructure/*"],
-      "@hyper.implementation/*": ["src/hyper.implementation/*"]
+      "@hyper.api/*": ["./src/hyper.api/*"],
+      "@hyper.infrastructure/*": ["./src/hyper.infrastructure/*"],
+      "@hyper.implementation/*": ["./src/hyper.implementation/*"]
     }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
