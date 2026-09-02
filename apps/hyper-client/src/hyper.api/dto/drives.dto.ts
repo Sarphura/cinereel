@@ -20,7 +20,7 @@ export class DriveDescriptorDto extends createZodDto(DriveResponseSchema) {} // 
 export const CreateDriveRequestSchema = z.object({
   namespace: z.string().min(1).describe('Drive 命名空间'),
   name: z.string().min(1).describe('Drive 名称'),
-  type: DriveTypeSchema.describe('Drive 类型：metadata 或 blob'),
+  type: DriveTypeSchema.describe('Drive 类型: metadata 或 blob'),
 })
 export class CreateDriveRequestDto extends createZodDto(CreateDriveRequestSchema) {
   namespace!: string
