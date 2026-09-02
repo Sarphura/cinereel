@@ -20,7 +20,7 @@ async function main(): Promise<void> {
   // ── 1. Create Nest app ─────────────────────────────────────────
   const app = await NestFactory.create<NestExpressApplication>(
     AppModule.forRoot(),
-    { bufferLogs: true },
+    { bodyParser: false, bufferLogs: true },
   )
 
   // ── 2. CORS ────────────────────────────────────────────────────
@@ -31,10 +31,7 @@ async function main(): Promise<void> {
 
   // ── 3. Body parsers ────────────────────────────────────────────
   app.use(express.json({ limit: '1mb' }))
-  app.use(
-    '/v1/files',
-    express.raw({ type: 'application/octet-stream', limit: '500mb' }),
-  )
+  app.use(express.urlencoded({ extended: true, limit: '1mb' }))
 
   // ── 4. OpenAPI doc ─────────────────────────────────────────────
   if (!isProd) {

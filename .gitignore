@@ -76,9 +76,9 @@ corestore/
 cache/
 test/
 
-# Unignore hyper-agent's and sidecar's own test/ and scripts/ — they
-# live inside the package, not at the repo root, and contain real test
-# code and CI guard scripts.
+# 保留各 Hyper 客户端包内实际参与版本控制的测试与检查脚本。
+!apps/hyper-client/test/
+!apps/hyper-client/test/**
 !apps/hyper-agent/test/
 !apps/hyper-agent/scripts/
 !apps/sidecar/test/
