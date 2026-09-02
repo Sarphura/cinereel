@@ -8,9 +8,13 @@
     "dev:service": "pnpm --filter @cinereel/service dev",
     "dev:ui:peer": "pnpm --filter ui dev:peer",
     "dev:service:peer": "pnpm --filter @cinereel/service dev:peer",
-    
+
+    "dev:client": "pnpm --filter @cinereel/hyper-client dev",
+
     "build": "pnpm --filter ui build",
+    "build:client": "pnpm --filter @cinereel/hyper-client build",
     "start": "pnpm --filter @cinereel/service start",
+    "start:client": "pnpm --filter @cinereel/hyper-client start",
     "test:service": "pnpm --filter @cinereel/service test"
   },
   "author": "Sarphura",
