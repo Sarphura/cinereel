@@ -32,7 +32,7 @@ async function main(): Promise<void> {
   // ── 3. Body parsers ────────────────────────────────────────────
   app.use(express.json({ limit: '1mb' }))
   app.use(
-    '/v1/drives',
+    '/v1/files',
     express.raw({ type: 'application/octet-stream', limit: '500mb' }),
   )
 
