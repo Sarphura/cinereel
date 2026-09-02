@@ -2,8 +2,8 @@ import { Injectable, type OnModuleInit } from '@nestjs/common'
 import type {
   CreateDriveRequestDto,
   DriveResponseDto,
-} from '@hyper.api/dto/drives.dto.js'
-import { GetConfigPath } from '@hyper.infrastructure/sdk/hyper-sdk.module.js'
+} from '../hyper.api/dto/drives.dto.js'
+import { GetConfigPath } from '../hyper.infrastructure/sdk/hyper-sdk.module.js'
 import { SDK } from 'hyper-sdk'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'

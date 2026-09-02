@@ -1,7 +1,7 @@
 import { Module, type Provider } from '@nestjs/common'
 import { SDK } from 'hyper-sdk'
-import { FileService } from '@hyper.implementation/file.service.js'
-import { HyperSdkModule } from '@hyper.infrastructure/sdk/hyper-sdk.module.js'
+import { FileService } from '../../../hyper.implementation/file.service.js'
+import { HyperSdkModule } from '../../../hyper.infrastructure/sdk/hyper-sdk.module.js'
 import { FileController } from './file.controller.js'
 
 const fileServiceProvider: Provider<FileService> = {

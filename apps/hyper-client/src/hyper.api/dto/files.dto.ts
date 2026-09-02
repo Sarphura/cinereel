@@ -7,7 +7,7 @@ import {
   isDrivePathSegment,
   MAX_DIRECTORY_PAGE_SIZE,
   MAX_DRIVE_FILE_PATH_LENGTH,
-} from '@hyper.implementation/file.service.js'
+} from '../../hyper.implementation/file.service.js'
 
 function emptyStringToUndefined(value: unknown): unknown {
   return value === '' ? undefined : value

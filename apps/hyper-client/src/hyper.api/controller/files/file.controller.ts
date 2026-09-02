@@ -28,7 +28,7 @@ import { ZodValidationPipe } from 'nestjs-zod'
 import {
   FileService,
   type ListDirectoryResult,
-} from '@hyper.implementation/file.service.js'
+} from '../../../hyper.implementation/file.service.js'
 import {
   AddFileQueryDto,
   ListDirectoryQueryDto,
