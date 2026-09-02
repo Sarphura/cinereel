@@ -94,3 +94,5 @@ jellyfin/
 
 .DS_Store
 
+.cinereel/
+LOG
