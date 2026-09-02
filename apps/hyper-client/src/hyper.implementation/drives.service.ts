@@ -34,7 +34,7 @@ export class DriveService implements OnModuleInit {
     await this.rememberDriveKey(driveKeyHex)
     return {
       driveKey: driveKeyHex,
-      namespace: driveKeyHex,
+      namespace: request.namespace,
       name: request.name,
       type: request.type,
       isLocal: true,
@@ -95,7 +95,7 @@ export class DriveService implements OnModuleInit {
         const driveKeyHex = Buffer.from(drive.key).toString('hex')
         return {
           driveKey: driveKeyHex,
-          namespace: driveKeyHex,
+          namespace: drive.name,
           name: drive.name || 'unnamed',
           type: 'blob' as const,
           isLocal: true,
