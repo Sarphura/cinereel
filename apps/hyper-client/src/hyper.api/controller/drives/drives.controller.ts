@@ -19,8 +19,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { ZodValidationPipe } from 'nestjs-zod'
-import { DriveService } from '@hyper.implementation/drives.service.js'
+import { DriveService } from '../../../hyper.implementation/drives.service.js'
 import {
   CreateDriveRequestDto,
   DriveResponseDto,
@@ -51,10 +50,7 @@ export class DrivesController {
   })
   @ApiBody({ type: CreateDriveRequestDto })
   @ApiOkResponse({ type: DriveResponseDto })
-  async create(
-    @Body(new ZodValidationPipe(CreateDriveRequestDto.schema))
-    body: CreateDriveRequestDto,
-  ): Promise<DriveResponseDto> {
+  async create(@Body() body: CreateDriveRequestDto): Promise<DriveResponseDto> {
     return this.driveService.createDrive(body)
   }
 

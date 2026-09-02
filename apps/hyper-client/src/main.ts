@@ -7,6 +7,7 @@ import { NestFactory } from '@nestjs/core'
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import express from 'express'
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger'
+import { cleanupOpenApiDoc } from 'nestjs-zod'
 import { AppModule } from './app.module.js'
 
 const DEFAULT_HOST = '127.0.0.1'
@@ -41,7 +42,9 @@ async function main(): Promise<void> {
       .setVersion('0.0.2')
       .build()
     
-    const document = SwaggerModule.createDocument(app, config)
+    const document = cleanupOpenApiDoc(
+      SwaggerModule.createDocument(app, config),
+    )
     SwaggerModule.setup('docs', app, document, {
       swaggerOptions: { persistAuthorization: true },
     })
