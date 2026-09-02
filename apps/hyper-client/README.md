@@ -27,29 +27,31 @@ Controller -> DriveService / FileService -> hyper-sdk SDK
 
 `HyperSdkModule` 只负责 SDK 的异步创建、依赖注入和生命周期，不包装或转发 SDK 方法。`DriveService` 与 `FileService` 注入同一个 SDK 实例，并分别保持各自行为的 Locality。`src/app.module.ts` 是 composition root，`src/main.ts` 是进程入口。
 
-## Configuration
+## 配置
 
 | Env | Required | Default | Description |
 |-----|----------|---------|-------------|
-| `SIDECAR_TOKEN` | ✓ in production | dev placeholder in dev mode (logs a warning) | Static token used in `X-Sidecar-Token` header. Must be ≥16 chars in production. |
-| `SIDECAR_PORT` | | `4321` | Listening port |
-| `SIDECAR_HOST` | | `127.0.0.1` | Listening host (loopback only) |
-| `SIDECAR_STORE_DIR` | | `./.sidecar-store` | Corestore persistence directory |
-| `SIDECAR_SWARM_PORT` | | `0` (random UDP) | Hyperswarm UDP port |
-| `SIDECAR_BOOTSTRAP` | | — | Comma-separated bootstrap multiaddrs |
-| `SIDECAR_LOG_LEVEL` | | `info` | pino log level |
-| `SIDECAR_SHUTDOWN_TIMEOUT_MS` | | `30000` | Graceful shutdown deadline |
+| `HOST` | | `127.0.0.1` | HTTP 监听地址 |
+| `PORT` | | `3000` | HTTP 监听端口 |
+| `CONFIG_DIR` | | `./.cinereel` | Corestore、Hyperdrive 和 Drive key 的持久化目录 |
+| `NODE_ENV` | | `development` | 设为 `production` 时不启用 Swagger UI |
 
-## Development
+## 开发
 
 ```bash
 pnpm install
-SIDECAR_TOKEN=$(openssl rand -hex 32) pnpm --filter @cinereel/hyper-client dev
+pnpm --filter @cinereel/hyper-client dev
 ```
 
 ```bash
-curl -H "X-Sidecar-Token: $SIDECAR_TOKEN" http://127.0.0.1:4321/v1/identity
+curl http://127.0.0.1:3000/healthz
 ```
+
+### Worktree 与本地存储
+
+Hyper Client 默认使用进程当前目录下的 `.cinereel`。不同 Git worktree 因此会拥有不同的 Corestore 和 Drive 写入密钥。如果请求发送给了另一个 worktree 的 Hyper Client，该进程只能按 public key 打开 Drive，`addFile` 会返回 `403 Forbidden`。
+
+排查时先用 `lsof -nP -iTCP:3000 -sTCP:LISTEN` 找到监听进程，再用 `lsof -a -p <PID> -d cwd` 确认它所属的 checkout，并通过 `GET /v1/drives` 确认目标 Drive key 已由当前实例恢复。需要使用指定存储时，应停止错误实例后从正确 checkout 启动，或显式设置绝对路径 `CONFIG_DIR`。同一 `CONFIG_DIR` 同时只能由一个 Hyper Client 进程打开，否则会出现 `File descriptor could not be locked`。
 
 ## Testing
 
