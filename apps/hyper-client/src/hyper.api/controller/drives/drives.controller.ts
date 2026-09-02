@@ -7,6 +7,7 @@ import {
   Controller,
   Delete,
   Get,
+  Inject,
   Param,
   Post,
 } from '@nestjs/common'
@@ -29,7 +30,9 @@ import {
 // @ApiBearerAuth(SECURITY_BEARER)
 @Controller('v1/drives')
 export class DrivesController {
-  constructor(private readonly driveService: DriveService) {}
+  constructor(
+    @Inject(DriveService) private readonly driveService: DriveService,
+  ) {}
 
   @Get()
   @ApiOperation({ operationId: 'listDrives' })

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   Put,
   Query,
@@ -27,7 +28,9 @@ const DRIVE_KEY_PATTERN = /^[0-9a-f]{64}$/iu
 @ApiTags('files')
 @Controller('v1/files')
 export class FileController {
-  constructor(private readonly fileService: FileService) {}
+  constructor(
+    @Inject(FileService) private readonly fileService: FileService,
+  ) {}
 
   @Put(':driveKey')
   @HttpCode(HttpStatus.CREATED)
