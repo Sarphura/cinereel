@@ -36,7 +36,6 @@ export class DriveService implements OnModuleInit {
       driveKey: driveKeyHex,
       namespace: request.namespace,
       name: request.name,
-      type: request.type,
       isLocal: true,
       createdAt: new Date().toISOString(),
     }
@@ -80,7 +79,6 @@ export class DriveService implements OnModuleInit {
       driveKey: driveKeyHex,
       namespace: driveKey,
       name: drive.name || 'unnamed',
-      type: drive.blobs ? 'blob' : 'metadata',
       isLocal: true,
       createdAt: new Date().toISOString(),
     }
