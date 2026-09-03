@@ -7,7 +7,7 @@
 
 Cinereel 使用 Hyperdrive 承载 Drive 的文件内容。Hyperdrive 以公钥识别和访问内容，现有 Web 前端与 Hyper Client 将这个公钥称为 `driveKey`，并在多处把它当作 Drive 的唯一标识。
 
-与此同时，Cinereel 的其他 Feature 需要稳定引用 Drive。例如 Publication 通过 Drive 的身份建立唯一发布关系，并以该身份执行状态查询和删除约束。如果直接把 Hyperdrive 公钥作为 Drive 的领域身份，领域模型会与当前存储协议绑定；未来更换内容载体、迁移密钥或调整 Hyperdrive 集成方式时，所有跨 Feature 引用都会受到影响。
+与此同时，Cinereel 的其他 Feature 需要稳定引用 Drive。如果直接把 Hyperdrive 公钥作为 Drive 的领域身份，领域模型会与当前存储协议绑定；未来更换内容载体、迁移密钥或调整 Hyperdrive 集成方式时，所有跨 Feature 引用都会受到影响。
 
 因此需要明确：Drive 的领域身份是否等同于 Hyperdrive 公钥。
 
