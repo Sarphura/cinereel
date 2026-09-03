@@ -31,6 +31,17 @@ export const DeleteFileQuerySchema = z.object({
 })
 export class DeleteFileQueryDto extends createZodDto(DeleteFileQuerySchema) {}
 
+export const DeleteDirectoryQuerySchema = z.object({
+  path: z
+    .string()
+    .max(MAX_DRIVE_FILE_PATH_LENGTH)
+    .refine(isDriveDirectoryPath, 'path 必须是规范的 Drive 绝对目录路径。')
+    .describe('要递归删除的规范 Drive 绝对目录路径，例如 /movies 或 /'),
+})
+export class DeleteDirectoryQueryDto extends createZodDto(
+  DeleteDirectoryQuerySchema,
+) {}
+
 export const DriveKeyParamsSchema = z.object({
   driveKey: z
     .string()
@@ -99,6 +110,13 @@ export const DeleteFileResponseSchema = z.object({
 })
 export class DeleteFileResponseDto extends createZodDto(DeleteFileResponseSchema) {}
 
+export const DeleteDirectoryResponseSchema = z.object({
+  ok: z.literal(true),
+})
+export class DeleteDirectoryResponseDto extends createZodDto(
+  DeleteDirectoryResponseSchema,
+) {}
+
 export const PathQueryRequestSchema = z.object({
     path: z.string(),
     wait: z.coerce.boolean().optional().default(true),
@@ -115,9 +133,3 @@ prefix: z.string().optional().default(''),
 wait: z.coerce.boolean().optional().default(true),
 })
 export class GetTreeRequestDto extends createZodDto(GetTreeRequestSchema) {}
-
-export const DeleteFileRequestSchema = z.object({
-path: z.string(),
-recursive: z.coerce.boolean().optional().default(false),
-})
-export class DeleteFileRequestDto extends createZodDto(DeleteFileRequestSchema) {}

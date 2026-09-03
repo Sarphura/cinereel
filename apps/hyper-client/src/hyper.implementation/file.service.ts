@@ -103,6 +103,10 @@ export type DeleteFileResultCode =
   | 'not-found'
   | 'drive-not-writable'
 
+export type DeleteDirectoryResultCode =
+  | 'deleted'
+  | 'drive-not-writable'
+
 @Injectable()
 export class FileService {
   private readonly pendingWrites = new Map<string, Promise<void>>()
@@ -192,7 +196,7 @@ export class FileService {
       throw new TypeError('path 必须是规范的 Drive 绝对文件路径。')
     }
 
-    return this.withWriteLock(`${driveKey.toLowerCase()}\0${path}`, async () => {
+    return this.withWriteLock(driveKey.toLowerCase(), async () => {
       const drive = await this.sdk.getDrive(driveKey)
 
       if (!drive.writable) {
@@ -232,7 +236,7 @@ export class FileService {
       throw new TypeError('path 必须是规范的 Drive 绝对文件路径。')
     }
 
-    return this.withWriteLock(`${driveKey.toLowerCase()}\0${path}`, async () => {
+    return this.withWriteLock(driveKey.toLowerCase(), async () => {
       const drive = await this.sdk.getDrive(driveKey)
 
       if (!drive.writable) {
@@ -245,6 +249,49 @@ export class FileService {
       }
 
       await drive.del(path)
+      return 'deleted'
+    })
+  }
+
+  async deleteDirectory(
+    driveKey: string,
+    path: string,
+  ): Promise<DeleteDirectoryResultCode> {
+    if (!DRIVE_KEY_PATTERN.test(driveKey)) {
+      throw new TypeError('driveKey 必须是 64 位十六进制字符串。')
+    }
+
+    if (!isDriveDirectoryPath(path)) {
+      throw new TypeError('path 必须是规范的 Drive 绝对目录路径。')
+    }
+
+    return this.withWriteLock(driveKey.toLowerCase(), async () => {
+      const drive = await this.sdk.getDrive(driveKey)
+
+      if (!drive.writable) {
+        return 'drive-not-writable'
+      }
+
+      // Drive 级锁保证进程内没有并发 mutation，
+      // 因此锁内枚举得到的输入集合是稳定的（等价于固定版本快照）。
+      const keys: string[] = []
+      for await (const node of drive.list(path)) {
+        keys.push(node.key)
+      }
+
+      // 目录自身若为叶 entry，也一并删除；根 '/' 没有自身 entry。
+      if (path !== '/') {
+        const self = await drive.entry(path, { wait: false })
+        if (self !== null) {
+          keys.push(path)
+        }
+      }
+
+      for (const key of keys) {
+        await drive.del(key)
+      }
+
+      // 无后代也返回 deleted（幂等）。
       return 'deleted'
     })
   }

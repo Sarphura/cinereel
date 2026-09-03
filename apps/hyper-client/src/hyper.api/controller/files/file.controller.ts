@@ -25,6 +25,8 @@ import { FileService } from "../../../hyper.implementation/file.service.js";
 import {
   AddFileQueryDto,
   AddFileResponseDto,
+  DeleteDirectoryQueryDto,
+  DeleteDirectoryResponseDto,
   DeleteFileQueryDto,
   DeleteFileResponseDto,
   DriveKeyParamsDto,
@@ -109,6 +111,31 @@ export class FileController {
         return { ok: true as const };
       case "not-found":
         throw new NotFoundException("目标路径不存在。");
+      case "drive-not-writable":
+        throw new ForbiddenException("当前 Hyper Client 没有该 Drive 的写权限。");
+      default:
+        return assertNever(result);
+    }
+  }
+
+  @Delete(":driveKey/entries")
+  @ApiOperation({
+    operationId: "deleteDirectory",
+    summary: "递归删除 Drive 目录",
+  })
+  @ZodResponse({ status: HttpStatus.OK, type: DeleteDirectoryResponseDto })
+  async deleteDirectory(
+    @Param() params: DriveKeyParamsDto,
+    @Query() query: DeleteDirectoryQueryDto,
+  ) {
+    const result = await this.fileService.deleteDirectory(
+      params.driveKey,
+      query.path,
+    );
+
+    switch (result) {
+      case "deleted":
+        return { ok: true as const };
       case "drive-not-writable":
         throw new ForbiddenException("当前 Hyper Client 没有该 Drive 的写权限。");
       default:
