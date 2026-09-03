@@ -1,10 +1,12 @@
 import {
   ConflictException,
   Controller,
+  Delete,
   ForbiddenException,
   Get,
   HttpStatus,
   Inject,
+  NotFoundException,
   Param,
   PayloadTooLargeException,
   Put,
@@ -23,10 +25,16 @@ import { FileService } from "../../../hyper.implementation/file.service.js";
 import {
   AddFileQueryDto,
   AddFileResponseDto,
+  DeleteFileQueryDto,
+  DeleteFileResponseDto,
   DriveKeyParamsDto,
   ListDirectoryQueryDto,
   ListDirectoryResponseDto,
 } from "../../dto/files.dto.js";
+
+function assertNever(value: never): never {
+  throw new Error(`未处理的结果码: ${String(value)}`);
+}
 
 @ApiTags("files")
 @Controller("v1/files")
@@ -76,11 +84,35 @@ export class FileController {
       case "already-exists":
         throw new ConflictException("目标路径已经存在。");
       case "drive-not-writable":
-        throw new ForbiddenException(
-          "当前 Hyper Client 没有该 Drive 的写权限。",
-        );
+        throw new ForbiddenException("当前 Hyper Client 没有该 Drive 的写权限。");
       case "file-too-large":
         throw new PayloadTooLargeException("文件不能超过 500 MiB。");
+      default:
+        return assertNever(result);
+    }
+  }
+
+  @Delete(":driveKey")
+  @ApiOperation({ operationId: "deleteFile", summary: "从可写 Drive 删除文件" })
+  @ZodResponse({ status: HttpStatus.OK, type: DeleteFileResponseDto })
+  async delete(
+    @Param() params: DriveKeyParamsDto,
+    @Query() query: DeleteFileQueryDto,
+  ) {
+    const result = await this.fileService.deleteFile(
+      params.driveKey,
+      query.path,
+    );
+
+    switch (result) {
+      case "deleted":
+        return { ok: true as const };
+      case "not-found":
+        throw new NotFoundException("目标路径不存在。");
+      case "drive-not-writable":
+        throw new ForbiddenException("当前 Hyper Client 没有该 Drive 的写权限。");
+      default:
+        return assertNever(result);
     }
   }
 }

@@ -98,6 +98,11 @@ export type AddFileResultCode =
   | 'drive-not-writable'
   | 'file-too-large'
 
+export type DeleteFileResultCode =
+  | 'deleted'
+  | 'not-found'
+  | 'drive-not-writable'
+
 @Injectable()
 export class FileService {
   private readonly pendingWrites = new Map<string, Promise<void>>()
@@ -212,6 +217,35 @@ export class FileService {
         }
         throw error
       }
+    })
+  }
+
+  async deleteFile(
+    driveKey: string,
+    path: string,
+  ): Promise<DeleteFileResultCode> {
+    if (!DRIVE_KEY_PATTERN.test(driveKey)) {
+      throw new TypeError('driveKey 必须是 64 位十六进制字符串。')
+    }
+
+    if (!isDriveFilePath(path)) {
+      throw new TypeError('path 必须是规范的 Drive 绝对文件路径。')
+    }
+
+    return this.withWriteLock(`${driveKey.toLowerCase()}\0${path}`, async () => {
+      const drive = await this.sdk.getDrive(driveKey)
+
+      if (!drive.writable) {
+        return 'drive-not-writable'
+      }
+
+      const existing = await drive.entry(path, { wait: false })
+      if (existing === null) {
+        return 'not-found'
+      }
+
+      await drive.del(path)
+      return 'deleted'
     })
   }
 

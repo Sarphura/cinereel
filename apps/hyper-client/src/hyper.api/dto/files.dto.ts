@@ -22,6 +22,15 @@ export const AddFileQuerySchema = z.object({
 })
 export class AddFileQueryDto extends createZodDto(AddFileQuerySchema) {}
 
+export const DeleteFileQuerySchema = z.object({
+  path: z
+    .string()
+    .max(MAX_DRIVE_FILE_PATH_LENGTH)
+    .refine(isDriveFilePath, 'path 必须是规范的 Drive 绝对文件路径。')
+    .describe('要删除的规范 Drive 绝对文件路径，例如 /movies/file.txt'),
+})
+export class DeleteFileQueryDto extends createZodDto(DeleteFileQuerySchema) {}
+
 export const DriveKeyParamsSchema = z.object({
   driveKey: z
     .string()
@@ -84,6 +93,11 @@ export const AddFileResponseSchema = z.object({
   ok: z.literal(true),
 })
 export class AddFileResponseDto extends createZodDto(AddFileResponseSchema) {}
+
+export const DeleteFileResponseSchema = z.object({
+  ok: z.literal(true),
+})
+export class DeleteFileResponseDto extends createZodDto(DeleteFileResponseSchema) {}
 
 export const PathQueryRequestSchema = z.object({
     path: z.string(),
