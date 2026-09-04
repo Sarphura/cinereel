@@ -1,3 +1,14 @@
 namespace Cinereel.Features.Drive;
 
-internal sealed class HyperClientException(string message) : Exception(message);
+internal sealed class HyperClientException : Exception
+{
+    internal HyperClientException(string message)
+        : base(message)
+    {
+    }
+
+    internal HyperClientException(string message, Exception innerException)
+        : base(message, innerException)
+    {
+    }
+}

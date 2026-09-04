@@ -4,6 +4,8 @@ namespace Cinereel.Features.Drive;
 
 public static class DriveConfiguration
 {
+    private static readonly TimeSpan HyperClientConnectTimeout = TimeSpan.FromSeconds(100);
+
     public static IServiceCollection AddDriveFeature(
         this IServiceCollection services,
         IConfiguration configuration)
@@ -26,9 +28,21 @@ public static class DriveConfiguration
         services.AddScoped<DriveService>();
         services.AddScoped<IDriveService>(provider =>
             provider.GetRequiredService<DriveService>());
+        services.TryAddScoped<IDriveFileService, DriveFileService>();
         services.TryAddScoped<IPublishService, PublishService>();
+        services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options =>
+            options.AddOperationTransformer(new DriveFileOpenApiConfiguration()));
+        services.Configure<Swashbuckle.AspNetCore.SwaggerGen.SwaggerGenOptions>(options =>
+            options.OperationFilter<DriveFileOpenApiConfiguration>());
         services.AddHttpClient<IHyperClient, HyperClient>(client =>
-            client.BaseAddress = normalizedBaseAddress);
+            {
+                client.BaseAddress = normalizedBaseAddress;
+                client.Timeout = Timeout.InfiniteTimeSpan;
+            })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                ConnectTimeout = HyperClientConnectTimeout
+            });
         services.AddHostedService<DriveCreationJob>();
         return services;
     }

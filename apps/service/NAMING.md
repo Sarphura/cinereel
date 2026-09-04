@@ -68,6 +68,11 @@ HTTP
        -> Repository Interface -> EF Core Repository Adapter -> CinereelDbContext
        -> IUnitOfWork          -> UnitOfWork                 -> CinereelDbContext
        -> IHyperClient         -> HyperClient                -> HttpClient
+  -> DriveFileController
+  -> IDriveFileService
+  -> DriveFileService
+       -> IDriveRepository     -> DriveRepository            -> CinereelDbContext
+       -> IHyperClient         -> HyperClient                -> HttpClient
   -> PublicationController
   -> IPublishService
   -> PublishService
@@ -80,6 +85,9 @@ Configuration    -> 只负责组合和依赖注册
 
 - `Controller/` 只依赖应用 Service Interface 和 DTO，不直接依赖 Repository、Entity、`CinereelDbContext` 或外部 Client。
 - `Service/` 负责用例编排，可以依赖 Repository Interface、`IUnitOfWork`、外部 Client Interface、Model 和 DTO，不直接编写 EF Core 查询。
+- Drive File Module 由 `DriveFileController`、`IDriveFileService` 和 `DriveFileService` 组成；它按 `DriveId` 校验关系、生命周期与写权限，并把用户文件意图交给现有 `IHyperClient`，不建立 File 或 Directory Entity、Repository 与 migration。
+- `DriveDirectoryCursor` 是绑定 Drive 版本与目录子项名称的 Web 不透明游标。`DriveFileService` 负责版本一致性，Controller 和调用方不得解析游标内容或直接向 Hyper Client 透传 Web 游标。
+- 普通目录只是 Hyperdrive 文件路径的前缀投影。Drive File Module 可以列举直接子项及递归删除目录，但不提供创建空目录的用例，也不持久化目录状态。
 - Publication 是 Drive Module 内的独立发布关系与状态机；`PublishService` 保留为发布用例 Seam，不合并进 `DriveService` 或 `DriveEntity`。
 - `Repository/` 是 Entity 集合访问的 Seam；EF Core Adapter 可以依赖 `CinereelDbContext`，但不得承载业务用例、调用外部 Client 或提交 Unit of Work。
 - `Client/` 封装远程协议，不反向依赖 Controller、Service Implementation、Repository 或 Entity。
@@ -188,7 +196,8 @@ HyperClient.cs
 ```
 
 - `IHyperClient` 表示 Cinereel 自己维护的 Hyper Client 进程这一远程依赖。
-- HTTP 路由、JSON、固定存储类型和错误协议封装在 `HyperClient` Adapter 内。
+- HTTP 路由、JSON、流式文件正文、固定存储类型和错误协议封装在 `HyperClient` Adapter 内。
+- Drive 文件调用向 `IHyperClient` 传递 `DriveKey`、规范路径和文件 I/O 意图；目录投影、协议保留路径保护与实际存储状态检查由 Hyper Client 负责。
 - 当前只有一个生产 Adapter 时，不使用 `HyperDriveHttpClient`、`HyperDriveClient` 或 `HyperHttpAdapter`。
 - 只有出现多个真实传输 Adapter 后，才使用 `HyperHttpClient`、`HyperGrpcClient` 等名称区分 Implementation。
 - 不因 Interface 未来可能增长而预先拆成 `IHyperDriveClient`、`IHyperFileClient`、`IHyperPublishClient`。

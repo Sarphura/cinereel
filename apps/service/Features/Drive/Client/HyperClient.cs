@@ -1,26 +1,56 @@
+using System.Globalization;
+using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace Cinereel.Features.Drive;
 
-internal sealed class HyperClient(HttpClient httpClient) : IHyperClient
+internal sealed class HyperClient : IHyperClient
 {
+    private static readonly TimeSpan RegularRequestTimeout = TimeSpan.FromSeconds(100);
+    private static readonly TimeSpan UploadResponseHeadersTimeout = TimeSpan.FromSeconds(100);
+    private readonly HttpClient httpClient;
+    private readonly TimeSpan uploadResponseHeadersTimeout;
+
+    public HyperClient(HttpClient httpClient)
+        : this(httpClient, UploadResponseHeadersTimeout)
+    {
+    }
+
+    internal HyperClient(HttpClient httpClient, TimeSpan uploadResponseHeadersTimeout)
+    {
+        ArgumentNullException.ThrowIfNull(httpClient);
+
+        if (uploadResponseHeadersTimeout <= TimeSpan.Zero)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(uploadResponseHeadersTimeout),
+                "上传完成后的响应头超时必须大于零。");
+        }
+
+        this.httpClient = httpClient;
+        this.uploadResponseHeadersTimeout = uploadResponseHeadersTimeout;
+    }
+
     public async Task<DriveKey> EnsureDriveAsync(
         DriveId driveId,
         DriveName name,
         CancellationToken cancellationToken)
     {
+        using var timeout = CreateRegularRequestTimeout(cancellationToken);
         using var response = await httpClient.PostAsJsonAsync(
             "v1/drives",
             new CreateHyperDriveRequest(
                 driveId.ToString(),
                 name.Value,
                 "blob"),
-            cancellationToken);
+            timeout.Token);
 
         response.EnsureSuccessStatusCode();
 
         var body = await response.Content.ReadFromJsonAsync<CreateHyperDriveResponse>(
-            cancellationToken);
+            timeout.Token);
 
         if (body is null || !DriveKey.TryCreate(body.DriveKey, out var driveKey))
         {
@@ -35,12 +65,331 @@ internal sealed class HyperClient(HttpClient httpClient) : IHyperClient
         DriveKey driveKey,
         CancellationToken cancellationToken)
     {
+        using var timeout = CreateRegularRequestTimeout(cancellationToken);
         using var response = await httpClient.DeleteAsync(
             $"v1/drives/{driveKey.Value}",
-            cancellationToken);
+            timeout.Token);
 
         response.EnsureSuccessStatusCode();
     }
+
+    public async Task<HyperDirectoryPage> ListDirectoryAsync(
+        DriveKey driveKey,
+        DriveDirectoryPath path,
+        string? cursor,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        var requestUri = BuildListDirectoryUri(driveKey, path, cursor, limit);
+        using var timeout = CreateRegularRequestTimeout(cancellationToken);
+        using var response = await httpClient.GetAsync(
+            requestUri,
+            HttpCompletionOption.ResponseHeadersRead,
+            timeout.Token);
+
+        if (response.StatusCode != HttpStatusCode.OK)
+        {
+            response.EnsureSuccessStatusCode();
+            throw UnexpectedSuccessStatus(response.StatusCode, "列举目录");
+        }
+
+        try
+        {
+            await using var responseStream = await response.Content.ReadAsStreamAsync(
+                timeout.Token);
+            using var document = await JsonDocument.ParseAsync(
+                responseStream,
+                cancellationToken: timeout.Token);
+
+            return ParseDirectoryPage(document.RootElement, path, limit);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (HyperClientException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (
+            exception is JsonException or IOException or HttpRequestException)
+        {
+            throw new HyperClientException(
+                "Hyper Client 返回了无法读取的目录响应。",
+                exception);
+        }
+    }
+
+    public async Task<HyperAddFileResultCode> AddFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        Stream content,
+        CancellationToken cancellationToken)
+    {
+        using var responseTimeout = CancellationTokenSource.CreateLinkedTokenSource(
+            cancellationToken);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Put,
+            BuildFileUri(driveKey, path.Value));
+        request.Content = new StreamContent(new EofNotifyingStream(
+            content,
+            () => responseTimeout.CancelAfter(uploadResponseHeadersTimeout)));
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue(
+            "application/octet-stream");
+
+        using var response = await httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            responseTimeout.Token);
+
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.Created:
+                return HyperAddFileResultCode.Created;
+            case HttpStatusCode.Conflict:
+                return HyperAddFileResultCode.AlreadyExists;
+            case HttpStatusCode.Forbidden:
+                return HyperAddFileResultCode.DriveNotWritable;
+            case HttpStatusCode.RequestEntityTooLarge:
+                return HyperAddFileResultCode.FileTooLarge;
+            default:
+                response.EnsureSuccessStatusCode();
+                throw UnexpectedSuccessStatus(response.StatusCode, "新增文件");
+        }
+    }
+
+    public async Task<HyperDeleteFileResultCode> DeleteFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CreateRegularRequestTimeout(cancellationToken);
+        using var response = await httpClient.DeleteAsync(
+            BuildFileUri(driveKey, path.Value),
+            timeout.Token);
+
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.OK:
+                return HyperDeleteFileResultCode.Deleted;
+            case HttpStatusCode.NotFound:
+                return HyperDeleteFileResultCode.NotFound;
+            case HttpStatusCode.Forbidden:
+                return HyperDeleteFileResultCode.DriveNotWritable;
+            default:
+                response.EnsureSuccessStatusCode();
+                throw UnexpectedSuccessStatus(response.StatusCode, "删除文件");
+        }
+    }
+
+    public async Task<HyperDeleteDirectoryResultCode> DeleteDirectoryAsync(
+        DriveKey driveKey,
+        DriveDirectoryPath path,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CreateRegularRequestTimeout(cancellationToken);
+        using var response = await httpClient.DeleteAsync(
+            BuildDirectoryUri(driveKey, path.Value),
+            timeout.Token);
+
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.OK:
+                return HyperDeleteDirectoryResultCode.Deleted;
+            case HttpStatusCode.Forbidden:
+                return HyperDeleteDirectoryResultCode.DriveNotWritable;
+            default:
+                response.EnsureSuccessStatusCode();
+                throw UnexpectedSuccessStatus(response.StatusCode, "删除目录");
+        }
+    }
+
+    private static string BuildListDirectoryUri(
+        DriveKey driveKey,
+        DriveDirectoryPath path,
+        string? cursor,
+        int limit)
+    {
+        var requestUri = BuildDirectoryUri(driveKey, path.Value);
+
+        if (cursor is not null)
+        {
+            requestUri += $"&cursor={Uri.EscapeDataString(cursor)}";
+        }
+
+        return requestUri +
+            $"&limit={limit.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    private static string BuildDirectoryUri(DriveKey driveKey, string path) =>
+        $"v1/files/{driveKey.Value}/entries?path={Uri.EscapeDataString(path)}";
+
+    private static string BuildFileUri(DriveKey driveKey, string path) =>
+        $"v1/files/{driveKey.Value}?path={Uri.EscapeDataString(path)}";
+
+    private static CancellationTokenSource CreateRegularRequestTimeout(
+        CancellationToken cancellationToken)
+    {
+        var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(RegularRequestTimeout);
+        return timeout;
+    }
+
+    private static HyperDirectoryPage ParseDirectoryPage(
+        JsonElement root,
+        DriveDirectoryPath requestedPath,
+        int requestedLimit)
+    {
+        RequireKind(root, JsonValueKind.Object, "目录响应");
+
+        var path = ReadRequiredString(root, "path", "目录响应");
+        if (!string.Equals(path, requestedPath.Value, StringComparison.Ordinal))
+        {
+            throw ProtocolError("目录响应的 path 与请求路径不一致。");
+        }
+
+        var driveVersion = ReadRequiredNonNegativeInteger(
+            root,
+            "driveVersion",
+            "目录响应");
+        var entriesElement = ReadRequiredProperty(root, "entries", "目录响应");
+        RequireKind(entriesElement, JsonValueKind.Array, "目录响应的 entries");
+
+        var entries = new List<HyperDirectoryEntry>();
+        foreach (var entryElement in entriesElement.EnumerateArray())
+        {
+            entries.Add(ParseDirectoryEntry(entryElement, path));
+        }
+
+        if (entries.Count > requestedLimit)
+        {
+            throw ProtocolError("目录响应的 entries 数量超过请求的 limit。");
+        }
+
+        var nextCursorElement = ReadRequiredProperty(
+            root,
+            "nextCursor",
+            "目录响应");
+        var nextCursor = nextCursorElement.ValueKind switch
+        {
+            JsonValueKind.Null => null,
+            JsonValueKind.String => nextCursorElement.GetString(),
+            _ => throw ProtocolError("目录响应的 nextCursor 必须是字符串或 null。")
+        };
+
+        if (nextCursor is not null &&
+            (!DriveFilePath.IsValidSegment(nextCursor) ||
+             entries.Count == 0 ||
+             !string.Equals(entries[^1].Name, nextCursor, StringComparison.Ordinal)))
+        {
+            throw ProtocolError("目录响应的 nextCursor 不是有效的末项游标。");
+        }
+
+        return new HyperDirectoryPage(path, driveVersion, entries, nextCursor);
+    }
+
+    private static HyperDirectoryEntry ParseDirectoryEntry(
+        JsonElement element,
+        string parentPath)
+    {
+        RequireKind(element, JsonValueKind.Object, "目录子项");
+
+        var path = ReadRequiredString(element, "path", "目录子项");
+        var name = ReadRequiredString(element, "name", "目录子项");
+        if (!DriveFilePath.IsValidSegment(name))
+        {
+            throw ProtocolError("目录子项的 name 不是有效路径段。");
+        }
+
+        var expectedPath = parentPath == "/"
+            ? $"/{name}"
+            : $"{parentPath}/{name}";
+        if (!string.Equals(path, expectedPath, StringComparison.Ordinal))
+        {
+            throw ProtocolError("目录子项的 path 不是请求目录的直接子项。");
+        }
+
+        var type = ReadRequiredString(element, "type", "目录子项");
+        if (type is not ("file" or "directory" or "symlink"))
+        {
+            throw ProtocolError("目录子项的 type 不受支持。");
+        }
+
+        var sizeElement = ReadRequiredProperty(element, "size", "目录子项");
+        long? size = sizeElement.ValueKind switch
+        {
+            JsonValueKind.Null => null,
+            JsonValueKind.Number when sizeElement.TryGetInt64(out var value) && value >= 0 =>
+                value,
+            _ => throw ProtocolError("目录子项的 size 必须是非负整数或 null。")
+        };
+
+        return new HyperDirectoryEntry(path, name, type, size);
+    }
+
+    private static JsonElement ReadRequiredProperty(
+        JsonElement element,
+        string propertyName,
+        string context)
+    {
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            throw ProtocolError($"{context}缺少 {propertyName}。");
+        }
+
+        return property;
+    }
+
+    private static string ReadRequiredString(
+        JsonElement element,
+        string propertyName,
+        string context)
+    {
+        var property = ReadRequiredProperty(element, propertyName, context);
+        if (property.ValueKind != JsonValueKind.String ||
+            property.GetString() is not { } value)
+        {
+            throw ProtocolError($"{context}的 {propertyName} 必须是字符串。");
+        }
+
+        return value;
+    }
+
+    private static long ReadRequiredNonNegativeInteger(
+        JsonElement element,
+        string propertyName,
+        string context)
+    {
+        var property = ReadRequiredProperty(element, propertyName, context);
+        if (property.ValueKind != JsonValueKind.Number ||
+            !property.TryGetInt64(out var value) ||
+            value < 0)
+        {
+            throw ProtocolError($"{context}的 {propertyName} 必须是非负整数。");
+        }
+
+        return value;
+    }
+
+    private static void RequireKind(
+        JsonElement element,
+        JsonValueKind expectedKind,
+        string context)
+    {
+        if (element.ValueKind != expectedKind)
+        {
+            throw ProtocolError($"{context}的 JSON 形状无效。");
+        }
+    }
+
+    private static HyperClientException ProtocolError(string message) =>
+        new($"Hyper Client 协议错误：{message}");
+
+    private static HyperClientException UnexpectedSuccessStatus(
+        HttpStatusCode statusCode,
+        string operation) =>
+        ProtocolError(
+            $"{operation}返回了未约定的成功状态码 {(int)statusCode}。");
 
     private sealed record CreateHyperDriveRequest(
         string Namespace,
@@ -48,4 +397,113 @@ internal sealed class HyperClient(HttpClient httpClient) : IHyperClient
         string Type);
 
     private sealed record CreateHyperDriveResponse(string DriveKey);
+
+    private sealed class EofNotifyingStream(Stream inner, Action notifyEof) : Stream
+    {
+        private int eofNotified;
+
+        public override bool CanRead => inner.CanRead;
+
+        public override bool CanSeek => inner.CanSeek;
+
+        public override bool CanWrite => inner.CanWrite;
+
+        public override long Length => inner.Length;
+
+        public override long Position
+        {
+            get => inner.Position;
+            set => inner.Position = value;
+        }
+
+        public override void Flush() => inner.Flush();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) =>
+            inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            NotifyEof(inner.Read(buffer, offset, count));
+
+        public override int Read(Span<byte> buffer) => NotifyEof(inner.Read(buffer));
+
+        public override int ReadByte()
+        {
+            var value = inner.ReadByte();
+
+            if (value == -1)
+            {
+                NotifyEof();
+            }
+
+            return value;
+        }
+
+        public override async Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken)
+        {
+            var bytesRead = await inner.ReadAsync(
+                buffer,
+                offset,
+                count,
+                cancellationToken);
+            return NotifyEof(bytesRead);
+        }
+
+        public override async ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default)
+        {
+            var bytesRead = await inner.ReadAsync(buffer, cancellationToken);
+            return NotifyEof(bytesRead);
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            inner.Seek(offset, origin);
+
+        public override void SetLength(long value) => inner.SetLength(value);
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            inner.Write(buffer, offset, count);
+
+        public override void Write(ReadOnlySpan<byte> buffer) => inner.Write(buffer);
+
+        public override Task WriteAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken) =>
+            inner.WriteAsync(buffer, offset, count, cancellationToken);
+
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default) =>
+            inner.WriteAsync(buffer, cancellationToken);
+
+        protected override void Dispose(bool disposing)
+        {
+        }
+
+        public override ValueTask DisposeAsync() => ValueTask.CompletedTask;
+
+        private int NotifyEof(int bytesRead)
+        {
+            if (bytesRead == 0)
+            {
+                NotifyEof();
+            }
+
+            return bytesRead;
+        }
+
+        private void NotifyEof()
+        {
+            if (Interlocked.Exchange(ref eofNotified, 1) == 0)
+            {
+                notifyEof();
+            }
+        }
+    }
 }
