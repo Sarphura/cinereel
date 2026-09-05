@@ -15,7 +15,7 @@ Cinereel 使用 Hyperdrive 保存并复制 Drive 内容，同时使用 C# 服务
 
 - C# 服务的 SQLite 数据库是当前 Cinereel 实例本地领域状态的权威来源，保存 `DriveId`、`DriveKey` 映射、`RelationType`、`Status`、`Remark`、`IdempotencyKey`、Publication 和可靠异步操作状态。
 - 每个可供其他实例订阅的 Drive 在 Hyperdrive 内保存一个版本化 JSON 文档，称为 `DriveManifest`。它是随 Drive 内容复制的公开描述，也是订阅方获得 Drive 规范信息的来源。
-- `DriveManifest` 位于 Cinereel 协议保留的固定路径。具体路径、JSON Schema 和兼容性测试在实现 Spec 中定义；一旦发布，路径不得由单个实例自行配置或更改。
+- `DriveManifest` 位于 Cinereel 协议保留的固定路径 `/.cinereel/drive.json`。JSON Schema、条件替换和兼容性规则见 [实现 Spec](../specs/drive-manifest.md)；一旦发布，路径不得由单个实例自行配置或更改。
 - `DriveManifest` 至少包含以下字段：
   - `schemaVersion`：Manifest Schema 版本。
   - `name`：发布者提供的 Drive 规范 Name。
@@ -26,6 +26,7 @@ Cinereel 使用 Hyperdrive 保存并复制 Drive 内容，同时使用 C# 服务
 - `DriveManifest` 不得包含本地 `DriveId`、`RelationType`、Subscription、`Remark`、Publication 或任务状态、扫描结果、错误信息、`IdempotencyKey` 以及其他仅属于当前实例的状态。
 - 对于 DriveOwnership，用户 A 的 C# 数据库保存可编辑的规范信息。修改公开描述时，C# 服务先提交本地领域状态，再通过可靠异步操作把新的 `DriveManifest` 写入 Drive；两份数据采用最终一致性，不把跨 SQLite 与 Hyperdrive 的写入伪装成原子事务。
 - Manifest 写入失败、重试和恢复状态只保存在用户 A 的 C# 数据库中，不写入 `DriveManifest`。只有成功写入 Drive 的版本才会传播给订阅者。
+- 创建 Drive 时一并记录初始公开描述与待同步修订，Hyperdrive 创建成功即可进入 `Ready`，Manifest 后台同步失败不阻塞普通文件操作。首次发布必须等待所需公开描述成功同步；该检查随 Publication 用例接入。
 - 用户 B 建立 Subscription 时，C# 服务通过 Hyper Client 读取 `DriveManifest`，校验固定路径、大小、JSON 格式、`schemaVersion` 和必填字段，然后创建自己的本地 `DriveId` 与 Subscription，并缓存公开描述。订阅方不得采用 Manifest 中不存在的发布者本地 `DriveId`。
 - 缺失、不受支持或无效的 `DriveManifest` 不足以建立 Cinereel Subscription；建立操作必须失败并返回可识别的协议错误。普通 Hyperdrive 可访问不等于它是可订阅的 Cinereel Drive。
 - 用户 B 的 `Remark` 只保存在用户 B 的 SQLite 数据库中，用作本地显示覆盖，不得回写或传播到用户 A 的 `DriveManifest`。
@@ -36,7 +37,7 @@ Cinereel 使用 Hyperdrive 保存并复制 Drive 内容，同时使用 C# 服务
 
 Hyperdrive 的签名和版本验证可以证明收到的 `DriveManifest` 属于相应 Drive，且由持有该 Drive 写入密钥的一方写入。它不能单独证明该写入者在 Cinereel 之外的社会身份就是“用户 A”。
 
-如果产品需要展示或验证发布者身份，必须另行定义经过签名的 `PublisherIdentity -> DriveKey` 关联及其信任、撤销和密钥轮换规则。该身份协议不属于 `DriveManifest` 的职责，也不在本 ADR 中决定。
+如果产品需要展示或验证发布者身份，必须另行定义经过签名的 `PublisherIdentity -> DriveKey` 关联及其信任、撤销和密钥轮换规则。Profile Drive 和该身份关联见 [ADR-0009](0009-persist-publisher-profile-in-profile-drive.md)；该身份协议不属于本 ADR 的职责。
 
 ## 数据流
 
@@ -105,5 +106,6 @@ Hyperdrive 的签名和版本验证可以证明收到的 `DriveManifest` 属于�
 - 已有但缺少 `DriveManifest` 的 Drive 不能直接建立 Subscription，需要发布者补写 Manifest 或经过显式迁移。
 - Manifest 的固定路径、大小上限、JSON Schema、字段长度、时间格式、未知字段处理和 Schema 兼容范围必须在实现前通过 Spec 固定并测试。
 - `DriveManifest` 证明的是 Drive 写入密钥控制权，不提供发布者社会身份认证；需要身份展示时必须增加独立签名协议。
+- 发布者资料、Profile Drive 引用和稳定身份标识的具体决策见 [ADR-0009](0009-persist-publisher-profile-in-profile-drive.md)。
 
 本 ADR 延续 [ADR-0002](0002-separate-drive-id-from-drive-key.md) 的 `DriveId` 与 `DriveKey` 分离、[ADR-0003](0003-model-subscription-as-a-separate-relationship.md) 的规范 Name 与本地 `Remark` 分离，以及 [ADR-0006](0006-use-ef-core-with-sqlite-for-local-persistence.md) 对本地领域状态持久化的决策。

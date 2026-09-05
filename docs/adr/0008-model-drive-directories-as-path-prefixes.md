@@ -22,7 +22,7 @@ Web 文件浏览器需要显示根目录、子目录和文件，并提供文件�
 - 根目录 `/` 始终作为合成目录节点存在，即使 Drive 尚无任何用户文件。
 - Cinereel 不支持空目录，不写入以 `/` 结尾的零字节目录标记，也不使用 `.keep`、隐藏占位文件或 Manifest 字段保留空目录。
 - 增加第一个后代文件时，其所有父目录自动出现；删除目录中的最后一个后代文件时，该目录自动消失。两种变化都不产生独立目录写入。
-- [ADR-0007](0007-persist-public-drive-description-in-drive-manifest.md) 定义的 `DriveManifest` 及其他 Cinereel 协议保留路径不属于用户文件空间。列举用户目录时必须过滤这些 entry，用户文件操作也不得写入、移动到、复制到或删除协议保留路径。只有协议 Implementation 可以访问这些路径。
+- [ADR-0007](0007-persist-public-drive-description-in-drive-manifest.md) 定义的 `DriveManifest`、[ADR-0009](0009-persist-publisher-profile-in-profile-drive.md) 定义的 `ProfileManifest` 及其他 Cinereel 协议保留路径不属于用户文件空间。列举用户目录时必须过滤这些 entry，用户文件操作也不得写入、移动到、复制到或删除协议保留路径。只有协议 Implementation 可以访问这些路径。
 
 ### 路径不变量
 
@@ -139,4 +139,4 @@ Web Explorer
 - Hyperdrive 读取失败、等待和超时不会被映射为空目录。
 - Web 不显示创建空目录命令，并按展开状态懒加载直接子项。
 
-本 ADR 延续 [ADR-0002](0002-separate-drive-id-from-drive-key.md) 的 `DriveId` 与 `DriveKey` 分离，以及 [ADR-0007](0007-persist-public-drive-description-in-drive-manifest.md) 对 C# 领域状态、可复制协议数据和 Hyper Client I/O 职责的划分。
+本 ADR 延续 [ADR-0002](0002-separate-drive-id-from-drive-key.md) 的 `DriveId` 与 `DriveKey` 分离，以及 [ADR-0007](0007-persist-public-drive-description-in-drive-manifest.md) 和 [ADR-0009](0009-persist-publisher-profile-in-profile-drive.md) 对 C# 领域状态、可复制协议数据和 Hyper Client I/O 职责的划分。

@@ -16,6 +16,26 @@ _避免使用_：DriveKey、HyperdriveKey
 Hyperdrive 用于定位和访问文件内容的公钥。DriveKey 是 Drive 关联的技术标识，不是 Drive 的领域身份；同一个值不得同时关联多个 Drive。
 _避免使用_：DriveId
 
+**DriveManifest**：
+随 Drive 内容复制的版本化公开描述，表达规范 Name、DriveContentTypeId、公开说明及描述时间，是订阅者认识 Drive 的协议文档；不包含当前实例的 DriveId、关系、私有 Remark 或任务状态。
+_避免使用_：DriveConfig、DriveEntity 的远端副本
+
+**PublisherIdentity**：
+跨节点识别发布者的稳定身份标识，使用可验证的公钥指纹或其他版本化格式表达。PublisherIdentity 不等同于本地 `DriveId` 或单个 Hyperdrive `DriveKey`；它通过签名文档声明与当前 Profile Drive 的绑定，并负责定义信任、撤销和密钥轮换规则。
+_避免使用_：ProfileDriveId、用户名称作为身份
+
+**Profile Drive**：
+发布者身份拥有的公开 Drive，用于传播 `ProfileManifest`、头像和受限的主页装饰资源。Profile Drive 是公开资料的可复制来源，不保存订阅关系、私有 `Remark`、任务状态或其他当前实例状态。当前单节点单账号部署可以按每个节点创建一个 Profile Drive；多账号部署必须按发布者身份分别创建。
+_避免使用_：LocalProfile、AccountDrive
+
+**ProfileManifest**：
+写入 Profile Drive 固定协议路径的版本化公开资料文档，至少包含 `schemaVersion`、`publisherId`、`displayName`、`bio`、`avatarPath` 和 `updatedAt`。个人主页装饰使用声明式、受限的 Schema；Profile Drive 中的合集索引是展示投影，不是 Publication 状态的权威来源。
+_避免使用_：ProfileJson、RemoteUserConfig
+
+**profileDriveKey**：
+写入发布 Drive `DriveManifest` 的 Profile Drive Hyperdrive 公钥，用于发现和读取发布者资料。它只承担内容定位职责；订阅者必须在本地缓存该值，并使用自己的 `DriveId` 表达本地 Drive 关系。跨节点引用不得使用发布者本地 `profileDriveId`。
+_避免使用_：ProfileDriveId、PublisherDriveId
+
 **DriveContentType**：
 在稳定 DriveContentTypeId 下定义的内容类别，用于提供该类内容的展示信息和文件扫描机制。当前 Cinereel 只支持电影、剧集、音乐与通用四种内置类型；命名空间标识为未来官方或第三方扩展保留兼容方向，但当前不提供扩展发现、安装或动态加载能力。
 _避免使用_：HyperdriveType、BlobType、MediaKind
