@@ -72,6 +72,34 @@ export class DriveService implements OnModuleInit {
     return true
   }
 
+  async purgeDriveForTest(driveKey: string): Promise<{
+    ok: boolean
+    driveKey: string
+    method: 'drive.purge'
+    error?: string
+  }> {
+    const drive = await this.sdk.getDrive(driveKey)
+    const resolvedDriveKey = Buffer.from(drive.key).toString('hex')
+
+    try {
+      await this.sdk.leave(drive.discoveryKey)
+      await drive.purge()
+      await this.forgetDriveKey(resolvedDriveKey)
+      return {
+        ok: true,
+        driveKey: resolvedDriveKey,
+        method: 'drive.purge',
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        driveKey: resolvedDriveKey,
+        method: 'drive.purge',
+        error: err instanceof Error ? err.message : String(err),
+      }
+    }
+  }
+
   async getDrive(driveKey: string): Promise<DriveResponseDto> {
     const drive = await this.sdk.getDrive(driveKey)
     const driveKeyHex = Buffer.from(drive.key).toString('hex')
@@ -100,6 +128,43 @@ export class DriveService implements OnModuleInit {
           createdAt: new Date().toISOString(),
         }
       })
+  }
+
+  async clearDriveBlobs(driveKey: string): Promise<{
+    ok: boolean
+    driveKey: string
+    clearedBlocks?: number
+    compacted?: boolean
+    error?: string
+  }> {
+    const drive = await this.sdk.getDrive(driveKey)
+    const resolvedDriveKey = Buffer.from(drive.key).toString('hex')
+
+    try {
+      await this.sdk.leave(drive.discoveryKey)
+      const blobCore = drive.blobs?.core as
+        | { length?: number; compact?: () => Promise<void> }
+        | undefined
+      if (!blobCore?.compact) {
+        throw new Error('当前 Hyperdrive blob core 不支持 compact。')
+      }
+      const clearedBlocks = blobCore.length ?? 0
+      await drive.clearAll({ diff: true })
+      await blobCore.compact()
+      return {
+        ok: true,
+        driveKey: resolvedDriveKey,
+        clearedBlocks,
+        compacted: true,
+      }
+    } catch (err) {
+      return {
+        ok: false,
+        driveKey: resolvedDriveKey,
+        compacted: false,
+        error: err instanceof Error ? err.message : String(err),
+      }
+    }
   }
 
   private async rememberDriveKey(driveKey: string): Promise<void> {

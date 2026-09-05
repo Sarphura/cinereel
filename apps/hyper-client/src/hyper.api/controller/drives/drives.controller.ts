@@ -8,6 +8,8 @@ import {
   Delete,
   Get,
   Inject,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
 } from '@nestjs/common'
@@ -64,6 +66,48 @@ export class DrivesController {
   async remove(@Param('key') key: string): Promise<{ ok: true }> {
     await this.driveService.deleteDrive(key)
     return { ok: true as const }
+  }
+
+  @Delete(':key/blobs')
+  @ApiOperation({
+    operationId: 'clearDriveBlobs',
+    summary: '清理指定 Drive 的本地 blob 内容，保留目录 metadata',
+  })
+  @ApiParam({ name: 'key', description: 'Hex64 drive key' })
+  @ApiOkResponse({
+    schema: {
+      example: {
+        ok: true,
+        driveKey: 'a'.repeat(64),
+        clearedBlocks: 128,
+        compacted: true,
+      },
+    },
+  })
+  @HttpCode(HttpStatus.OK)
+  clearBlobs(@Param('key') key: string) {
+    return this.driveService.clearDriveBlobs(key)
+  }
+
+  @Post(':key/purge-test')
+  @ApiOperation({
+    operationId: 'testDrivePurge',
+    summary: '测试清理单个 Drive 的本地存储，不改变正式删除接口',
+  })
+  @ApiParam({ name: 'key', description: 'Hex64 drive key' })
+  @ApiOkResponse({
+    schema: {
+      example: {
+        ok: false,
+        driveKey: 'a'.repeat(64),
+        method: 'drive.purge',
+        error: '清理失败原因',
+      },
+    },
+  })
+  @HttpCode(HttpStatus.OK)
+  purgeTest(@Param('key') key: string) {
+    return this.driveService.purgeDriveForTest(key)
   }
 
   @Post(':key/mount')
