@@ -1,10 +1,11 @@
 import {
   Module,
-  type OnModuleDestroy,
+  type OnApplicationShutdown,
   type Provider,
 } from '@nestjs/common'
 import { create, SDK } from 'hyper-sdk'
 import { resolve } from 'node:path'
+import { DriveActivity } from './drive-activity.js'
 
 const DEFAULT_CONFIG_DIR = '.cinereel'
 
@@ -18,10 +19,10 @@ const hyperSdkProvider: Provider<SDK> = {
   useFactory: (): Promise<SDK> => create({ storage: GetConfigPath() }),
 }
 
-class HyperSdkLifecycle implements OnModuleDestroy {
+class HyperSdkLifecycle implements OnApplicationShutdown {
   constructor(private readonly sdk: SDK) {}
 
-  async onModuleDestroy(): Promise<void> {
+  async onApplicationShutdown(): Promise<void> {
     await this.sdk.close()
   }
 }
@@ -33,7 +34,7 @@ const hyperSdkLifecycleProvider: Provider<HyperSdkLifecycle> = {
 }
 
 @Module({
-  providers: [hyperSdkProvider, hyperSdkLifecycleProvider],
-  exports: [SDK],
+  providers: [hyperSdkProvider, hyperSdkLifecycleProvider, DriveActivity],
+  exports: [SDK, DriveActivity],
 })
 export class HyperSdkModule {}

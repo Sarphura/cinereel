@@ -20,6 +20,25 @@ internal sealed class DriveEntityConfiguration : IEntityTypeConfiguration<DriveE
         builder.Property(drive => drive.ContentTypeId)
             .HasMaxLength(200)
             .IsRequired();
+        builder.Property(drive => drive.Description)
+            .HasMaxLength(DriveManifest.MaxDescriptionLength)
+            .IsRequired();
+        builder.Property(drive => drive.ManifestRevision);
+        builder.Property(drive => drive.ManifestSyncedRevision);
+        builder.Property(drive => drive.ManifestCreatedAt)
+            .HasConversion(
+                value => value.ToUnixTimeMilliseconds(),
+                value => DateTimeOffset.FromUnixTimeMilliseconds(value));
+        builder.Property(drive => drive.ManifestUpdatedAt)
+            .HasConversion(
+                value => value.ToUnixTimeMilliseconds(),
+                value => DateTimeOffset.FromUnixTimeMilliseconds(value));
+        builder.Property(drive => drive.ManifestErrorCode).HasMaxLength(64);
+        builder.Property(drive => drive.ManifestAttempts);
+        builder.Property(drive => drive.ManifestNextAttemptAt)
+            .HasConversion(
+                value => value.HasValue ? (long?)value.Value.ToUnixTimeMilliseconds() : null,
+                value => value.HasValue ? DateTimeOffset.FromUnixTimeMilliseconds(value.Value) : null);
         builder.Property(drive => drive.IdempotencyKey)
             .HasMaxLength(IdempotencyKey.MaxLength);
         builder.HasIndex(drive => drive.IdempotencyKey).IsUnique();

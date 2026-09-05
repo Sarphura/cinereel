@@ -29,6 +29,10 @@ public static class DriveConfiguration
         services.AddScoped<IDriveService>(provider =>
             provider.GetRequiredService<DriveService>());
         services.TryAddScoped<IDriveFileService, DriveFileService>();
+        services.TryAddScoped<IDriveManifestService, DriveManifestService>();
+        services.TryAddScoped<IDriveDescriptionService, DriveDescriptionService>();
+        services.TryAddScoped<ISubscriptionService, SubscriptionService>();
+        services.AddScoped<DriveManifestSyncService>();
         services.TryAddScoped<IPublishService, PublishService>();
         services.Configure<Microsoft.AspNetCore.OpenApi.OpenApiOptions>("v1", options =>
             options.AddOperationTransformer(new DriveFileOpenApiConfiguration()));
@@ -44,6 +48,7 @@ public static class DriveConfiguration
                 ConnectTimeout = HyperClientConnectTimeout
             });
         services.AddHostedService<DriveCreationJob>();
+        services.AddHostedService<DriveManifestSyncJob>();
         return services;
     }
 }

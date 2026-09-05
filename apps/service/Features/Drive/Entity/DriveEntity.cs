@@ -10,6 +10,22 @@ internal sealed class DriveEntity
 
     internal string ContentTypeId { get; set; } = string.Empty;
 
+    internal string Description { get; set; } = string.Empty;
+
+    internal long ManifestRevision { get; set; }
+
+    internal long ManifestSyncedRevision { get; set; }
+
+    internal DateTimeOffset ManifestCreatedAt { get; set; }
+
+    internal DateTimeOffset ManifestUpdatedAt { get; set; }
+
+    internal string? ManifestErrorCode { get; set; }
+
+    internal int ManifestAttempts { get; set; }
+
+    internal DateTimeOffset? ManifestNextAttemptAt { get; set; }
+
     internal string? IdempotencyKey { get; set; }
 
     internal string? CreationRequestHash { get; set; }

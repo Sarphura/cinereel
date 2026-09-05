@@ -56,6 +56,13 @@ internal sealed class DriveFileService(
                 null);
         }
 
+        if (IsReservedPath(path.Value))
+        {
+            return new ListDriveDirectoryResult(
+                ListDriveDirectoryResultCode.ReservedPath,
+                null);
+        }
+
         try
         {
             var page = await hyperClient.ListDirectoryAsync(
@@ -145,6 +152,11 @@ internal sealed class DriveFileService(
             return AddDriveFileResultCode.WriteNotAllowed;
         }
 
+        if (IsReservedPath(path.Value))
+        {
+            return AddDriveFileResultCode.ReservedPath;
+        }
+
         try
         {
             using var limitedContent = new FileSizeLimitedReadStream(content, maxFileSize);
@@ -208,6 +220,11 @@ internal sealed class DriveFileService(
             return DeleteDriveFileResultCode.WriteNotAllowed;
         }
 
+        if (IsReservedPath(path.Value))
+        {
+            return DeleteDriveFileResultCode.ReservedPath;
+        }
+
         try
         {
             var resultCode = await hyperClient.DeleteFileAsync(
@@ -261,6 +278,11 @@ internal sealed class DriveFileService(
         if (drive.RelationType != DriveRelationType.Ownership)
         {
             return DeleteDriveDirectoryResultCode.WriteNotAllowed;
+        }
+
+        if (IsReservedPath(path.Value))
+        {
+            return DeleteDriveDirectoryResultCode.ReservedPath;
         }
 
         try
@@ -327,6 +349,10 @@ internal sealed class DriveFileService(
 
         return true;
     }
+
+    private static bool IsReservedPath(string path) =>
+        string.Equals(path, "/.cinereel", StringComparison.Ordinal) ||
+        path.StartsWith("/.cinereel/", StringComparison.Ordinal);
 
     private static void ValidateFilePath(DriveFilePath path)
     {

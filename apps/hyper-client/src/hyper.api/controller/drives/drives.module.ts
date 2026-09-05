@@ -4,11 +4,12 @@ import { SDK } from 'hyper-sdk'
 import { DriveService } from '../../../hyper.implementation/drives.service.js'
 import { HyperSdkModule } from '../../../hyper.infrastructure/sdk/hyper-sdk.module.js'
 import { DrivesController } from './drives.controller.js'
+import { DriveActivity } from '../../../hyper.infrastructure/sdk/drive-activity.js'
 
 const driveServiceProvider: Provider<DriveService> = {
   provide: DriveService,
-  inject: [SDK],
-  useFactory: (sdk: SDK) => new DriveService(sdk),
+  inject: [SDK, DriveActivity],
+  useFactory: (sdk: SDK, activity: DriveActivity) => new DriveService(sdk, activity),
 }
 
 @Module({

@@ -33,6 +33,38 @@ internal enum HyperDeleteDirectoryResultCode
     DriveNotWritable
 }
 
+internal sealed record HyperReadProtocolFileResult(
+    HyperReadProtocolFileResultCode ResultCode,
+    byte[]? Content = null,
+    string? ETag = null,
+    long? DriveVersion = null);
+
+internal enum HyperReadProtocolFileResultCode
+{
+    Success,
+    NotFound,
+    InvalidTarget,
+    TooLarge,
+    Unavailable,
+    Timeout
+}
+
+internal sealed record HyperWriteProtocolFileResult(
+    HyperWriteProtocolFileResultCode ResultCode,
+    string? ETag = null,
+    long? DriveVersion = null);
+
+internal enum HyperWriteProtocolFileResultCode
+{
+    Written,
+    Conflict,
+    NotWritable,
+    TargetConflict,
+    TooLarge,
+    Unavailable,
+    Timeout
+}
+
 internal sealed class HyperClientException : Exception
 {
     internal HyperClientException(string message)

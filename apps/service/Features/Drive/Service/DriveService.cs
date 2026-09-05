@@ -68,6 +68,9 @@ internal sealed class DriveService(
             Id = DriveId.New().Value,
             Name = name.Value,
             ContentTypeId = contentTypeId.Value,
+            ManifestRevision = 1,
+            ManifestCreatedAt = now,
+            ManifestUpdatedAt = now,
             IdempotencyKey = idempotencyKey.Value,
             CreationRequestHash = requestHash,
             Status = DriveStatus.Pending,
@@ -163,12 +166,23 @@ internal sealed class DriveService(
             driveId.Value,
             cancellationToken);
 
-        if (drive is null || drive.RelationType != DriveRelationType.Ownership)
+        if (!DriveDescriptionService.IsVisible(drive))
         {
             return UpdateDriveRemarkResultCode.NotFound;
         }
 
-        drive.Remark = remark.Value;
+        var lockKey = drive!.RelationType == DriveRelationType.Ownership
+            ? drive.IdempotencyKey ?? throw new InvalidOperationException("自有 Drive 缺少创建幂等键。")
+            : $"subscription:{drive.Key}";
+        using var lease = await creationLock.AcquireAsync(lockKey, cancellationToken);
+        unitOfWork.ClearTrackedEntities();
+        drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
+        if (!DriveDescriptionService.IsVisible(drive))
+        {
+            return UpdateDriveRemarkResultCode.NotFound;
+        }
+
+        drive!.Remark = remark.Value;
         await unitOfWork.SaveChangesAsync(cancellationToken);
         return UpdateDriveRemarkResultCode.Updated;
     }

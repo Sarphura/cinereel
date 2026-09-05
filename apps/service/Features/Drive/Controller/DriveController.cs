@@ -150,7 +150,7 @@ public sealed class DriveController(IDriveService driveService) : ControllerBase
             UpdateDriveRemarkResultCode.Updated => NoContent(),
             UpdateDriveRemarkResultCode.NotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
-                title: "Drive 不存在或当前 Cinereel 不持有 DriveOwnership。"),
+                title: "Drive 不存在或当前 Cinereel 没有访问关系。"),
             _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
         };
     }

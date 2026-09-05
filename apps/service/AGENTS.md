@@ -35,7 +35,7 @@
 - Drive Feature 当前目录树是已经接受的基准结构，不得重新压平，也不得恢复 `DriveContracts.cs`、`DriveTypes.cs`、`DrivesController`、`IHyperDriveClient` 等旧结构或旧名称。
 - Drive Feature 的状态与分类枚举和所属 Entity 或 Model 同文件；DTO 与应用结果码集中到 `Dto/DriveDtos.cs`、`Dto/DriveFileDtos.cs`、`Dto/PublicationDtos.cs`，Hyper 目录响应、结果码与协议异常集中到 `Client/HyperClientContracts.cs`，`IHyperClient` 与 `HyperClient` 各自保留独立文件。共置类型保持顶层声明、原有名称、可见性和契约，不嵌套到包装类中，也不跨职责集中到一个文件。
 - `DriveContentTypeId` 与 `DriveEntity` 同文件，保留独立的公开顶层值对象及其校验逻辑；共置不改变 Entity 的字符串持久化字段，也不把输入校验移入 Entity。
-- Drive Feature 的其余 Model 按职责集中到 `Model/DriveValues.cs`（Drive 标识与字段校验）、`Model/DriveFileModels.cs`（文件路径、目录路径与游标）和 `Model/Publication.cs`（Publication、失败信息及相关枚举），各类型及其校验逻辑保持独立。
+- Drive Feature 的其余 Model 按职责集中到 `Model/DriveValues.cs`（Drive 标识与字段校验）、`Model/DriveFileModels.cs`（文件路径、目录路径与游标）、`Model/Publication.cs`（Publication、失败信息及相关枚举）和 `Model/DriveManifest.cs`（公开协议文档与 Schema 校验），各类型及其校验逻辑保持独立。Manifest、公开描述和 Subscription 的 DTO 分别共置到 `DriveManifestDtos.cs`、`DriveDescriptionDtos.cs` 和 `SubscriptionDtos.cs`，具体契约见 `NAMING.md`。
 - 新 Feature 仍按垂直切片创建；只有出现真实职责时才建立对应子目录，但一旦建立就必须使用 `Controller/`、`Service/`、`Dto/`、`Entity/`、`Repository/`、`Model/`、`Client/`、`Configuration/`、`Job/` 中的规范名称。
 - 修改公共 Interface、Module 边界、Repository/UnitOfWork 规则或目录职责前，必须先说明方案及取舍并取得确认；确认后同步更新 `NAMING.md`，需要记录长期架构取舍时同时更新 ADR。
 - 完成后端代码修改前，必须检查新增文件的位置、文件名与顶层类型名、namespace、依赖方向和旧名称残留，并运行本文件末尾的构建与测试命令。

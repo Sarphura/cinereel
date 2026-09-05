@@ -33,4 +33,16 @@ internal interface IHyperClient
         DriveKey driveKey,
         DriveDirectoryPath path,
         CancellationToken cancellationToken);
+
+    Task<HyperReadProtocolFileResult> ReadProtocolFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        CancellationToken cancellationToken);
+
+    Task<HyperWriteProtocolFileResult> WriteProtocolFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        ReadOnlyMemory<byte> content,
+        string? expectedETag,
+        CancellationToken cancellationToken);
 }

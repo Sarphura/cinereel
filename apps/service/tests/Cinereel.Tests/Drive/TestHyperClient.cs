@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Cinereel.Features.Drive;
@@ -7,6 +8,10 @@ namespace Cinereel.Tests.Drive;
 internal sealed class TestHyperClient : IHyperClient
 {
     private readonly Func<DriveId, DriveKey> _createDriveKey;
+    private readonly object protocolFilesLock = new();
+    private readonly Dictionary<(DriveKey DriveKey, string Path), HyperReadProtocolFileResult>
+        protocolFiles = [];
+    private long protocolVersion;
 
     internal TestHyperClient()
         : this(CreateDriveKey)
@@ -71,6 +76,125 @@ internal sealed class TestHyperClient : IHyperClient
     internal Exception? DeleteDirectoryException { get; set; }
 
     internal Action? BeforeFileOperation { get; set; }
+
+    internal ConcurrentQueue<(DriveKey DriveKey, DriveFilePath Path)> ReadProtocolFileCalls
+    { get; } = new();
+
+    internal ConcurrentQueue<(
+        DriveKey DriveKey,
+        DriveFilePath Path,
+        byte[] Content,
+        string? ExpectedETag)> WriteProtocolFileCalls
+    { get; } = new();
+
+    internal HyperReadProtocolFileResult? ReadProtocolFileResult { get; set; }
+
+    internal HyperWriteProtocolFileResult? WriteProtocolFileResult { get; set; }
+
+    internal Exception? ReadProtocolFileException { get; set; }
+
+    internal Exception? WriteProtocolFileException { get; set; }
+
+    internal Func<CancellationToken, Task>? BeforeProtocolRead { get; set; }
+
+    internal Func<CancellationToken, Task>? BeforeProtocolWrite { get; set; }
+
+    internal Func<CancellationToken, Task>? AfterProtocolWrite { get; set; }
+
+    internal void SetProtocolFile(
+        DriveKey driveKey,
+        byte[] content,
+        string path = DriveManifest.Path)
+    {
+        lock (protocolFilesLock)
+        {
+            var version = ++protocolVersion;
+            protocolFiles[(driveKey, path)] = new(
+                HyperReadProtocolFileResultCode.Success,
+                content.ToArray(),
+                $"\"{version}\"",
+                version);
+        }
+    }
+
+    internal HyperReadProtocolFileResult GetProtocolFile(
+        DriveKey driveKey,
+        string path = DriveManifest.Path)
+    {
+        lock (protocolFilesLock)
+        {
+            return protocolFiles.TryGetValue((driveKey, path), out var result)
+                ? result with { Content = result.Content!.ToArray() }
+                : new(HyperReadProtocolFileResultCode.NotFound);
+        }
+    }
+
+    public async Task<HyperReadProtocolFileResult> ReadProtocolFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReadProtocolFileCalls.Enqueue((driveKey, path));
+        if (BeforeProtocolRead is not null)
+        {
+            await BeforeProtocolRead(cancellationToken);
+        }
+
+        if (ReadProtocolFileException is not null)
+        {
+            throw ReadProtocolFileException;
+        }
+
+        return ReadProtocolFileResult ?? GetProtocolFile(driveKey, path.Value);
+    }
+
+    public async Task<HyperWriteProtocolFileResult> WriteProtocolFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        ReadOnlyMemory<byte> content,
+        string? expectedETag,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        WriteProtocolFileCalls.Enqueue((driveKey, path, content.ToArray(), expectedETag));
+        if (BeforeProtocolWrite is not null)
+        {
+            await BeforeProtocolWrite(cancellationToken);
+        }
+
+        if (WriteProtocolFileException is not null)
+        {
+            throw WriteProtocolFileException;
+        }
+
+        if (WriteProtocolFileResult is not null)
+        {
+            return WriteProtocolFileResult;
+        }
+
+        HyperWriteProtocolFileResult result;
+        lock (protocolFilesLock)
+        {
+            var existing = GetProtocolFile(driveKey, path.Value);
+            if ((expectedETag is null && existing.ResultCode != HyperReadProtocolFileResultCode.NotFound) ||
+                (expectedETag is not null && existing.ETag != expectedETag))
+            {
+                return new(HyperWriteProtocolFileResultCode.Conflict);
+            }
+
+            SetProtocolFile(driveKey, content.ToArray(), path.Value);
+            var written = GetProtocolFile(driveKey, path.Value);
+            result = new(HyperWriteProtocolFileResultCode.Written, written.ETag, written.DriveVersion);
+        }
+
+        if (AfterProtocolWrite is not null)
+        {
+            await AfterProtocolWrite(cancellationToken);
+        }
+
+        return result;
+    }
 
     public Task<DriveKey> EnsureDriveAsync(
         DriveId driveId,

@@ -13,6 +13,26 @@ function emptyStringToUndefined(value: unknown): unknown {
   return value === '' ? undefined : value
 }
 
+export const ReadFileQuerySchema = z.object({
+  path: z
+    .string()
+    .max(MAX_DRIVE_FILE_PATH_LENGTH)
+    .refine(isDriveDirectoryPath, 'path 必须是规范的 Drive 绝对路径。')
+    .describe('要读取的规范 Drive 绝对文件路径'),
+  driveVersion: z
+    .preprocess(
+      emptyStringToUndefined,
+      z.coerce.number().int().min(1).max(Number.MAX_SAFE_INTEGER).optional(),
+    )
+    .optional()
+    .describe('固定读取的 Drive 版本；省略时使用本次取得的版本'),
+  disposition: z
+    .enum(['inline', 'attachment'])
+    .default('inline')
+    .describe('inline 用于预览或播放，attachment 用于下载'),
+})
+export class ReadFileQueryDto extends createZodDto(ReadFileQuerySchema) {}
+
 export const AddFileQuerySchema = z.object({
   path: z
     .string()

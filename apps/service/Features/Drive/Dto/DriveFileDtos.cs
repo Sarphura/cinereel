@@ -10,7 +10,8 @@ public enum ListDriveDirectoryResultCode
     DriveNotFound,
     DriveNotReady,
     VersionConflict,
-    ContentUnavailable
+    ContentUnavailable,
+    ReservedPath
 }
 
 public sealed record DriveDirectoryResponse(
@@ -33,7 +34,8 @@ public enum AddDriveFileResultCode
     WriteNotAllowed,
     AlreadyExists,
     FileTooLarge,
-    ContentUnavailable
+    ContentUnavailable,
+    ReservedPath
 }
 
 public enum DeleteDriveFileResultCode
@@ -43,7 +45,8 @@ public enum DeleteDriveFileResultCode
     DriveNotReady,
     WriteNotAllowed,
     FileNotFound,
-    ContentUnavailable
+    ContentUnavailable,
+    ReservedPath
 }
 
 public enum DeleteDriveDirectoryResultCode
@@ -52,5 +55,6 @@ public enum DeleteDriveDirectoryResultCode
     DriveNotFound,
     DriveNotReady,
     WriteNotAllowed,
-    ContentUnavailable
+    ContentUnavailable,
+    ReservedPath
 }

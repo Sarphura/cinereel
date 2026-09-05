@@ -253,14 +253,18 @@ public sealed class DriveFileServiceTests
         Assert.Empty(fixture.HyperClient.DeleteDirectoryCalls);
     }
 
-    [Fact]
-    public async Task NonReadyDriveRejectsAllContentOperationsBeforeCallingHyperClient()
+    [Theory]
+    [InlineData("/", "/movie.mkv")]
+    [InlineData("/.cinereel", "/.cinereel/drive.json")]
+    public async Task NonReadyDriveRejectsAllContentOperationsBeforeCallingHyperClient(
+        string directoryPathValue,
+        string filePathValue)
     {
         await using var fixture = await DriveFileServiceFixture.CreateAsync(
             DriveRelationType.Ownership,
             DriveStatus.Pending);
-        var directoryPath = DirectoryPath("/");
-        var filePath = FilePath("/movie.mkv");
+        var directoryPath = DirectoryPath(directoryPathValue);
+        var filePath = FilePath(filePathValue);
         await using var content = new MemoryStream([1, 2, 3]);
 
         var listed = await fixture.Service.ListDirectoryAsync(
@@ -320,13 +324,17 @@ public sealed class DriveFileServiceTests
         AssertNoFileCalls(fixture.HyperClient);
     }
 
-    [Fact]
-    public async Task MissingDriveReturnsNotFoundForAllContentOperations()
+    [Theory]
+    [InlineData("/", "/movie.mkv")]
+    [InlineData("/.cinereel", "/.cinereel/drive.json")]
+    public async Task MissingDriveReturnsNotFoundForAllContentOperations(
+        string directoryPathValue,
+        string filePathValue)
     {
         await using var fixture = await DriveFileServiceFixture.CreateAsync();
         var missingDriveId = DriveId.New();
-        var directoryPath = DirectoryPath("/");
-        var filePath = FilePath("/movie.mkv");
+        var directoryPath = DirectoryPath(directoryPathValue);
+        var filePath = FilePath(filePathValue);
         await using var content = new MemoryStream([1, 2, 3]);
 
         var listed = await fixture.Service.ListDirectoryAsync(
@@ -354,6 +362,106 @@ public sealed class DriveFileServiceTests
         Assert.Equal(DeleteDriveFileResultCode.DriveNotFound, deletedFile);
         Assert.Equal(DeleteDriveDirectoryResultCode.DriveNotFound, deletedDirectory);
         AssertNoFileCalls(fixture.HyperClient);
+    }
+
+    [Theory]
+    [InlineData("/.cinereel")]
+    [InlineData("/.cinereel/drive.json")]
+    [InlineData("/.cinereel/nested/settings.json")]
+    public async Task ReservedPathsRejectAllContentOperationsWithoutCallingHyperClient(
+        string pathValue)
+    {
+        await using var fixture = await DriveFileServiceFixture.CreateAsync();
+        await using var content = new MemoryStream([1, 2, 3]);
+
+        var listed = await fixture.Service.ListDirectoryAsync(
+            fixture.DriveId,
+            DirectoryPath(pathValue),
+            null,
+            100,
+            CancellationToken.None);
+        var added = await fixture.Service.AddFileAsync(
+            fixture.DriveId,
+            FilePath(pathValue),
+            content,
+            CancellationToken.None);
+        var deletedFile = await fixture.Service.DeleteFileAsync(
+            fixture.DriveId,
+            FilePath(pathValue),
+            CancellationToken.None);
+        var deletedDirectory = await fixture.Service.DeleteDirectoryAsync(
+            fixture.DriveId,
+            DirectoryPath(pathValue),
+            CancellationToken.None);
+
+        Assert.Equal(ListDriveDirectoryResultCode.ReservedPath, listed.ResultCode);
+        Assert.Null(listed.Directory);
+        Assert.Equal(AddDriveFileResultCode.ReservedPath, added);
+        Assert.Equal(DeleteDriveFileResultCode.ReservedPath, deletedFile);
+        Assert.Equal(DeleteDriveDirectoryResultCode.ReservedPath, deletedDirectory);
+        Assert.Equal(0, content.Position);
+        AssertNoFileCalls(fixture.HyperClient);
+    }
+
+    [Theory]
+    [InlineData("/.cinereel-backup")]
+    [InlineData("/.cinereel-backup/drive.json")]
+    [InlineData("/video/.cinereel/drive.json")]
+    public async Task SimilarOrdinaryPathsStillReachHyperClient(string pathValue)
+    {
+        await using var fixture = await DriveFileServiceFixture.CreateAsync();
+        await using var content = new MemoryStream([1, 2, 3]);
+
+        var listed = await fixture.Service.ListDirectoryAsync(
+            fixture.DriveId,
+            DirectoryPath(pathValue),
+            null,
+            100,
+            CancellationToken.None);
+        var added = await fixture.Service.AddFileAsync(
+            fixture.DriveId,
+            FilePath(pathValue),
+            content,
+            CancellationToken.None);
+        var deletedFile = await fixture.Service.DeleteFileAsync(
+            fixture.DriveId,
+            FilePath(pathValue),
+            CancellationToken.None);
+        var deletedDirectory = await fixture.Service.DeleteDirectoryAsync(
+            fixture.DriveId,
+            DirectoryPath(pathValue),
+            CancellationToken.None);
+
+        Assert.Equal(ListDriveDirectoryResultCode.Listed, listed.ResultCode);
+        Assert.Equal(AddDriveFileResultCode.Created, added);
+        Assert.Equal(DeleteDriveFileResultCode.Deleted, deletedFile);
+        Assert.Equal(DeleteDriveDirectoryResultCode.Deleted, deletedDirectory);
+        Assert.Single(fixture.HyperClient.ListDirectoryCalls);
+        Assert.Single(fixture.HyperClient.AddFileCalls);
+        Assert.Single(fixture.HyperClient.DeleteFileCalls);
+        Assert.Single(fixture.HyperClient.DeleteDirectoryCalls);
+    }
+
+    [Fact]
+    public async Task RootDirectoryCanStillBeListedAndDeleted()
+    {
+        await using var fixture = await DriveFileServiceFixture.CreateAsync();
+
+        var listed = await fixture.Service.ListDirectoryAsync(
+            fixture.DriveId,
+            DirectoryPath("/"),
+            null,
+            100,
+            CancellationToken.None);
+        var deleted = await fixture.Service.DeleteDirectoryAsync(
+            fixture.DriveId,
+            DirectoryPath("/"),
+            CancellationToken.None);
+
+        Assert.Equal(ListDriveDirectoryResultCode.Listed, listed.ResultCode);
+        Assert.Equal(DeleteDriveDirectoryResultCode.Deleted, deleted);
+        Assert.Equal("/", Assert.Single(fixture.HyperClient.ListDirectoryCalls).Path.Value);
+        Assert.Equal("/", Assert.Single(fixture.HyperClient.DeleteDirectoryCalls).Path.Value);
     }
 
     [Fact]

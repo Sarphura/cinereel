@@ -96,6 +96,43 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
         Assert.Equal("/video", deleteDirectoryCall.Path.Value);
     }
 
+    [Theory]
+    [InlineData("/.cinereel")]
+    [InlineData("/.cinereel/drive.json")]
+    public async Task ReservedPathsReturnIdentifiableForbiddenProblemWithoutCallingHyperClient(
+        string path)
+    {
+        ResetHyperClient();
+        var drive = await SeedDriveAsync(
+            DriveRelationType.Ownership,
+            DriveStatus.Ready);
+        var query = Uri.EscapeDataString(path);
+
+        using var listResponse = await _client.GetAsync(
+            $"/api/drives/{drive.DriveId}/files/entries?path={query}");
+        using var addRequest = CreateBinaryRequest(
+            HttpMethod.Put,
+            drive.DriveId,
+            path,
+            [1, 2, 3]);
+        using var addResponse = await _client.SendAsync(addRequest);
+        using var deleteFileResponse = await _client.DeleteAsync(
+            $"/api/drives/{drive.DriveId}/files?path={query}");
+        using var deleteDirectoryResponse = await _client.DeleteAsync(
+            $"/api/drives/{drive.DriveId}/files/entries?path={query}");
+
+        foreach (var response in new[]
+        {
+            listResponse, addResponse, deleteFileResponse, deleteDirectoryResponse
+        })
+        {
+            var problem = await AssertProblemAsync(response, HttpStatusCode.Forbidden);
+            Assert.Equal("reserved_path", problem.GetProperty("code").GetString());
+        }
+
+        AssertNoFileCalls();
+    }
+
     [Fact]
     public async Task EmptyCursorUsesFirstPageAndDefaultLimit()
     {
@@ -320,14 +357,25 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
         AssertRequiredQueryParameter(put, "path");
         AssertRequiredQueryParameter(deleteFile, "path");
         AssertRequiredQueryParameter(deleteDirectory, "path");
-        AssertProblemContent(get, "400", "404", "409", "503");
+        AssertProblemContent(get, "400", "403", "404", "409", "503");
         AssertProblemContent(put, "400", "403", "404", "409", "413", "415", "503");
         AssertProblemContent(deleteFile, "400", "403", "404", "409", "503");
         AssertProblemContent(deleteDirectory, "400", "403", "404", "409", "503");
+        foreach (var operation in new[] { get, put, deleteFile, deleteDirectory })
+        {
+            Assert.Contains(
+                "reserved_path",
+                operation.GetProperty("responses")
+                    .GetProperty("403")
+                    .GetProperty("description")
+                    .GetString());
+        }
+
         AssertResponseCodes(
             get,
             "200",
             "400",
+            "403",
             "404",
             "409",
             "503");
@@ -404,7 +452,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
         return content;
     }
 
-    private static async Task AssertProblemAsync(
+    private static async Task<JsonElement> AssertProblemAsync(
         HttpResponseMessage response,
         HttpStatusCode expectedStatus)
     {
@@ -414,6 +462,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             response.Content.Headers.ContentType?.MediaType);
         var problem = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal((int)expectedStatus, problem.GetProperty("status").GetInt32());
+        return problem;
     }
 
     private static void AssertResponseCodes(

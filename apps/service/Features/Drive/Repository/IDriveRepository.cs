@@ -2,6 +2,14 @@ namespace Cinereel.Features.Drive;
 
 internal interface IDriveRepository
 {
+    Task<DriveEntity?> FindByKeyAsync(
+        string driveKey,
+        CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<DriveEntity>> FindPendingManifestSyncAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken);
+
     Task<DriveEntity?> FindByIdAsync(
         Guid driveId,
         CancellationToken cancellationToken);

@@ -11,6 +11,8 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
     [HttpGet("entries")]
     [ProducesResponseType<DriveDirectoryResponse>(StatusCodes.Status200OK)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden,
+        Description = "目标位于 /.cinereel 协议保留目录，错误码为 reserved_path。")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
@@ -68,6 +70,7 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
             ListDriveDirectoryResultCode.Listed => Ok(result.Directory!),
             ListDriveDirectoryResultCode.DriveNotFound => DriveNotFound(),
             ListDriveDirectoryResultCode.DriveNotReady => DriveNotReady(),
+            ListDriveDirectoryResultCode.ReservedPath => ReservedPath(),
             ListDriveDirectoryResultCode.VersionConflict => Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "Drive 内容版本已变化，请从第一页重新列举目录。"),
@@ -81,7 +84,8 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
     [DisableRequestSizeLimit]
     [ProducesResponseType(StatusCodes.Status201Created)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden,
+        Description = "没有写权限，或目标位于 /.cinereel 协议保留目录（reserved_path）。")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status413PayloadTooLarge)]
@@ -123,6 +127,7 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
             AddDriveFileResultCode.DriveNotFound => DriveNotFound(),
             AddDriveFileResultCode.DriveNotReady => DriveNotReady(),
             AddDriveFileResultCode.WriteNotAllowed => WriteNotAllowed(),
+            AddDriveFileResultCode.ReservedPath => ReservedPath(),
             AddDriveFileResultCode.AlreadyExists => Problem(
                 statusCode: StatusCodes.Status409Conflict,
                 title: "目标路径已经存在。"),
@@ -137,7 +142,8 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
     [HttpDelete]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden,
+        Description = "没有写权限，或目标位于 /.cinereel 协议保留目录（reserved_path）。")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
@@ -169,6 +175,7 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
             DeleteDriveFileResultCode.DriveNotFound => DriveNotFound(),
             DeleteDriveFileResultCode.DriveNotReady => DriveNotReady(),
             DeleteDriveFileResultCode.WriteNotAllowed => WriteNotAllowed(),
+            DeleteDriveFileResultCode.ReservedPath => ReservedPath(),
             DeleteDriveFileResultCode.FileNotFound => Problem(
                 statusCode: StatusCodes.Status404NotFound,
                 title: "目标文件不存在。"),
@@ -180,7 +187,8 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
     [HttpDelete("entries")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
-    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden,
+        Description = "没有写权限，或目标位于 /.cinereel 协议保留目录（reserved_path）。")]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status503ServiceUnavailable)]
@@ -212,6 +220,7 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
             DeleteDriveDirectoryResultCode.DriveNotFound => DriveNotFound(),
             DeleteDriveDirectoryResultCode.DriveNotReady => DriveNotReady(),
             DeleteDriveDirectoryResultCode.WriteNotAllowed => WriteNotAllowed(),
+            DeleteDriveDirectoryResultCode.ReservedPath => ReservedPath(),
             DeleteDriveDirectoryResultCode.ContentUnavailable => ContentUnavailable(),
             _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
         };
@@ -243,6 +252,14 @@ public sealed class DriveFileController(IDriveFileService driveFileService) : Co
         return Problem(
             statusCode: StatusCodes.Status403Forbidden,
             title: "当前 Cinereel 不持有该 Drive 的写权限。");
+    }
+
+    private ObjectResult ReservedPath()
+    {
+        return Problem(
+            statusCode: StatusCodes.Status403Forbidden,
+            title: "普通文件接口不能访问 /.cinereel 协议保留目录。",
+            extensions: new Dictionary<string, object?> { ["code"] = "reserved_path" });
     }
 
     private ObjectResult ContentUnavailable()

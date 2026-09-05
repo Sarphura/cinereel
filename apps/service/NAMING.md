@@ -76,8 +76,14 @@ HTTP
   -> PublicationController
   -> IPublishService
   -> PublishService
+  -> DriveDescriptionController
+  -> IDriveDescriptionService -> DriveDescriptionService
+  -> SubscriptionController
+  -> ISubscriptionService -> SubscriptionService -> IDriveManifestService
 
 DriveCreationJob -> DriveService 的 Pending Drive 处理操作
+DriveManifestSyncJob -> DriveManifestSyncService -> IDriveManifestService
+IDriveManifestService -> DriveManifestService -> IHyperClient
 Configuration    -> 只负责组合和依赖注册
 ```
 
@@ -89,6 +95,10 @@ Configuration    -> 只负责组合和依赖注册
 - `DriveDirectoryCursor` 是绑定 Drive 版本与目录子项名称的 Web 不透明游标。`DriveFileService` 负责版本一致性，Controller 和调用方不得解析游标内容或直接向 Hyper Client 透传 Web 游标。
 - 普通目录只是 Hyperdrive 文件路径的前缀投影。Drive File Module 可以列举直接子项及递归删除目录，但不提供创建空目录的用例，也不持久化目录状态。
 - Publication 是 Drive Module 内的独立发布关系与状态机；`PublishService` 保留为发布用例 Seam，不合并进 `DriveService` 或 `DriveEntity`。
+- DriveManifest Module 保留在 Drive Feature 内；`DriveManifest` 负责固定 Schema 的解析与序列化，`IDriveManifestService` / `DriveManifestService` 隐藏固定路径与条件写入协议，不提交本地 Unit of Work。
+- `DriveDescriptionService` 更新本地公开描述和同步修订；`DriveManifestSyncService` 使用持久化待同步状态执行条件写入。`DriveManifestSyncJob` 只负责触发，Manifest 同步失败不改变 Drive 的 `Ready` 状态。
+- `SubscriptionService` 先按 `DriveKey` 校验 Manifest，再创建本地关系；刷新只替换公开描述缓存，保留本地 `CreatedAt` 与 `Remark`。`ManifestCreatedAt` 和 `ManifestUpdatedAt` 表达公开描述时间。
+- 自有 Drive 的描述更新、Manifest 同步、备注更新和删除复用 `DriveCreationLock` 的原创建幂等键，避免同一进程内交错修改；订阅关系使用 `subscription:<DriveKey>` 锁键。跨进程迟到的文件写入由 Hyper 条件替换协调，不以进程锁代替远端写入条件。
 - `Repository/` 是 Entity 集合访问的 Seam；EF Core Adapter 可以依赖 `CinereelDbContext`，但不得承载业务用例、调用外部 Client 或提交 Unit of Work。
 - `Client/` 封装远程协议，不反向依赖 Controller、Service Implementation、Repository 或 Entity。
 - `Dto/` 与 `Model/` 不依赖 ASP.NET Core、EF Core 或具体 Adapter，保证它们可以跨 Controller 与 Service 使用。
@@ -115,10 +125,14 @@ Drive Feature 的共置类型组织如下：
 | `DriveId`、`DriveKey`、`DriveName`、`DriveRemark`、`IdempotencyKey` | `Model/DriveValues.cs` |
 | `DriveFilePath`、`DriveDirectoryPath`、`DriveDirectoryCursor` | `Model/DriveFileModels.cs` |
 | `Publication`、`PublicationFailure`、`PublicationStatus`、`PublicationActionType` | `Model/Publication.cs` |
+| `DriveManifest` | `Model/DriveManifest.cs` |
 | Drive 创建、查询、备注、重试、删除的 DTO 与结果码 | `Dto/DriveDtos.cs` |
 | 目录列举、文件增加、文件删除、目录删除的 DTO 与应用结果码 | `Dto/DriveFileDtos.cs` |
 | Publication 查询、发布、取消发布的 DTO 与结果码 | `Dto/PublicationDtos.cs` |
-| `HyperDirectoryPage`、`HyperDirectoryEntry`、三个 `Hyper*ResultCode` 和 `HyperClientException` | `Client/HyperClientContracts.cs` |
+| 公开描述读取、更新的 DTO 与结果码 | `Dto/DriveDescriptionDtos.cs` |
+| 内部 Manifest 读取、写入的结果与结果码 | `Dto/DriveManifestDtos.cs` |
+| 订阅建立、刷新、取消的 DTO 与结果码 | `Dto/SubscriptionDtos.cs` |
+| Hyper 目录与协议文件响应、结果码和 `HyperClientException` | `Client/HyperClientContracts.cs` |
 
 相关 Request、Response、Result 和 ResultCode 在同一职责文件内组织，已有 Result 的结果码与其相邻；直接返回枚举的用例不额外增加 Result 包装类。Hyper 协议结果由应用 Service 映射为应用结果，不放入 `Dto/`。
 
@@ -218,6 +232,7 @@ HyperClient.cs
 - `IHyperClient.cs` 与 `HyperClient.cs` 分别保存 Interface 与 Adapter；其目录响应、结果码和协议异常统一放在 `HyperClientContracts.cs`，保持内部顶层类型，不混入应用 DTO 或其他职责的异常。
 - HTTP 路由、JSON、流式文件正文、固定存储类型和错误协议封装在 `HyperClient` Adapter 内。
 - Drive 文件调用向 `IHyperClient` 传递 `DriveKey`、规范路径和文件 I/O 意图；目录投影、协议保留路径保护与实际存储状态检查由 Hyper Client 负责。
+- 协议文件调用使用 `ReadProtocolFileAsync` / `WriteProtocolFileAsync`，传递受限字节内容和 opaque ETag；`expectedETag = null` 表示仅在文件不存在时创建，不表示无条件覆盖。协议字段含义仍由 C# 解释。
 - 当前只有一个生产 Adapter 时，不使用 `HyperDriveHttpClient`、`HyperDriveClient` 或 `HyperHttpAdapter`。
 - 只有出现多个真实传输 Adapter 后，才使用 `HyperHttpClient`、`HyperGrpcClient` 等名称区分 Implementation。
 - 不因 Interface 未来可能增长而预先拆成 `IHyperDriveClient`、`IHyperFileClient`、`IHyperPublishClient`。

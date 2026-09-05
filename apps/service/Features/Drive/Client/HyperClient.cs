@@ -8,6 +8,7 @@ namespace Cinereel.Features.Drive;
 
 internal sealed class HyperClient : IHyperClient
 {
+    private const int MaxProtocolFileByteLength = 64 * 1024;
     private static readonly TimeSpan RegularRequestTimeout = TimeSpan.FromSeconds(100);
     private static readonly TimeSpan UploadResponseHeadersTimeout = TimeSpan.FromSeconds(100);
     private readonly HttpClient httpClient;
@@ -204,6 +205,163 @@ internal sealed class HyperClient : IHyperClient
         }
     }
 
+    public async Task<HyperReadProtocolFileResult> ReadProtocolFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CreateRegularRequestTimeout(cancellationToken);
+        using var response = await httpClient.GetAsync(
+            BuildProtocolFileUri(driveKey, path.Value),
+            HttpCompletionOption.ResponseHeadersRead,
+            timeout.Token);
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.NotFound:
+                return new(HyperReadProtocolFileResultCode.NotFound);
+            case HttpStatusCode.Conflict:
+                return new(HyperReadProtocolFileResultCode.InvalidTarget);
+            case HttpStatusCode.RequestEntityTooLarge:
+                return new(HyperReadProtocolFileResultCode.TooLarge);
+            case HttpStatusCode.ServiceUnavailable:
+                return new(HyperReadProtocolFileResultCode.Unavailable);
+            case HttpStatusCode.GatewayTimeout:
+                return new(HyperReadProtocolFileResultCode.Timeout);
+            case HttpStatusCode.OK:
+                break;
+            default:
+                response.EnsureSuccessStatusCode();
+                throw UnexpectedSuccessStatus(response.StatusCode, "读取协议文件");
+        }
+
+        var (etag, driveVersion) = ReadProtocolFileHeaders(response);
+        if (!string.Equals(
+            response.Content.Headers.ContentType?.MediaType,
+            "application/octet-stream",
+            StringComparison.OrdinalIgnoreCase))
+        {
+            throw ProtocolError("协议文件响应的 Content-Type 必须为 application/octet-stream。");
+        }
+
+        var declaredLength = response.Content.Headers.ContentLength;
+        if (declaredLength > MaxProtocolFileByteLength)
+        {
+            return new(HyperReadProtocolFileResultCode.TooLarge);
+        }
+
+        await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
+        var buffer = new byte[MaxProtocolFileByteLength + 1];
+        var length = 0;
+        while (length < buffer.Length)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(length), timeout.Token);
+            if (read == 0)
+            {
+                break;
+            }
+
+            length += read;
+        }
+
+        if (length > MaxProtocolFileByteLength)
+        {
+            return new(HyperReadProtocolFileResultCode.TooLarge);
+        }
+
+        if (declaredLength is not null && declaredLength != length)
+        {
+            throw ProtocolError("协议文件响应的 Content-Length 与实际正文不一致。");
+        }
+
+        return new(
+            HyperReadProtocolFileResultCode.Success,
+            buffer.AsSpan(0, length).ToArray(),
+            etag,
+            driveVersion);
+    }
+
+    public async Task<HyperWriteProtocolFileResult> WriteProtocolFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        ReadOnlyMemory<byte> content,
+        string? expectedETag,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (content.Length > MaxProtocolFileByteLength)
+        {
+            return new(HyperWriteProtocolFileResultCode.TooLarge);
+        }
+
+        using var timeout = CreateRegularRequestTimeout(cancellationToken);
+        using var request = new HttpRequestMessage(
+            HttpMethod.Put, BuildProtocolFileUri(driveKey, path.Value));
+        request.Content = new ReadOnlyMemoryContent(content);
+        request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
+        if (expectedETag is null)
+        {
+            request.Headers.IfNoneMatch.Add(EntityTagHeaderValue.Any);
+        }
+        else
+        {
+            if (!TryParseStrongETag(expectedETag, out var etag))
+            {
+                throw ProtocolError("协议文件条件写入需要有效的强 ETag。");
+            }
+
+            request.Headers.IfMatch.Add(etag!);
+        }
+
+        using var response = await httpClient.SendAsync(
+            request, HttpCompletionOption.ResponseHeadersRead, timeout.Token);
+        switch (response.StatusCode)
+        {
+            case HttpStatusCode.OK:
+            case HttpStatusCode.Created:
+                var (etag, driveVersion) = ReadProtocolFileHeaders(response);
+                return new(HyperWriteProtocolFileResultCode.Written, etag, driveVersion);
+            case HttpStatusCode.PreconditionFailed:
+                return new(HyperWriteProtocolFileResultCode.Conflict);
+            case HttpStatusCode.Forbidden:
+                return new(HyperWriteProtocolFileResultCode.NotWritable);
+            case HttpStatusCode.Conflict:
+                return new(HyperWriteProtocolFileResultCode.TargetConflict);
+            case HttpStatusCode.RequestEntityTooLarge:
+                return new(HyperWriteProtocolFileResultCode.TooLarge);
+            case HttpStatusCode.ServiceUnavailable:
+                return new(HyperWriteProtocolFileResultCode.Unavailable);
+            case HttpStatusCode.GatewayTimeout:
+                return new(HyperWriteProtocolFileResultCode.Timeout);
+            default:
+                response.EnsureSuccessStatusCode();
+                throw UnexpectedSuccessStatus(response.StatusCode, "写入协议文件");
+        }
+    }
+
+    private static (string ETag, long DriveVersion) ReadProtocolFileHeaders(
+        HttpResponseMessage response)
+    {
+        if (!response.Headers.TryGetValues("ETag", out var etagValues) ||
+            etagValues.ToArray() is not [var etag] ||
+            !TryParseStrongETag(etag, out _))
+        {
+            throw ProtocolError("协议文件响应缺少有效的强 ETag。");
+        }
+
+        if (!response.Headers.TryGetValues("X-Drive-Version", out var versionValues) ||
+            versionValues.ToArray() is not [var version] ||
+            !long.TryParse(version, NumberStyles.None, CultureInfo.InvariantCulture,
+                out var driveVersion) || driveVersion < 0)
+        {
+            throw ProtocolError("协议文件响应缺少有效的 X-Drive-Version。");
+        }
+
+        return (etag, driveVersion);
+    }
+
+    private static bool TryParseStrongETag(string value, out EntityTagHeaderValue? etag) =>
+        EntityTagHeaderValue.TryParse(value, out etag) && !etag.IsWeak && etag.Tag != "*";
+
     private static string BuildListDirectoryUri(
         DriveKey driveKey,
         DriveDirectoryPath path,
@@ -226,6 +384,9 @@ internal sealed class HyperClient : IHyperClient
 
     private static string BuildFileUri(DriveKey driveKey, string path) =>
         $"v1/files/{driveKey.Value}?path={Uri.EscapeDataString(path)}";
+
+    private static string BuildProtocolFileUri(DriveKey driveKey, string path) =>
+        $"v1/protocol-files/{driveKey.Value}?path={Uri.EscapeDataString(path)}";
 
     private static CancellationTokenSource CreateRegularRequestTimeout(
         CancellationToken cancellationToken)

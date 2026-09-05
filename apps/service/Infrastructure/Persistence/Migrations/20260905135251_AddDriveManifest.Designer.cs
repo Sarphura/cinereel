@@ -3,6 +3,7 @@ using System;
 using Cinereel.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace Cinereel.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(CinereelDbContext))]
-    partial class CinereelDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260905135251_AddDriveManifest")]
+    partial class AddDriveManifest
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.10");
