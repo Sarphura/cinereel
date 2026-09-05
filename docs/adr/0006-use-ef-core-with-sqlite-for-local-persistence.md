@@ -41,8 +41,7 @@ Drive Module 的持久化相关文件采用以下结构：
 ```text
 Features/Drive/
 ├── Entity/
-│   ├── DriveEntity.cs
-│   └── DriveStatus.cs
+│   └── DriveEntity.cs
 ├── Repository/
 │   ├── IDriveRepository.cs
 │   └── DriveRepository.cs
@@ -57,6 +56,8 @@ Infrastructure/Persistence/
 ├── PersistenceConfiguration.cs
 └── Migrations/
 ```
+
+`DriveStatus`、`DriveRelationType` 顶层枚举及 `DriveContentTypeId` 顶层值对象和 `DriveEntity` 共置于 `Entity/DriveEntity.cs`，保持各自的类型名、可见性与行为。`DriveContentTypeId` 的校验逻辑仍归值对象所有，Entity 的对应字段继续以字符串持久化。
 
 这一结构保留按 Feature 聚合的 Locality，同时使用 `Entity`、`Repository`、`Configuration` 与 Unit of Work 等 Java/Spring Data 开发者熟悉的职责名称。ASP.NET Core、EF Core、SQLite 与 migration 仍提供底层框架能力；这些类型不是对 ORM、事务或建表机制的自研替代品。
 

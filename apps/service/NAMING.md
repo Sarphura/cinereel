@@ -43,7 +43,7 @@ Features/<Feature>/
 | `Dto/` | 用例输入、输出和执行结果 | `CreateDriveRequest`、`DriveResponse` |
 | `Entity/` | EF Core 持久化 Entity 与其状态类型 | `DriveEntity`、`DriveStatus` |
 | `Repository/` | 每种 Entity 的 Repository Interface 与 EF Core Adapter | `IDriveRepository`、`DriveRepository` |
-| `Model/` | 值对象、领域标识和分类类型 | `DriveId`、`DriveContentTypeId` |
+| `Model/` | 值对象、领域标识和分类类型 | `DriveId`、`DriveKey` |
 | `Client/` | 外部进程或第三方依赖的 Client Interface 与 Adapter | `IHyperClient`、`HyperClient` |
 | `Configuration/` | Feature 依赖注册和 EF Core Entity Configuration | `DriveConfiguration`、`DriveEntityConfiguration` |
 | `Job/` | 后台调度、恢复或补偿任务 | `DriveCreationJob` |
@@ -99,11 +99,30 @@ Configuration    -> 只负责组合和依赖注册
 
 ## 文件与类型
 
-- 每个可独立复用或查找的顶层类型放在独立文件中，文件名与类型名一致。
+- 每个可独立复用或查找的顶层类型默认放在独立文件中，文件名与类型名一致。
+- Drive Feature 中下表列出的相关类型是明确例外，按所属类型和用例职责共置，保持顶层声明、原有类型名、可见性、字段契约、校验逻辑及枚举成员值；不嵌套进包装类，也不合并成通用结果类型。其他类型继续按职责分目录。
 - 仅供单个类型使用的私有嵌套类型可以保留在同一文件。
-- 不使用 `DriveContracts.cs`、`DriveTypes.cs`、`DriveDtos.cs` 等聚合文件承载多个顶层类型。
+- 不使用 `DriveContracts.cs`、`DriveTypes.cs` 等跨职责聚合文件，也不使用缺少职责前缀的 `Contracts.cs`、`Types.cs` 或 `Dtos.cs`；下表中的共置文件是按职责分组的明确例外。
 - 类型默认使用 `sealed`；只有明确存在继承需求时例外。
 - Controller action、公共应用 Interface 及其参数和返回 DTO 使用 `public`；Feature Implementation 默认使用 `internal`。
+
+Drive Feature 的共置类型组织如下：
+
+| 类型 | 所在文件 |
+|---|---|
+| `DriveStatus`、`DriveRelationType` | `Entity/DriveEntity.cs` |
+| `DriveContentTypeId` 值对象 | `Entity/DriveEntity.cs` |
+| `DriveId`、`DriveKey`、`DriveName`、`DriveRemark`、`IdempotencyKey` | `Model/DriveValues.cs` |
+| `DriveFilePath`、`DriveDirectoryPath`、`DriveDirectoryCursor` | `Model/DriveFileModels.cs` |
+| `Publication`、`PublicationFailure`、`PublicationStatus`、`PublicationActionType` | `Model/Publication.cs` |
+| Drive 创建、查询、备注、重试、删除的 DTO 与结果码 | `Dto/DriveDtos.cs` |
+| 目录列举、文件增加、文件删除、目录删除的 DTO 与应用结果码 | `Dto/DriveFileDtos.cs` |
+| Publication 查询、发布、取消发布的 DTO 与结果码 | `Dto/PublicationDtos.cs` |
+| `HyperDirectoryPage`、`HyperDirectoryEntry`、三个 `Hyper*ResultCode` 和 `HyperClientException` | `Client/HyperClientContracts.cs` |
+
+相关 Request、Response、Result 和 ResultCode 在同一职责文件内组织，已有 Result 的结果码与其相邻；直接返回枚举的用例不额外增加 Result 包装类。Hyper 协议结果由应用 Service 映射为应用结果，不放入 `Dto/`。
+
+`DriveContentTypeId` 与 `DriveEntity` 同文件，但仍是独立的 `public readonly record struct`，校验逻辑保留在值对象中。Entity 的 `ContentTypeId` 仍以字符串持久化；Controller 与 Service 使用值对象校验输入，无须依赖 Entity。
 
 ## Controller
 
@@ -196,6 +215,7 @@ HyperClient.cs
 ```
 
 - `IHyperClient` 表示 Cinereel 自己维护的 Hyper Client 进程这一远程依赖。
+- `IHyperClient.cs` 与 `HyperClient.cs` 分别保存 Interface 与 Adapter；其目录响应、结果码和协议异常统一放在 `HyperClientContracts.cs`，保持内部顶层类型，不混入应用 DTO 或其他职责的异常。
 - HTTP 路由、JSON、流式文件正文、固定存储类型和错误协议封装在 `HyperClient` Adapter 内。
 - Drive 文件调用向 `IHyperClient` 传递 `DriveKey`、规范路径和文件 I/O 意图；目录投影、协议保留路径保护与实际存储状态检查由 Hyper Client 负责。
 - 当前只有一个生产 Adapter 时，不使用 `HyperDriveHttpClient`、`HyperDriveClient` 或 `HyperHttpAdapter`。
@@ -220,7 +240,7 @@ DriveEntityConfiguration
 
 - 继承 `BackgroundService` 的恢复、补偿或定时任务使用 `Job` 后缀，例如 `DriveCreationJob`。
 - 不使用 `Worker` 或 `Service` 后缀表达后台任务。
-- Exception 跟随所属职责放置，例如 `Client/HyperClientException.cs`。
+- Exception 跟随所属职责放置；`HyperClientException` 与相关 Hyper 契约共置于 `Client/HyperClientContracts.cs`。
 - 不创建统一 `Exception/` 目录，也不把多个不相关 Exception 合并进 `DriveExceptions.cs`。
 
 ## 重命名映射
