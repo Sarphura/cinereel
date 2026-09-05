@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import { tanstackRouter } from '@tanstack/router-plugin/vite'
 
 export default defineConfig(({ mode }) => {
-  const servicePort = mode === 'peer' ? 3001 : 3000;
+  const servicePort = mode === 'peer' ? 5238 : 5237;
 
   return {
     base: '/',

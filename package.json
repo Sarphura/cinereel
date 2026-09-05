@@ -4,18 +4,18 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev:ui": "pnpm --filter ui dev",
-    "dev:service": "pnpm --filter @cinereel/service dev",
-    "dev:ui:peer": "pnpm --filter ui dev:peer",
-    "dev:service:peer": "pnpm --filter @cinereel/service dev:peer",
+    "dev:ui": "pnpm --filter @cinereel/ui dev",
+    "dev:service": "dotnet watch --project apps/service/Cinereel.csproj run -- --environment Development --urls http://localhost:5237",
+    "dev:ui:peer": "pnpm --filter @cinereel/ui dev:peer",
+    "dev:service:peer": "dotnet watch --project apps/service/Cinereel.csproj run -- --environment Development --urls http://localhost:5238 --ConnectionStrings:Cinereel \"Data Source=cinereel-peer.db\"",
 
     "dev:client": "pnpm --filter @cinereel/hyper-client dev",
 
-    "build": "pnpm --filter ui build",
+    "build": "pnpm --filter @cinereel/ui build",
     "build:client": "pnpm --filter @cinereel/hyper-client build",
-    "start": "pnpm --filter @cinereel/service start",
+    "start": "dotnet run --project apps/service/Cinereel.csproj -- --urls http://localhost:5237",
     "start:client": "pnpm --filter @cinereel/hyper-client start",
-    "test:service": "pnpm --filter @cinereel/service test"
+    "test:service": "dotnet test apps/service/tests/Cinereel.Tests/Cinereel.Tests.csproj"
   },
   "author": "Sarphura",
   "license": "AGPL-3.0-only",

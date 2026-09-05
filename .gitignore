@@ -64,6 +64,9 @@ apps/server/cache/
 apps/service/cinereel.db
 apps/service/cinereel.db-shm
 apps/service/cinereel.db-wal
+apps/service/cinereel-peer.db
+apps/service/cinereel-peer.db-shm
+apps/service/cinereel-peer.db-wal
 tmp/
 temp/
 
