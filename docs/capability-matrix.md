@@ -1,7 +1,7 @@
 # Cinereel 三端能力总览
 
 - 盘点日期：2026-09-05
-- 对应基线：`b440d41`，另包含当前工作区尚未提交的 Hyper Client 读取、离线任务及 DriveManifest 实现
+- 对应基线：`8fd69fe`，另包含本次 Hyper Client 离线任务实现
 - 范围：Web 前端 `apps/web`、C# 后端 `apps/service`、Hyper Client `apps/hyper-client`
 - 文档性质：当前实现状态快照，不替代 [领域术语](../CONTEXT.md)、[后端规范](../apps/service/NAMING.md) 或 [ADR](adr/)。
 
@@ -114,7 +114,7 @@
 
 Hyper Client 返回原文件字节，支持 MIME、HEAD、Range 与固定版本；浏览器是否能播放取决于原文件容器和编码。旧 Web 视频组件期待的转码输出尚未实现，C# 也尚无正文代理 Interface。
 
-离线任务缓存数据块，不导出普通目录。进度是处理的内容字节，包含已有缓存；恢复时当前文件进度可能回退。任务固定版本且不自动跟踪源端后续变化，取消和暂停不清块；完成记录不保证显式清理之后缓存仍然存在。
+离线任务缓存普通文件的数据块，根目录任务排除 `/.cinereel` 协议目录，不导出普通目录。进度是处理的内容字节，包含已有缓存；恢复时当前文件进度可能回退。任务固定版本且不自动跟踪源端后续变化，取消和暂停不清块；完成记录不保证显式清理之后缓存仍然存在。
 
 文件操作以及排队、运行、暂停的任务会阻止 Drive 卸载／删除／清理测试，返回 `409`。本期未增加自动缓存淘汰、配额或可靠空间回收。具体契约见 [Hyper Client README](../apps/hyper-client/README.md) 与 [ADR-0010](adr/0010-stream-files-and-persist-offline-download-tasks.md)。
 
