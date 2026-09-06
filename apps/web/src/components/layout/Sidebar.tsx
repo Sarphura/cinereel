@@ -69,7 +69,7 @@ export const Sidebar = () => {
               label="发布"
               color="#f59e0b"
               to="/publish"
-              search={{ driveKey: undefined }}
+              search={{ driveId: undefined }}
             />
           </div>
         </div>

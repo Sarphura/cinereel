@@ -7,6 +7,9 @@ internal sealed class DriveFileService(
     IHyperClient hyperClient,
     ILogger<DriveFileService> logger) : IDriveFileService
 {
+    private const string HyperDriveWriteKeyUnavailableMessage =
+        "Hyper Client 当前没有该 Drive 的本地写密钥，请检查 CONFIG_DIR 是否与创建 Drive 时一致。";
+
     private readonly long maxFileSize = IDriveFileService.MaxFileSize;
 
     internal DriveFileService(
@@ -163,7 +166,7 @@ internal sealed class DriveFileService(
                 HyperAddFileResultCode.Created => Result<object>.Created(null!),
                 HyperAddFileResultCode.AlreadyExists => Result<object>.Conflict("目标路径已经存在。"),
                 HyperAddFileResultCode.DriveNotWritable =>
-                    Result<object>.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。"),
+                    Result<object>.Forbidden(HyperDriveWriteKeyUnavailableMessage),
                 HyperAddFileResultCode.FileTooLarge => Result<object>.Invalid(
                     new ValidationError("文件不能超过 500 MiB。")),
                 _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
@@ -230,7 +233,7 @@ internal sealed class DriveFileService(
                 HyperDeleteFileResultCode.Deleted => Result.NoContent(),
                 HyperDeleteFileResultCode.NotFound => Result.NotFound("目标文件不存在。"),
                 HyperDeleteFileResultCode.DriveNotWritable =>
-                    Result.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。"),
+                    Result.Forbidden(HyperDriveWriteKeyUnavailableMessage),
                 _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
             };
         }
@@ -289,7 +292,7 @@ internal sealed class DriveFileService(
             {
                 HyperDeleteDirectoryResultCode.Deleted => Result.NoContent(),
                 HyperDeleteDirectoryResultCode.DriveNotWritable =>
-                    Result.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。"),
+                    Result.Forbidden(HyperDriveWriteKeyUnavailableMessage),
                 _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
             };
         }

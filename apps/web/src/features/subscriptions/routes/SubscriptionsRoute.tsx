@@ -41,7 +41,7 @@ export function SubscriptionsRoute() {
   const [resourceMenuState, setResourceMenuState] = useState<{ node: ResourceTreeNode; x: number; y: number } | null>(null);
   const selectedDrive = drives.find((drive) => drive.driveKey === selectedDriveKey) ?? null;
   const preview = useDrivePreview(selectedDriveKey);
-  const { router, setDriveKey, replaceAndInvalidate } = useDriveSearchSync('/subscribe', selectedDriveKey, search.driveKey);
+  const { router, setDriveKey, replaceAndInvalidate } = useDriveSearchSync(selectedDriveKey, search.driveKey);
   const queryClient = useQueryClient();
 
   const invalidateSubscribeData = async (driveKey?: string | null) => {

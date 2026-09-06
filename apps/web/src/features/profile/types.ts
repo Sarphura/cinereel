@@ -6,6 +6,7 @@ export type ProfileRecord = {
   avatarUrl: string | null;
   updatedAt: number;
   collections: Array<{
+    driveId?: string;
     driveKey: string;
     name: string;
     addedAt: number;

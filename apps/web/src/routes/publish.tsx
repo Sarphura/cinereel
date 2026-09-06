@@ -5,15 +5,21 @@ import { PublishRoutePending, PublishRouteView } from '../features/publish/route
 export const Route = createFileRoute('/publish')({
   pendingMs: 0,
   pendingComponent: PublishRoutePending,
-  validateSearch: (search: Record<string, unknown>) => ({
-    driveKey: typeof search.driveKey === 'string' && search.driveKey ? search.driveKey : undefined,
-  }),
+  validateSearch: (search: Record<string, unknown>) => {
+    const driveId = typeof search.driveId === 'string' && search.driveId
+      ? search.driveId
+      : typeof search.driveKey === 'string' && search.driveKey
+        ? search.driveKey
+        : undefined;
+
+    return { driveId };
+  },
   loaderDeps: ({ search }) => ({
-    driveKey: search.driveKey,
+    driveId: search.driveId,
   }),
   loader: async ({ deps }) => {
     try {
-      return await loadPublishedExplorerData(deps.driveKey);
+      return await loadPublishedExplorerData(deps.driveId);
     } catch (error) {
       return { drives: [], selectedDriveKey: null, resourceTree: null, error: error instanceof Error ? error.message : '数据加载失败。' };
     }

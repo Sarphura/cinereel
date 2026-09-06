@@ -84,8 +84,16 @@ export function getDriveSelectionKey(drive: DriveRecord) {
 }
 
 export function resolveSelectedDriveKey(drives: DriveRecord[], requestedDriveKey?: string) {
-  if (requestedDriveKey && drives.some((drive) => getDriveSelectionKey(drive) === requestedDriveKey)) {
-    return requestedDriveKey;
+  if (requestedDriveKey) {
+    const selectedDrive = drives.find((drive) => (
+      getDriveSelectionKey(drive) === requestedDriveKey
+      || drive.driveId === requestedDriveKey
+      || drive.driveKey === requestedDriveKey
+    ));
+
+    if (selectedDrive) {
+      return getDriveSelectionKey(selectedDrive);
+    }
   }
 
   return drives[0] ? getDriveSelectionKey(drives[0]) : null;

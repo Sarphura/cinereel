@@ -1,29 +1,26 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { IconUpload } from '../../../components/icons/Icons';
-import { FormDialog } from '../../../components/ui/FormDialog';
 import { DriveSummaryHeader } from '../../drive/components/DriveSummaryHeader';
 import type { DriveRecord } from '../../drive/types';
-import { ManualMovieMountDialog } from './ManualMovieMountDialog';
-import type { ManualMovieMountInput } from '../../jobs/api';
 
 interface PublishDetailHeaderProps {
   drive: DriveRecord | null;
   submitting: boolean;
-  defaultMountPath?: string | null;
-  onMount: (targetPath: string) => Promise<void>;
-  onManualMovieMount: (input: ManualMovieMountInput) => Promise<void>;
+  onUpload: (files: File[]) => Promise<void>;
 }
+
+const directoryInputAttributes = {
+  directory: '',
+  webkitdirectory: '',
+} as Record<string, string>;
 
 export function PublishDetailHeader({
   drive,
   submitting,
-  defaultMountPath,
-  onMount,
-  onManualMovieMount,
+  onUpload,
 }: PublishDetailHeaderProps) {
-  const [showMountDialog, setShowMountDialog] = useState(false);
-  const [showManualMovieMountDialog, setShowManualMovieMountDialog] = useState(false);
-  const [mountPath, setMountPath] = useState('');
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const directoryInputRef = useRef<HTMLInputElement | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   if (!drive) {
@@ -34,91 +31,62 @@ export function PublishDetailHeader({
     return <DriveSummaryHeader drive={drive} />;
   }
 
-  const handleSubmit = async () => {
-    setError(null);
+  const handleFileSelection = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    event.target.value = '';
+    if (files.length === 0) {
+      return;
+    }
 
+    setError(null);
     try {
-      await onMount(mountPath);
-      setMountPath('');
-      setShowMountDialog(false);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '创建挂载任务失败。');
+      await onUpload(files);
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : '上传文件失败。');
     }
-  };
-
-  const handleClose = () => {
-    if (!submitting) {
-      setError(null);
-      setMountPath('');
-      setShowMountDialog(false);
-    }
-  };
-
-  const openAutomaticMountDialog = () => {
-    setMountPath(defaultMountPath ?? '');
-    setError(null);
-    setShowMountDialog(true);
   };
 
   return (
-    <>
+    <div className="flex min-w-0 flex-col gap-2">
       <DriveSummaryHeader drive={drive} />
       <div className="flex items-center gap-2">
-        {drive.type === 'movie' ? (
-          <>
-            <button
-              onClick={() => setShowManualMovieMountDialog(true)}
-              disabled={submitting}
-              className="flex items-center gap-2 h-7 px-3 bg-[#c47e09] rounded text-[11px] font-bold text-white hover:bg-[#d48e19] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(196,126,9,0.24)]"
-            >
-              <IconUpload className="size-3.5" />
-              手动挂载
-            </button>
-            <button
-              onClick={openAutomaticMountDialog}
-              disabled={submitting}
-              className="flex items-center gap-2 h-7 px-3 bg-white/8 rounded text-[11px] font-bold text-[#d4d4d8] hover:bg-white/12 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <IconUpload className="size-3.5" />
-              自动挂载
-            </button>
-          </>
-        ) : (
-          <button
-            onClick={openAutomaticMountDialog}
-            disabled={submitting}
-            className="flex items-center gap-2 h-7 px-3 bg-[#c47e09] rounded text-[11px] font-bold text-white hover:bg-[#d48e19] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(196,126,9,0.24)]"
-          >
-            <IconUpload className="size-3.5" />
-            {submitting ? '进行中' : '挂载'}
-          </button>
-        )}
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={submitting}
+          className="flex h-7 items-center gap-2 rounded bg-[#c47e09] px-3 text-[11px] font-bold text-white shadow-[0_0_15px_rgba(196,126,9,0.24)] transition-all hover:bg-[#d48e19] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <IconUpload className="size-3.5" />
+          {submitting ? '上传中...' : '上传文件'}
+        </button>
+        <button
+          type="button"
+          onClick={() => directoryInputRef.current?.click()}
+          disabled={submitting}
+          className="flex h-7 items-center gap-2 rounded bg-white/8 px-3 text-[11px] font-bold text-[#d4d4d8] transition-all hover:bg-white/12 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <IconUpload className="size-3.5" />
+          {submitting ? '上传中...' : '上传目录'}
+        </button>
       </div>
-      <FormDialog
-        open={showMountDialog}
-        title="自动挂载目录"
-        description={`将本地目录挂载到 ${drive.name}`}
-        label="本地路径"
-        value={mountPath}
-        placeholder="/path/to/local/folder"
-        submitLabel="加入任务"
-        submittingLabel="提交中..."
-        error={error}
-        disabled={submitting}
-        onClose={handleClose}
-        onChange={(value) => {
-          setMountPath(value);
-          setError(null);
-        }}
-        onSubmit={() => void handleSubmit()}
+      <input
+        ref={fileInputRef}
+        aria-label="选择上传文件"
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(event) => void handleFileSelection(event)}
       />
-      <ManualMovieMountDialog
-        open={showManualMovieMountDialog}
-        submitting={submitting}
-        driveName={drive.name}
-        onClose={() => setShowManualMovieMountDialog(false)}
-        onMount={onManualMovieMount}
+      <input
+        ref={directoryInputRef}
+        aria-label="选择上传目录"
+        type="file"
+        multiple
+        className="hidden"
+        {...directoryInputAttributes}
+        onChange={(event) => void handleFileSelection(event)}
       />
-    </>
+      {error ? <div className="text-xs text-[#fca5a5]">{error}</div> : null}
+    </div>
   );
 }

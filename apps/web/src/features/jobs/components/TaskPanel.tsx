@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from '@tanstack/react-router';
 import { addToast } from '@heroui/toast';
-import { listMountJobs, listScanJobs } from '../api';
+import { listScanJobs } from '../api';
 import { listDownloadJobs } from '../../downloads/api';
 import { IconHeartbeatRing } from '../../../components/icons/Icons';
 import { normalizeTaskProgress, taskProgressToDash } from '../task-progress';
@@ -11,7 +11,6 @@ export const TaskPanel = () => {
   const [isTaskPanelOpen, setIsTaskPanelOpen] = useState(false);
   const taskPanelRef = useRef<HTMLDivElement | null>(null);
   const previousJobStatesRef = useRef<Record<string, string>>({});
-  const previousMountJobStatesRef = useRef<Record<string, string>>({});
   const previousScanJobStatesRef = useRef<Record<string, string>>({});
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -23,17 +22,6 @@ export const TaskPanel = () => {
       const jobs = query.state.data ?? [];
       const hasActive = jobs.some(
         (job) => job.status === 'queued' || job.status === 'downloading',
-      );
-      return hasActive ? 1000 : false;
-    },
-  });
-  const mountJobsQuery = useQuery({
-    queryKey: ['mount-jobs'],
-    queryFn: listMountJobs,
-    refetchInterval: (query) => {
-      const jobs = query.state.data ?? [];
-      const hasActive = jobs.some(
-        (job) => job.status === 'queued' || job.status === 'mounting',
       );
       return hasActive ? 1000 : false;
     },
@@ -79,9 +67,6 @@ export const TaskPanel = () => {
   const activeTasks = (downloadJobsQuery.data ?? []).filter((job) => (
     job.status === 'queued' || job.status === 'downloading'
   ));
-  const activeMountTasks = (mountJobsQuery.data ?? []).filter((job) => (
-    job.status === 'queued' || job.status === 'mounting'
-  ));
   const activeScanTasks = (scanJobsQuery.data ?? []).filter((job) => (
     job.status === 'queued' || job.status === 'scanning'
   ));
@@ -94,16 +79,6 @@ export const TaskPanel = () => {
     progress: number;
     tone?: 'default' | 'failed';
   }> = [
-    ...activeMountTasks.map((task) => ({
-      id: `mount-${task.id}`,
-      title: `挂载任务：${task.targetPath.split(/[\\/]/).filter(Boolean).pop() ?? task.targetPath}`,
-      subtitle: task.currentFilePath
-        ? `处理中：${task.currentFilePath}`
-        : task.status === 'queued'
-          ? '等待开始'
-          : `文件 ${task.processedFiles}/${task.totalFiles || 0}`,
-      progress: normalizeTaskProgress(task.progress),
-    })),
     ...activeTasks.map((task) => ({
       id: `download-${task.id}`,
       title: `下载任务：${task.fileName}`,
@@ -157,33 +132,6 @@ export const TaskPanel = () => {
       await router.invalidate();
     })();
   }, [downloadJobsQuery.data, queryClient, router]);
-
-  useEffect(() => {
-    const jobs = mountJobsQuery.data ?? [];
-    const previousJobStates = previousMountJobStatesRef.current;
-    const hasCompletedTransition = jobs.some((job) => {
-      const previousStatus = previousJobStates[job.id];
-      return (
-        (previousStatus === 'queued' || previousStatus === 'mounting')
-        && (job.status === 'completed' || job.status === 'failed')
-      );
-    });
-
-    previousMountJobStatesRef.current = jobs.reduce<Record<string, string>>((accumulator, job) => {
-      accumulator[job.id] = job.status;
-      return accumulator;
-    }, {});
-
-    if (!hasCompletedTransition) {
-      return;
-    }
-
-    void (async () => {
-      await queryClient.refetchQueries({ queryKey: ['drive-tree'] });
-      await queryClient.refetchQueries({ queryKey: ['drives', 'local'], exact: true });
-      await router.invalidate();
-    })();
-  }, [mountJobsQuery.data, queryClient, router]);
 
   useEffect(() => {
     const jobs = scanJobsQuery.data ?? [];

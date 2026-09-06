@@ -64,30 +64,94 @@ export async function listPublishedDrives() {
   return filterDrivesByScope(response.map(normalizeDriveResponse), 'local');
 }
 
-export async function getPublishedDriveTree(driveKey: string) {
+export async function getPublishedDriveTree(driveId: string) {
   const drives = queryClient.getQueryData<DriveRecord[]>(publishedDrivesQueryOptions().queryKey) ?? [];
-  const selectedDrive = drives.find((drive) => (drive.driveId ?? drive.driveKey) === driveKey);
+  const selectedDrive = drives.find((drive) => (
+    getDriveSelectionKey(drive) === driveId
+    || drive.driveId === driveId
+    || drive.driveKey === driveId
+  ));
+  const resolvedDriveId = selectedDrive ? getDriveSelectionKey(selectedDrive) : driveId;
 
   try {
-    const response = await requestJson<ResourceTreeNode>(`/api/drives/${driveKey}/tree`);
-    return response;
+    if (!selectedDrive) {
+      return null;
+    }
+
+    return await loadDriveDirectoryTree(
+      resolvedDriveId,
+      '/',
+      selectedDrive.name,
+      selectedDrive.updatedAt,
+    );
   } catch {
     return selectedDrive ? createEmptyDriveTree(selectedDrive) : null;
   }
 }
 
-export async function refreshPublishedDriveTree(driveKey: string) {
-  const drives = queryClient.getQueryData<DriveRecord[]>(publishedDrivesQueryOptions().queryKey) ?? [];
-  const selectedDrive = drives.find((drive) => (drive.driveId ?? drive.driveKey) === driveKey);
+export async function refreshPublishedDriveTree(driveId: string) {
+  return getPublishedDriveTree(driveId);
+}
 
-  try {
-    const response = await requestJson<ResourceTreeNode>(`/api/drives/${driveKey}/refresh`, {
-      method: 'POST',
-    });
-    return response;
-  } catch {
-    return selectedDrive ? createEmptyDriveTree(selectedDrive) : null;
-  }
+type DriveDirectoryResponse = {
+  path: string;
+  driveVersion: number;
+  entries: Array<{
+    path: string;
+    name: string;
+    type: 'file' | 'directory' | 'symlink';
+    size: number | null;
+  }>;
+  nextCursor: string | null;
+};
+
+async function loadDriveDirectoryTree(
+  driveId: string,
+  path: string,
+  name: string,
+  updatedAt: number,
+): Promise<ResourceTreeNode> {
+  const entries: DriveDirectoryResponse['entries'] = [];
+  let cursor: string | undefined;
+
+  do {
+    const search = new URLSearchParams({ path, limit: '500' });
+    if (cursor) {
+      search.set('cursor', cursor);
+    }
+
+    const response = await requestJson<DriveDirectoryResponse>(
+      `/api/drives/${driveId}/files/entries?${search.toString()}`,
+    );
+    entries.push(...response.entries);
+    cursor = response.nextCursor ?? undefined;
+  } while (cursor);
+
+  const children = await Promise.all(
+    entries.map((entry) => {
+      if (entry.type === 'directory') {
+        return loadDriveDirectoryTree(driveId, entry.path, entry.name, updatedAt);
+      }
+
+      return Promise.resolve<ResourceTreeNode>({
+        path: entry.path,
+        name: entry.name,
+        type: 'file',
+        size: entry.size ?? 0,
+        updatedAt,
+        children: [],
+      });
+    }),
+  );
+
+  return {
+    path,
+    name,
+    type: 'directory',
+    size: 0,
+    updatedAt,
+    children,
+  };
 }
 
 export function publishedDrivesQueryOptions() {
@@ -97,24 +161,24 @@ export function publishedDrivesQueryOptions() {
   });
 }
 
-export function publishedDriveTreeQueryOptions(driveKey: string) {
+export function publishedDriveTreeQueryOptions(driveId: string) {
   return queryOptions({
-    queryKey: ['drive-tree', driveKey] as const,
-    queryFn: () => getPublishedDriveTree(driveKey),
+    queryKey: ['drive-tree', driveId] as const,
+    queryFn: () => getPublishedDriveTree(driveId),
   });
 }
 
-export async function loadPublishedExplorerData(requestedDriveKey?: string): Promise<DriveExplorerLoaderData> {
+export async function loadPublishedExplorerData(requestedDriveId?: string): Promise<DriveExplorerLoaderData> {
   const drives = await queryClient.ensureQueryData(publishedDrivesQueryOptions());
-  const selectedDriveKey = resolveSelectedDriveKey(drives, requestedDriveKey);
-  const selectedDrive = drives.find((drive) => getDriveSelectionKey(drive) === selectedDriveKey);
-  const resourceTree = selectedDriveKey && (selectedDrive?.status ?? 'ready') === 'ready'
-    ? await queryClient.ensureQueryData(publishedDriveTreeQueryOptions(selectedDriveKey))
+  const selectedDriveId = resolveSelectedDriveKey(drives, requestedDriveId);
+  const selectedDrive = drives.find((drive) => getDriveSelectionKey(drive) === selectedDriveId);
+  const resourceTree = selectedDriveId && (selectedDrive?.status ?? 'ready') === 'ready'
+    ? await queryClient.ensureQueryData(publishedDriveTreeQueryOptions(selectedDriveId))
     : null;
 
   return {
     drives,
-    selectedDriveKey,
+    selectedDriveKey: selectedDriveId,
     resourceTree,
   };
 }
@@ -134,8 +198,8 @@ export async function createPublishedDrive(input: { name: string; contentTypeId:
   return normalizeDriveResponse(response);
 }
 
-export async function renamePublishedDrive(driveKey: string, name: string) {
-  const response = await requestJson<DriveResponse>(`/api/drives/${driveKey}`, {
+export async function renamePublishedDrive(driveId: string, name: string) {
+  const response = await requestJson<DriveResponse>(`/api/drives/${driveId}`, {
     method: 'PATCH',
     body: JSON.stringify({ name }),
   });
@@ -156,38 +220,86 @@ export async function retryPublishedDriveCreation(driveId: string) {
   });
 }
 
-export async function deletePublishedDrive(driveKey: string) {
-  await requestJson(`/api/drives/${driveKey}`, {
+export async function deletePublishedDrive(driveId: string) {
+  await requestJson(`/api/drives/${driveId}`, {
     method: 'DELETE',
   });
 }
 
-export async function moveDriveFile(driveKey: string, from: string, to: string) {
-  await requestJson(`/api/drives/${driveKey}/files/move`, {
+export async function moveDriveFile(driveId: string, from: string, to: string) {
+  await requestJson(`/api/drives/${driveId}/files/move`, {
     method: 'POST',
     body: JSON.stringify({ from, to }),
   });
 }
 
-export async function copyDriveFile(driveKey: string, from: string, to: string) {
-  await requestJson(`/api/drives/${driveKey}/files/copy`, {
+export async function copyDriveFile(driveId: string, from: string, to: string) {
+  await requestJson(`/api/drives/${driveId}/files/copy`, {
     method: 'POST',
     body: JSON.stringify({ from, to }),
   });
 }
 
-export async function createDriveFolder(driveKey: string, path: string) {
-  await requestJson(`/api/drives/${driveKey}/files/folder`, {
+export async function createDriveFolder(driveId: string, path: string) {
+  await requestJson(`/api/drives/${driveId}/files/folder`, {
     method: 'POST',
     body: JSON.stringify({ path }),
   });
 }
 
-export async function deleteDriveFile(driveKey: string, path: string) {
-  await requestJson(`/api/drives/${driveKey}/files`, {
+export async function deleteDriveFile(driveId: string, path: string) {
+  const search = new URLSearchParams({ path });
+  await requestJson(`/api/drives/${driveId}/files?${search.toString()}`, {
     method: 'DELETE',
-    body: JSON.stringify({ path }),
   });
+}
+
+export async function uploadDriveFile(driveId: string, path: string, file: Blob) {
+  const search = new URLSearchParams({ path });
+  await requestJson(`/api/drives/${driveId}/files?${search.toString()}`, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+    },
+    body: file,
+  });
+}
+
+export async function uploadDriveFiles(driveId: string, files: readonly File[]) {
+  if (files.length === 0) {
+    throw new Error('请选择要上传的文件。');
+  }
+
+  const result = await runBatchFileOperation(
+    [...files],
+    async (file) => uploadDriveFile(driveId, toDriveUploadPath(file), file),
+  );
+
+  if (result.failures.length > 0) {
+    const firstFailure = result.failures[0];
+    throw new Error(
+      `上传完成 ${files.length - result.failures.length}/${files.length} 个文件。` +
+      ` ${getFileDisplayName(firstFailure.item)}：${firstFailure.error}`,
+    );
+  }
+}
+
+function toDriveUploadPath(file: File) {
+  const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+  const segments = relativePath
+    .replaceAll('\\', '/')
+    .split('/')
+    .filter(Boolean);
+
+  if (segments.length === 0 || segments.some((segment) => segment === '.' || segment === '..')) {
+    throw new Error(`文件路径无效：${relativePath}`);
+  }
+
+  return `/${segments.join('/')}`;
+}
+
+function getFileDisplayName(file: File) {
+  return (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
 }
 
 /**

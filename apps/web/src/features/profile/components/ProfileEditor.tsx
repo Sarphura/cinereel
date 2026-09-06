@@ -177,7 +177,7 @@ export function ProfileEditor() {
               <Link
                 key={collection.driveKey}
                 to="/publish"
-                search={{ driveKey: collection.driveKey }}
+                search={{ driveId: collection.driveId ?? collection.driveKey }}
                 className="flex items-center justify-between rounded-2xl border border-[#27272a] bg-[#18181b] px-4 py-3 transition hover:border-[#f59e0b]/40 hover:bg-[#1a1a1f]"
               >
                 <div className="min-w-0">

@@ -1,8 +1,8 @@
 import { startTransition, useEffect } from 'react';
 import { useNavigate, useRouter } from '@tanstack/react-router';
 
-export function useDriveSearchSync(from: '/publish' | '/subscribe', selectedDriveKey: string | null, currentDriveKey?: string) {
-  const navigate = useNavigate({ from });
+export function useDriveSearchSync(selectedDriveKey: string | null, currentDriveKey?: string) {
+  const navigate = useNavigate({ from: '/subscribe' });
   const router = useRouter();
 
   useEffect(() => {
@@ -38,6 +38,47 @@ export function useDriveSearchSync(from: '/publish' | '/subscribe', selectedDriv
   return {
     router,
     setDriveKey,
+    replaceAndInvalidate,
+  };
+}
+
+export function usePublishDriveSearchSync(selectedDriveId: string | null, currentDriveId?: string) {
+  const navigate = useNavigate({ from: '/publish' });
+  const router = useRouter();
+
+  useEffect(() => {
+    if (currentDriveId === selectedDriveId) {
+      return;
+    }
+
+    startTransition(() => {
+      void navigate({
+        search: { driveId: selectedDriveId ?? undefined },
+        replace: true,
+      });
+    });
+  }, [currentDriveId, navigate, selectedDriveId]);
+
+  const setDriveId = (driveId?: string | null) => {
+    startTransition(() => {
+      void navigate({
+        search: { driveId: driveId ?? undefined },
+        replace: true,
+      });
+    });
+  };
+
+  const replaceAndInvalidate = async (driveId?: string | null) => {
+    await navigate({
+      search: { driveId: driveId ?? undefined },
+      replace: true,
+    });
+    await router.invalidate();
+  };
+
+  return {
+    router,
+    setDriveId,
     replaceAndInvalidate,
   };
 }

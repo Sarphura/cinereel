@@ -10,15 +10,15 @@ import {
   renamePublishedDrive,
   retryPublishedDriveCreation,
   savePublishedDriveRemark,
+  uploadDriveFiles,
 } from '../api/api';
-import { mountDrive, mountMovieManually, type ManualMovieMountInput } from '../../jobs/api';
 import type { DriveContentTypeId, DriveRecord, ResourceTreeNode } from '../../drive/types';
 import { getDriveSelectionKey } from '../../drive/utils';
 
 interface UsePublishDriveActionsOptions {
   drives: DriveRecord[];
   selectedDrive: DriveRecord | null;
-  replaceAndInvalidate: (driveKey: string | null) => Promise<void>;
+  replaceAndInvalidate: (driveId: string | null) => Promise<void>;
   onClosePreview: () => void;
 }
 
@@ -36,13 +36,12 @@ export interface PublishDriveActions {
   setError: (error: string | null) => void;
   // Handlers
   handleCreateDrive: (label: string, contentTypeId: DriveContentTypeId) => Promise<void>;
-  handleRenameDrive: (driveKey: string, name: string) => Promise<void>;
+  handleRenameDrive: (driveId: string, name: string) => Promise<void>;
   handleDelete: () => Promise<void>;
-  handlePublish: (targetPath: string) => Promise<void>;
-  handleManualMovieMount: (input: ManualMovieMountInput) => Promise<void>;
+  handleUpload: (files: readonly File[]) => Promise<void>;
   handleSaveRemark: (driveId: string, remark: string) => Promise<void>;
   handleRetryCreation: () => Promise<void>;
-  handleRefresh: (selectedDriveKey: string | null) => Promise<void>;
+  handleRefresh: (selectedDriveId: string | null) => Promise<void>;
 }
 
 export function usePublishDriveActions({
@@ -63,12 +62,12 @@ export function usePublishDriveActions({
   const [retryingCreation, setRetryingCreation] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const invalidatePublishData = async (driveKey?: string | null) => {
+  const invalidatePublishData = async (driveId?: string | null) => {
     await queryClient.invalidateQueries({ queryKey: publishedDrivesQueryOptions().queryKey });
     await queryClient.refetchQueries({ queryKey: publishedDrivesQueryOptions().queryKey, exact: true });
-    if (driveKey) {
-      await queryClient.invalidateQueries({ queryKey: publishedDriveTreeQueryOptions(driveKey).queryKey });
-      await queryClient.refetchQueries({ queryKey: publishedDriveTreeQueryOptions(driveKey).queryKey, exact: true });
+    if (driveId) {
+      await queryClient.invalidateQueries({ queryKey: publishedDriveTreeQueryOptions(driveId).queryKey });
+      await queryClient.refetchQueries({ queryKey: publishedDriveTreeQueryOptions(driveId).queryKey, exact: true });
     }
     await router.invalidate();
   };
@@ -94,12 +93,12 @@ export function usePublishDriveActions({
   });
 
   const renamePublishedDriveMutation = useMutation({
-    mutationFn: ({ driveKey, name }: { driveKey: string; name: string }) => renamePublishedDrive(driveKey, name),
+    mutationFn: ({ driveId, name }: { driveId: string; name: string }) => renamePublishedDrive(driveId, name),
     onSuccess: async (updatedDrive, variables) => {
       queryClient.setQueryData(publishedDrivesQueryOptions().queryKey, (current: DriveRecord[] | undefined) =>
-        current?.map((drive) => (getDriveSelectionKey(drive) === variables.driveKey ? { ...drive, ...updatedDrive } : drive)) ?? current,
+        current?.map((drive) => (getDriveSelectionKey(drive) === variables.driveId ? { ...drive, ...updatedDrive } : drive)) ?? current,
       );
-      queryClient.setQueryData(publishedDriveTreeQueryOptions(variables.driveKey).queryKey, (current: ResourceTreeNode | null | undefined) => {
+      queryClient.setQueryData(publishedDriveTreeQueryOptions(variables.driveId).queryKey, (current: ResourceTreeNode | null | undefined) => {
         if (!current) {
           return current;
         }
@@ -109,7 +108,7 @@ export function usePublishDriveActions({
           name: updatedDrive.name,
         };
       });
-      await invalidatePublishData(variables.driveKey);
+      await invalidatePublishData(variables.driveId);
       setError(null);
     },
   });
@@ -128,22 +127,6 @@ export function usePublishDriveActions({
       }
       onClosePreview();
       await replaceAndInvalidate(fallback ? getDriveSelectionKey(fallback) : null);
-      setError(null);
-    },
-  });
-
-  const mountDriveMutation = useMutation({
-    mutationFn: ({ driveKey, targetPath }: { driveKey: string; targetPath: string }) => mountDrive(driveKey, targetPath),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['mount-jobs'] });
-      setError(null);
-    },
-  });
-
-  const mountMovieManuallyMutation = useMutation({
-    mutationFn: ({ driveKey, input }: { driveKey: string; input: ManualMovieMountInput }) => mountMovieManually(driveKey, input),
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: ['mount-jobs'] });
       setError(null);
     },
   });
@@ -180,7 +163,7 @@ export function usePublishDriveActions({
     }
   };
 
-  const handleRenameDrive = async (driveKey: string, name: string) => {
+  const handleRenameDrive = async (driveId: string, name: string) => {
     const nextLabel = name.trim();
 
     if (!nextLabel) {
@@ -190,7 +173,7 @@ export function usePublishDriveActions({
     setRenaming(true);
 
     try {
-      await renamePublishedDriveMutation.mutateAsync({ driveKey, name: nextLabel });
+      await renamePublishedDriveMutation.mutateAsync({ driveId, name: nextLabel });
     } finally {
       setRenaming(false);
     }
@@ -210,35 +193,24 @@ export function usePublishDriveActions({
     }
   };
 
-  const handlePublish = async (targetPath: string) => {
+  const handleUpload = async (files: readonly File[]) => {
     if (!selectedDrive) {
       throw new Error('请先新建并选择一个 Drive。');
     }
 
-    const nextTargetPath = targetPath.trim();
-
-    if (!nextTargetPath) {
-      throw new Error('请输入要发布的本地路径。');
+    if (!selectedDrive.driveId) {
+      throw new Error('当前 Drive 缺少 driveId，无法上传文件。');
     }
 
     setSubmitting(true);
 
     try {
-      await mountDriveMutation.mutateAsync({ driveKey: getDriveSelectionKey(selectedDrive), targetPath: nextTargetPath });
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleManualMovieMount = async (input: ManualMovieMountInput) => {
-    if (!selectedDrive) {
-      throw new Error('请先新建并选择一个 Drive。');
-    }
-
-    setSubmitting(true);
-
-    try {
-      await mountMovieManuallyMutation.mutateAsync({ driveKey: getDriveSelectionKey(selectedDrive), input });
+      await uploadDriveFiles(selectedDrive.driveId, files);
+      await invalidatePublishData(selectedDrive.driveId);
+      setError(null);
+    } catch (uploadError) {
+      await invalidatePublishData(selectedDrive.driveId);
+      throw uploadError;
     } finally {
       setSubmitting(false);
     }
@@ -268,13 +240,13 @@ export function usePublishDriveActions({
     }
   };
 
-  const handleRefresh = async (selectedDriveKey: string | null) => {
+  const handleRefresh = async (selectedDriveId: string | null) => {
     setRefreshing(true);
 
     try {
-      if (selectedDriveKey) {
-        const nextTree = await refreshPublishedDriveTree(selectedDriveKey);
-        queryClient.setQueryData(publishedDriveTreeQueryOptions(selectedDriveKey).queryKey, nextTree);
+      if (selectedDriveId) {
+        const nextTree = await refreshPublishedDriveTree(selectedDriveId);
+        queryClient.setQueryData(publishedDriveTreeQueryOptions(selectedDriveId).queryKey, nextTree);
         await queryClient.invalidateQueries({ queryKey: publishedDrivesQueryOptions().queryKey });
       }
 
@@ -300,8 +272,7 @@ export function usePublishDriveActions({
     handleCreateDrive,
     handleRenameDrive,
     handleDelete,
-    handlePublish,
-    handleManualMovieMount,
+    handleUpload,
     handleSaveRemark,
     handleRetryCreation,
     handleRefresh,

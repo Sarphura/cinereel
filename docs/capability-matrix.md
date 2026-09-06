@@ -1,11 +1,11 @@
 # Cinereel 三端能力总览
 
-- 盘点日期：2026-09-05
-- 对应基线：`8fd69fe`，另包含本次 Hyper Client 离线任务实现
+- 盘点日期：2026-09-06
+- 对应基线：`cd10710`，另包含本次发布页文件上传链路接入
 - 范围：Web 前端 `apps/web`、C# 后端 `apps/service`、Hyper Client `apps/hyper-client`
 - 文档性质：当前实现状态快照，不替代 [领域术语](../CONTEXT.md)、[后端规范](../apps/service/NAMING.md) 或 [ADR](adr/)。
 
-目前已完成 Drive 基础管理、后端与 Client 的文件基础操作，以及 Hyper Client 的正文传输和离线缓存任务。C# 尚未接入正文和离线任务 Interface，前端文件管理、发布订阅、媒体库等链路还没有打通。
+目前已完成 Drive 基础管理、后端与 Client 的文件基础操作、Hyper Client 的正文传输和离线缓存任务，以及发布页的文件和目录上传链路。C# 尚未接入离线任务 Interface，Publication 发布、订阅前端和媒体库等链路仍未打通。
 
 ## 判定口径
 
@@ -32,16 +32,16 @@
 | 订阅列表 | ❌ | ✅ | 不涉及 | 后端返回已有订阅记录；前端解析格式不兼容 |
 | 发布、取消发布、发布状态 | ❌ | ❌ | ❌ | 后端有路由，但 Service 尚未实现；Client 没有可靠发布确认接口 |
 | 加入、退出 Swarm | ❌ | ❌ | ✅ | Client 的 mount / unmount；不等于产品的发布订阅 |
-| 浏览目录直接子项 | ❌ | ✅* | ✅* | 前端仍请求旧 `/tree`，未接新分页接口 |
-| 上传新增文件 | ❌ | ✅* | ✅* | 流式上传，最大 500 MiB，默认不覆盖 |
-| 删除单个文件 | ❌ | ✅ | ✅ | 前端 `path` 传参位置错误 |
-| 递归删除目录 | ❌ | ✅ | ✅ | 前端没有正确区分文件、目录删除接口；Client 逐项删除，不保证原子性 |
+| 浏览目录直接子项 | ✅* | ✅* | ✅* | Web 按 `/files/entries` 分页递归加载资源树 |
+| 上传新增文件 | ✅* | ✅* | ✅* | Web 逐个调用 DriveFile 流式上传，最大 500 MiB，默认不覆盖 |
+| 删除单个文件 | ✅ | ✅ | ✅ | Web 使用 query 参数传递路径 |
+| 递归删除目录 | ❌ | ✅ | ✅ | Web 尚未接入 `/files/entries` 删除路由；Client 逐项删除，不保证原子性 |
 | 用户文件覆盖更新 | ❌ | ❌ | ❌ | 普通文件 PUT 只有新增语义；协议文件另有条件替换 Interface |
 | 文件、目录重命名／移动／复制 | ❌ | ❌ | ❌ | 前端有交互，但接口不存在 |
 | 创建空目录 | ❌ | ❌ | ❌ | 领域设计明确不支持；前端仍残留入口 |
 | 文件读取、HTTP 下载、原文件媒体预览／播放 | ❌ | ❌ | ✅ | Client 支持 GET、HEAD、单段 Range、附件与固定版本；仅传输原文件，不转码 |
 | 单文件／目录／整盘离线缓存任务 | ❌ | ❌ | ✅ | Client 提供持久化任务、进度、暂停／继续／取消／重试与重启恢复；缓存到 Corestore |
-| 本地目录导入、手动电影挂载 | ❌ | ❌ | ❌ | 前端弹窗仍调用旧 `/api/mount` |
+| 浏览器上传文件、目录 | ✅ | ✅ | ✅ | Web 读取 File 对象并逐个调用 DriveFile；服务端不读取用户本地路径 |
 | DriveManifest、协议保留路径保护 | ❌ | ✅ | ✅ | 固定 /.cinereel/drive.json；C# 解析与持久化重试，Hyper 受限读取和条件替换；普通文件操作隔离协议目录 |
 | DriveManifest 发布者引用、PublisherIdentity | ❌ | ❌ | ❌ | 设计见 [ADR-0009](adr/0009-persist-publisher-profile-in-profile-drive.md)，尚未实现 |
 | 媒体扫描、索引、任务进度 | ❌ | ❌ | 不涉及 | 前端任务面板依赖旧接口 |
@@ -53,6 +53,8 @@
 ## 实际接口清单
 
 `{driveId}` 是 Cinereel 的 DriveId，`{driveKey}` 是 Hyperdrive 的 DriveKey，二者不能互换。目录列举接口还支持可选的 `cursor` 和 `limit`；C# 的 Web 游标与 Hyper Client 的子项名称游标不是同一种格式。
+
+发布页使用 `publish?driveId=<uuid>` 选择本地 Drive；旧的 `driveKey` 查询参数仅作为兼容输入，不再由页面生成。
 
 | 接口能力 | C# 后端 | Hyper Client |
 |---|---|---|
@@ -89,15 +91,17 @@
 
 ## 已知限制
 
-### 开发地址配置尚未对齐
+### 开发地址配置
 
-[Web 代理](../apps/web/vite.config.ts)默认把 `/api` 转发到 `localhost:3000`，而 [Hyper Client](../apps/hyper-client/src/main.ts)默认也监听 `3000`。[C# 配置](../apps/service/appsettings.json)又将该地址作为 Hyper Client 地址。前端 `/api` 应指向 C# 服务，需要为三端明确配置各自地址。
+[Web 代理](../apps/web/vite.config.ts)默认把 `/api` 转发到 C# 服务 `localhost:5237`；[C# 配置](../apps/service/appsettings.json)把 Hyper Client 配置为 `localhost:3000`。三端使用不同端口，避免 Web 请求误发到 Hyper Client。
 
-### 前端界面与现有接口存在断点
+### 前端界面与现有接口的边界
 
-[前端文件 API](../apps/web/src/features/publish/api/api.ts)仍请求 `/tree` 和 `/refresh`，失败后显示空树；删除文件把 `path` 放在 JSON 正文，当前后端要求 query，目录删除还需要单独使用 `/files/entries`。上传正文尚未接入。
+[发布页](../apps/web/src/features/publish/api/api.ts)通过 `/api/drives/{driveId}/files/entries` 递归读取资源树，并在文件批量上传结束后重新拉取。上传正文由浏览器直接流式发送到 C# DriveFile 接口，C# 再转发到 Hyper Client；服务端不读取用户本地路径。
 
-[订阅 API](../apps/web/src/features/subscriptions/api.ts)把 `GET /api/drives` 的返回值按 `{ data: [] }` 读取，当前 C# 返回的是直接数组，因此列表也未接通。`/publish` 页面目前主要管理自有 Drive 和本地目录挂载，并未实现 Publication 发布操作。
+[订阅 API](../apps/web/src/features/subscriptions/api.ts)仍把 `GET /api/drives` 的返回值按 `{ data: [] }` 读取，当前 C# 返回的是直接数组，因此订阅列表尚未接通。`/publish` 页面通过 `publish?driveId=<uuid>` 管理自有 Drive 文件，并未实现 Publication 发布操作。
+
+上传仍要求 Hyper Client 使用创建该 Drive 时的同一 `CONFIG_DIR`。如果本地写密钥缺失，DriveFile 接口会返回 `403`，发布页显示错误；这不是浏览器文件选择或上传流本身的问题。
 
 ### 文件模型的完整保证尚未实现
 
@@ -128,19 +132,19 @@ Profile Drive 和个人资料编辑页面目前只有前端草稿，后端没有
 
 发布 Drive 的跨节点引用必须使用 `publisherId` 与 `profileDriveKey`，不能使用发布者本地 `DriveId`。ProfileManifest、PublisherIdentity、签名、Key 轮换、撤销和资料缓存策略见 [ADR-0009](adr/0009-persist-publisher-profile-in-profile-drive.md)。
 
-[Hyper Drive 实现](../apps/hyper-client/src/hyper.implementation/drives.service.ts)的 mount / unmount 只控制 Swarm 加入、退出与 Drive 关闭，不建立 Cinereel Subscription 或 Publication。前端“挂载本地目录”又是另一项用例，不能因名称相同而视为已接通。
+[Hyper Drive 实现](../apps/hyper-client/src/hyper.implementation/drives.service.ts)的 mount / unmount 只控制 Swarm 加入、退出与 Drive 关闭，不建立 Cinereel Subscription 或 Publication；Web 的文件上传则走 DriveFile 文件接口。
 
 C# 删除 Drive 只写入逻辑删除状态。Client 删除接口会尝试清理本地块，但清理失败仍可能返回成功，因此不保证释放全部本地存储。
 
 ## 验证范围
 
-- 本次能力盘点只读检查了三端源码及接口注册，没有启动三端进行完整在线验收。
+- 本次能力盘点检查了三端源码及接口注册，并验证了开发环境的文件上传 HTTP 链路。
 - Hyper Client 读取与离线任务另行执行了 `test`、`typecheck`、`build`。真实双节点通过本地复制连接验证 Range 字节、完整哈希、缓存后重启断网读取、旧版本任务，以及部分缓存任务暂停／重启／恢复网络继续；未以此宣称公网 DHT 穿透或三端联通已完成。
 - Chrome 已验证通过真实 HTTP 上传与读取的 MP4、MP3 和 PNG：音视频实际播放、seek 到 7.25 秒并收到 `206`；桌面和移动视口检查通过。PDF 已验证 MIME、完整和范围字节契约，尚未验证浏览器内置 PDF 阅读器。
 - 此前标准 C# 构建、测试在依赖还原阶段被 `SQLitePCLRaw.lib.e_sqlite3` 的 `NU1903` 漏洞告警阻断。
-- DriveManifest 实现另行通过 262 项 C# 测试（验证命令使用 `-p:NuGetAudit=false`，没有修改依赖审计配置），当前 Hyper 全量 129 项测试通过。真实 Hyperdrive 协议测试覆盖条件并发、大小限制、中断上传和保留目录隔离。
+- C# 全量测试共 262 项，252 项通过；剩余 10 项是既有的状态码、订阅 OpenAPI 和 Location 断言失败，与本次文件上传改动无关。验证命令使用 `-p:NuGetAudit=false`，没有修改依赖审计配置。当前 Hyper 全量 129 项测试通过，真实 Hyperdrive 协议测试覆盖条件并发、大小限制、中断上传和保留目录隔离。
 - 两个独立临时 SQLite 的 C# 进程与真实 Hyper SDK 完成 21 项 HTTP 检查：创建与同步、连续公开描述更新、按 Key 订阅和刷新、保留 Remark、订阅只读、删除用户根目录后保留 Manifest。验证禁用 Swarm 发现，不代表公网复制或 Web 已接通；未修改用户数据库。
-- 仅为验证命令添加 `-p:NuGetAudit=false` 后，构建成功，136 项 C# 测试全部通过；没有修改仓库审计配置。该结果不表示依赖漏洞已解决。
+- C# 项目构建成功；Web 生产构建和本次发布页上传相关的 10 项前端测试通过。Web 全量测试仍有仓库既有测试环境与类型问题，没有将其归因于本次上传改动。
 - 此前使用真实 Hyperdrive 复现了路径层级冲突和分页一致性问题，并验证了真实 HTTP 的基本流式上传与 EOF 后响应超时。
 - 现有 C# 端点测试替换了 `IHyperClient`，不能凭测试全部通过推断三端功能已经打通。
 

@@ -6,7 +6,7 @@ import { FormDialog } from '../../../components/ui/FormDialog';
 import { ExplorerDetailHeader, ExplorerPage, ExplorerPanel } from '../../../shared/components/explorer/ExplorerChrome';
 import { DriveListSidebar } from '../../drive/components/DriveListSidebar';
 import { DriveRemarkDialog, type DriveRemarkEditorState } from '../../drive/components/DriveRemarkDialog';
-import { useDriveSearchSync } from '../../drive/hooks/useDriveSearchSync';
+import { usePublishDriveSearchSync } from '../../drive/hooks/useDriveSearchSync';
 import { useDrivePreview } from '../../drive/hooks/useDrivePreview';
 import { getDriveSelectionKey, getPreviewKind, requiresStreamingVideoPreview } from '../../drive/utils';
 import type { DriveRecord, ResourceTreeNode } from '../../drive/types';
@@ -89,11 +89,11 @@ export function PublishRoutePending() {
 export function PublishRouteView() {
   const search = routeApi.useSearch();
   const { drives, selectedDriveKey, resourceTree, error: loaderError } = routeApi.useLoaderData();
-  const { router, setDriveKey, replaceAndInvalidate } = useDriveSearchSync('/publish', selectedDriveKey, search.driveKey);
+  const { router, setDriveId, replaceAndInvalidate } = usePublishDriveSearchSync(selectedDriveKey, search.driveId);
   const selectedDrive = drives.find((drive) => getDriveSelectionKey(drive) === selectedDriveKey) ?? null;
   const preview = useDrivePreview(selectedDriveKey);
 
-  // 当前 tree 中选中的节点（用于确定默认挂载路径）
+  // 当前 tree 中选中的节点（用于预览和文件操作）
   const [selectedNode, setSelectedNode] = useState<ResourceTreeNode | null>(null);
 
   // Dialog open states
@@ -133,23 +133,20 @@ export function PublishRouteView() {
     setSelectedNode(null);
   }
 
-  // 默认挂载路径：优先用节点的 localDirPath（上次挂载来源目录），回退到节点在 drive 内的 path
-  const defaultMountPath = selectedNode?.localDirPath ?? null;
-
   const openRemarkEditor = (drive: DriveRecord) => {
     setRemarkError(null);
     setRemarkEditor({ driveKey: getDriveSelectionKey(drive), label: drive.name, remark: drive.remark ?? '' });
   };
 
   const openRenameDialog = (drive: DriveRecord) => {
-    setDriveKey(getDriveSelectionKey(drive));
+    setDriveId(getDriveSelectionKey(drive));
     setRenameLabel(drive.name);
     setRenameError(null);
     setShowRenameDialog(true);
   };
 
   const openDeleteDialog = (drive: DriveRecord) => {
-    setDriveKey(getDriveSelectionKey(drive));
+    setDriveId(getDriveSelectionKey(drive));
     setDeleteError(null);
     setShowDeleteDialog(true);
   };
@@ -231,14 +228,14 @@ export function PublishRouteView() {
               items={drives}
               selectedDriveKey={selectedDriveKey}
               emptyText="还没有 Drive，点击上方新建订阅源"
-              onSelect={setDriveKey}
+              onSelect={setDriveId}
               getItemMeta={(drive) => ({
                 title: drive.remark ?? drive.name,
                 subtitle: drive.remark ? drive.name : undefined,
                 subtitlePrefix: '',
                 onContextMenu: (event) => {
                   event.preventDefault();
-                  setDriveKey(getDriveSelectionKey(drive));
+                  setDriveId(getDriveSelectionKey(drive));
                   setContextMenuState({ drive, x: event.clientX, y: event.clientY });
                 },
               })}
@@ -250,9 +247,7 @@ export function PublishRouteView() {
                   <PublishDetailHeader
                     drive={selectedDrive}
                     submitting={actions.submitting}
-                    defaultMountPath={defaultMountPath}
-                    onMount={actions.handlePublish}
-                    onManualMovieMount={actions.handleManualMovieMount}
+                    onUpload={actions.handleUpload}
                   />
                 ) : null}
               </ExplorerDetailHeader>
