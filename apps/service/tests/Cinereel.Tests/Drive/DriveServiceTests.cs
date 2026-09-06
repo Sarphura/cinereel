@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using Cinereel.Features.Drive;
 using Cinereel.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -20,10 +21,10 @@ public sealed class DriveServiceTests
             input.Request,
             CancellationToken.None);
 
-        Assert.Equal(CreateDriveResultCode.Accepted, result.ResultCode);
-        Assert.NotNull(result.Drive);
-        Assert.Equal("pending", result.Drive.Status);
-        Assert.Null(result.Drive.DriveKey);
+        Assert.Equal(ResultStatus.Created, result.Status);
+        Assert.NotNull(result.Value);
+        Assert.Equal("pending", result.Value.Status);
+        Assert.Null(result.Value.DriveKey);
         Assert.Empty(fixture.HyperClient.CreateCalls);
         var saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
         Assert.Equal(DriveStatus.Pending, saved.Status);
@@ -45,8 +46,8 @@ public sealed class DriveServiceTests
             input.Request,
             CancellationToken.None);
 
-        Assert.Equal(CreateDriveResultCode.Accepted, repeated.ResultCode);
-        Assert.Equal(first.Drive, repeated.Drive);
+        Assert.Equal(ResultStatus.Created, repeated.Status);
+        Assert.Equal(first.Value, repeated.Value);
         Assert.Equal(1, await fixture.DbContext.Drives.CountAsync());
     }
 
@@ -66,8 +67,8 @@ public sealed class DriveServiceTests
             conflicting.Request,
             CancellationToken.None);
 
-        Assert.Equal(CreateDriveResultCode.IdempotencyConflict, result.ResultCode);
-        Assert.Null(result.Drive);
+        Assert.Equal(ResultStatus.Conflict, result.Status);
+        Assert.Null(result.Value);
         Assert.Empty(fixture.HyperClient.CreateCalls);
     }
 
@@ -84,19 +85,19 @@ public sealed class DriveServiceTests
         await fixture.Service.ProcessPendingCreationsAsync(CancellationToken.None);
 
         var found = await fixture.Service.GetAsync(
-            new DriveId(accepted.Drive!.DriveId),
+            new DriveId(accepted.Value!.DriveId),
             CancellationToken.None);
-        Assert.NotNull(found);
-        Assert.Equal("ready", found.Status);
-        Assert.NotNull(found.DriveKey);
-        Assert.Equal(accepted.Drive.DriveId, Assert.Single(fixture.HyperClient.CreateCalls).DriveId.Value);
+        Assert.Equal(ResultStatus.Ok, found.Status);
+        Assert.Equal("ready", found.Value!.Status);
+        Assert.NotNull(found.Value.DriveKey);
+        Assert.Equal(accepted.Value.DriveId, Assert.Single(fixture.HyperClient.CreateCalls).DriveId.Value);
 
         var replayed = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
             CancellationToken.None);
-        Assert.Equal(CreateDriveResultCode.Replayed, replayed.ResultCode);
-        Assert.Equal(found, replayed.Drive);
+        Assert.Equal(ResultStatus.Ok, replayed.Status);
+        Assert.Equal(found.Value, replayed.Value);
     }
 
     [Fact]
@@ -117,9 +118,9 @@ public sealed class DriveServiceTests
 
         fixture.HyperClient.CreateException = null;
         var retryResult = await fixture.Service.RetryCreationAsync(
-            new DriveId(accepted.Drive!.DriveId),
+            new DriveId(accepted.Value!.DriveId),
             CancellationToken.None);
-        Assert.Equal(RetryDriveCreationResultCode.Accepted, retryResult);
+        Assert.Equal(ResultStatus.Created, retryResult.Status);
 
         await fixture.Service.ProcessPendingCreationsAsync(CancellationToken.None);
         var ready = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
@@ -138,12 +139,13 @@ public sealed class DriveServiceTests
             CancellationToken.None);
 
         var found = await fixture.Service.GetAsync(
-            new DriveId(accepted.Drive!.DriveId),
+            new DriveId(accepted.Value!.DriveId),
             CancellationToken.None);
         var listed = await fixture.Service.ListAsync(CancellationToken.None);
 
-        Assert.Equal(accepted.Drive, found);
-        Assert.Equal(accepted.Drive, Assert.Single(listed));
+        Assert.Equal(ResultStatus.Ok, found.Status);
+        Assert.Equal(accepted.Value, found.Value);
+        Assert.Equal(accepted.Value, Assert.Single(listed.Value!));
     }
 
     [Fact]
@@ -158,11 +160,11 @@ public sealed class DriveServiceTests
         Assert.True(DriveRemark.TryCreate("我的电影", out var remark));
 
         var result = await fixture.Service.UpdateRemarkAsync(
-            new DriveId(accepted.Drive!.DriveId),
+            new DriveId(accepted.Value!.DriveId),
             remark,
             CancellationToken.None);
 
-        Assert.Equal(UpdateDriveRemarkResultCode.Updated, result);
+        Assert.Equal(ResultStatus.NoContent, result.Status);
         var saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
         Assert.Equal("我的电影", saved.Remark);
     }
@@ -178,23 +180,25 @@ public sealed class DriveServiceTests
             CancellationToken.None);
 
         var result = await fixture.Service.DeleteAsync(
-            new DriveId(accepted.Drive!.DriveId),
+            new DriveId(accepted.Value!.DriveId),
             CancellationToken.None);
 
-        Assert.Equal(DeleteDriveResultCode.Deleted, result);
+        Assert.Equal(ResultStatus.NoContent, result.Status);
         var saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
         Assert.Equal(DriveStatus.Deleted, saved.Status);
         Assert.Equal(DriveRelationType.None, saved.RelationType);
-        Assert.Null(await fixture.Service.GetAsync(
-            new DriveId(accepted.Drive.DriveId),
-            CancellationToken.None));
-        Assert.Empty(await fixture.Service.ListAsync(CancellationToken.None));
+        var missing = await fixture.Service.GetAsync(
+            new DriveId(accepted.Value.DriveId),
+            CancellationToken.None);
+        Assert.Equal(ResultStatus.NotFound, missing.Status);
+        var listed = await fixture.Service.ListAsync(CancellationToken.None);
+        Assert.Empty(listed.Value!);
 
         var replayed = await fixture.Service.CreateAsync(
             input.IdempotencyKey,
             input.Request,
             CancellationToken.None);
-        Assert.Equal(CreateDriveResultCode.Gone, replayed.ResultCode);
+        Assert.Equal(ResultStatus.NotFound, replayed.Status);
     }
 
     private static CreateDriveInput CreateInput(string idempotencyKey, string name)

@@ -1,18 +1,5 @@
 namespace Cinereel.Features.Drive;
 
-public sealed record PublicationCommandResult(
-    PublicationCommandResultCode ResultCode,
-    Publication? Publication);
-
-public enum PublicationCommandResultCode
-{
-    Accepted,
-    Unchanged,
-    DriveNotFound,
-    PublicationNotFound,
-    Conflict
-}
-
 public sealed record PublicationResponse(
     Guid Id,
     string DriveId,

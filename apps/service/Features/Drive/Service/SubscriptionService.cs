@@ -1,3 +1,4 @@
+using Ardalis.Result;
 using Cinereel.Infrastructure.Persistence;
 
 namespace Cinereel.Features.Drive;
@@ -9,7 +10,7 @@ internal sealed class SubscriptionService(
     DriveCreationLock creationLock,
     TimeProvider timeProvider) : ISubscriptionService
 {
-    public async Task<CreateSubscriptionResult> CreateAsync(
+    public async Task<Result<DriveDescriptionResponse>> CreateAsync(
         DriveKey driveKey,
         CancellationToken cancellationToken)
     {
@@ -26,18 +27,19 @@ internal sealed class SubscriptionService(
         if (drive is not null &&
             (drive.Status != DriveStatus.Ready || drive.RelationType == DriveRelationType.Ownership))
         {
-            return new(CreateSubscriptionResultCode.RelationshipConflict);
+            return Result<DriveDescriptionResponse>.Conflict(
+                "该 Drive 已由当前 Cinereel 持有或已经删除，不能建立订阅。");
         }
 
         if (drive?.RelationType == DriveRelationType.Subscription)
         {
-            return new(CreateSubscriptionResultCode.Replayed, DriveDescriptionService.ToResponse(drive));
+            return Result<DriveDescriptionResponse>.Success(DriveDescriptionService.ToResponse(drive));
         }
 
         var read = await manifestService.ReadAsync(driveKey, cancellationToken);
         if (read.ResultCode != ReadDriveManifestResultCode.Success)
         {
-            return new(ToCreateFailureCode(read.ResultCode));
+            return MapManifestFailure(read.ResultCode);
         }
 
         var now = GetUtcNow();
@@ -57,17 +59,17 @@ internal sealed class SubscriptionService(
         drive.RelationType = DriveRelationType.Subscription;
         drive.Remark = null;
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return new(CreateSubscriptionResultCode.Created, DriveDescriptionService.ToResponse(drive));
+        return Result<DriveDescriptionResponse>.Created(DriveDescriptionService.ToResponse(drive));
     }
 
-    public async Task<RefreshSubscriptionResult> RefreshAsync(
+    public async Task<Result<DriveDescriptionResponse>> RefreshAsync(
         DriveId driveId,
         CancellationToken cancellationToken)
     {
         var drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
         if (!TryGetSubscriptionKey(drive, out var driveKey))
         {
-            return new(RefreshSubscriptionResultCode.NotFound);
+            return Result<DriveDescriptionResponse>.NotFound("Subscription 不存在。");
         }
 
         using var lease = await creationLock.AcquireAsync(
@@ -76,28 +78,28 @@ internal sealed class SubscriptionService(
         drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
         if (!TryGetSubscriptionKey(drive, out driveKey))
         {
-            return new(RefreshSubscriptionResultCode.NotFound);
+            return Result<DriveDescriptionResponse>.NotFound("Subscription 不存在。");
         }
 
         var read = await manifestService.ReadAsync(driveKey, cancellationToken);
         if (read.ResultCode != ReadDriveManifestResultCode.Success)
         {
-            return new(ToRefreshFailureCode(read.ResultCode));
+            return MapManifestFailure(read.ResultCode);
         }
 
         ApplyManifest(drive!, read.Manifest!, GetUtcNow());
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return new(RefreshSubscriptionResultCode.Refreshed, DriveDescriptionService.ToResponse(drive!));
+        return Result<DriveDescriptionResponse>.Success(DriveDescriptionService.ToResponse(drive!));
     }
 
-    public async Task<DeleteSubscriptionResultCode> DeleteAsync(
+    public async Task<Result> DeleteAsync(
         DriveId driveId,
         CancellationToken cancellationToken)
     {
         var drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
         if (!TryGetSubscriptionKey(drive, out var driveKey))
         {
-            return DeleteSubscriptionResultCode.NotFound;
+            return Result.NotFound("Subscription 不存在。");
         }
 
         using var lease = await creationLock.AcquireAsync(
@@ -106,14 +108,14 @@ internal sealed class SubscriptionService(
         drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
         if (!TryGetSubscriptionKey(drive, out _))
         {
-            return DeleteSubscriptionResultCode.NotFound;
+            return Result.NotFound("Subscription 不存在。");
         }
 
         drive!.RelationType = DriveRelationType.None;
         drive.Remark = null;
         drive.UpdatedAt = GetUtcNow();
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return DeleteSubscriptionResultCode.Deleted;
+        return Result.NoContent();
     }
 
     private static void ApplyManifest(DriveEntity drive, DriveManifest manifest, DateTimeOffset now)
@@ -152,27 +154,22 @@ internal sealed class SubscriptionService(
     private DateTimeOffset GetUtcNow() => DateTimeOffset.FromUnixTimeMilliseconds(
         timeProvider.GetUtcNow().ToUnixTimeMilliseconds());
 
-    private static CreateSubscriptionResultCode ToCreateFailureCode(ReadDriveManifestResultCode code) => code switch
+    private static Result<DriveDescriptionResponse> MapManifestFailure(ReadDriveManifestResultCode code) => code switch
     {
-        ReadDriveManifestResultCode.NotFound => CreateSubscriptionResultCode.ManifestMissing,
-        ReadDriveManifestResultCode.Invalid => CreateSubscriptionResultCode.InvalidManifest,
-        ReadDriveManifestResultCode.TooLarge => CreateSubscriptionResultCode.ManifestTooLarge,
-        ReadDriveManifestResultCode.UnsupportedSchema => CreateSubscriptionResultCode.UnsupportedSchema,
-        ReadDriveManifestResultCode.UnsupportedContentType => CreateSubscriptionResultCode.UnsupportedContentType,
-        ReadDriveManifestResultCode.Unavailable => CreateSubscriptionResultCode.ContentUnavailable,
-        ReadDriveManifestResultCode.Timeout => CreateSubscriptionResultCode.Timeout,
-        _ => throw new ArgumentOutOfRangeException(nameof(code))
-    };
-
-    private static RefreshSubscriptionResultCode ToRefreshFailureCode(ReadDriveManifestResultCode code) => code switch
-    {
-        ReadDriveManifestResultCode.NotFound => RefreshSubscriptionResultCode.ManifestMissing,
-        ReadDriveManifestResultCode.Invalid => RefreshSubscriptionResultCode.InvalidManifest,
-        ReadDriveManifestResultCode.TooLarge => RefreshSubscriptionResultCode.ManifestTooLarge,
-        ReadDriveManifestResultCode.UnsupportedSchema => RefreshSubscriptionResultCode.UnsupportedSchema,
-        ReadDriveManifestResultCode.UnsupportedContentType => RefreshSubscriptionResultCode.UnsupportedContentType,
-        ReadDriveManifestResultCode.Unavailable => RefreshSubscriptionResultCode.ContentUnavailable,
-        ReadDriveManifestResultCode.Timeout => RefreshSubscriptionResultCode.Timeout,
+        ReadDriveManifestResultCode.NotFound => Result<DriveDescriptionResponse>.Invalid(
+            new ValidationError("manifest", "DriveManifest 不存在。")),
+        ReadDriveManifestResultCode.Invalid => Result<DriveDescriptionResponse>.Invalid(
+            new ValidationError("manifest", "DriveManifest 无效。")),
+        ReadDriveManifestResultCode.TooLarge => Result<DriveDescriptionResponse>.Invalid(
+            new ValidationError("manifest", "DriveManifest 不能超过 64 KiB。")),
+        ReadDriveManifestResultCode.UnsupportedSchema => Result<DriveDescriptionResponse>.Invalid(
+            new ValidationError("manifest", "DriveManifest Schema 版本不受支持。")),
+        ReadDriveManifestResultCode.UnsupportedContentType => Result<DriveDescriptionResponse>.Invalid(
+            new ValidationError("manifest", "DriveManifest 内容类型不受支持。")),
+        ReadDriveManifestResultCode.Unavailable => Result<DriveDescriptionResponse>.CriticalError(
+            "Drive 内容暂不可用，请稍后重试。"),
+        ReadDriveManifestResultCode.Timeout => Result<DriveDescriptionResponse>.CriticalError(
+            "读取 DriveManifest 超时，请稍后重试。"),
         _ => throw new ArgumentOutOfRangeException(nameof(code))
     };
 }

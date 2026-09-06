@@ -99,7 +99,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
     [Theory]
     [InlineData("/.cinereel")]
     [InlineData("/.cinereel/drive.json")]
-    public async Task ReservedPathsReturnIdentifiableForbiddenProblemWithoutCallingHyperClient(
+    public async Task ReservedPathsReturnForbiddenProblemWithoutCallingHyperClient(
         string path)
     {
         ResetHyperClient();
@@ -126,8 +126,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             listResponse, addResponse, deleteFileResponse, deleteDirectoryResponse
         })
         {
-            var problem = await AssertProblemAsync(response, HttpStatusCode.Forbidden);
-            Assert.Equal("reserved_path", problem.GetProperty("code").GetString());
+            await AssertProblemAsync(response, HttpStatusCode.Forbidden);
         }
 
         AssertNoFileCalls();
@@ -260,7 +259,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             [1]))
         {
             var response = await _client.SendAsync(request);
-            await AssertProblemAsync(response, HttpStatusCode.RequestEntityTooLarge);
+            await AssertProblemAsync(response, HttpStatusCode.BadRequest);
         }
 
         _factory.HyperClient.AddFileException = new HttpRequestException("不可用");
@@ -271,7 +270,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             [1]))
         {
             var response = await _client.SendAsync(request);
-            await AssertProblemAsync(response, HttpStatusCode.ServiceUnavailable);
+            await AssertProblemAsync(response, HttpStatusCode.InternalServerError);
         }
         _factory.HyperClient.AddFileException = null;
 
@@ -296,7 +295,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             $"/api/drives/{drive.DriveId}/files/entries?path=%2F");
         await AssertProblemAsync(
             unavailableListResponse,
-            HttpStatusCode.ServiceUnavailable);
+            HttpStatusCode.InternalServerError);
         _factory.HyperClient.ListDirectoryException = null;
 
         _factory.HyperClient.DeleteDirectoryException = new TimeoutException("不可用");
@@ -304,7 +303,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             $"/api/drives/{drive.DriveId}/files/entries?path=%2Fvideo");
         await AssertProblemAsync(
             unavailableDeleteResponse,
-            HttpStatusCode.ServiceUnavailable);
+            HttpStatusCode.InternalServerError);
     }
 
     [Fact]
@@ -357,19 +356,10 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
         AssertRequiredQueryParameter(put, "path");
         AssertRequiredQueryParameter(deleteFile, "path");
         AssertRequiredQueryParameter(deleteDirectory, "path");
-        AssertProblemContent(get, "400", "403", "404", "409", "503");
-        AssertProblemContent(put, "400", "403", "404", "409", "413", "415", "503");
-        AssertProblemContent(deleteFile, "400", "403", "404", "409", "503");
-        AssertProblemContent(deleteDirectory, "400", "403", "404", "409", "503");
-        foreach (var operation in new[] { get, put, deleteFile, deleteDirectory })
-        {
-            Assert.Contains(
-                "reserved_path",
-                operation.GetProperty("responses")
-                    .GetProperty("403")
-                    .GetProperty("description")
-                    .GetString());
-        }
+        AssertProblemContent(get, "400", "403", "404", "409", "500");
+        AssertProblemContent(put, "400", "403", "404", "409", "500");
+        AssertProblemContent(deleteFile, "400", "403", "404", "409", "500");
+        AssertProblemContent(deleteDirectory, "400", "403", "404", "409", "500");
 
         AssertResponseCodes(
             get,
@@ -378,7 +368,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             "403",
             "404",
             "409",
-            "503");
+            "500");
         AssertResponseCodes(
             put,
             "201",
@@ -386,9 +376,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             "403",
             "404",
             "409",
-            "413",
-            "415",
-            "503");
+            "500");
     }
 
     private void ResetHyperClient()

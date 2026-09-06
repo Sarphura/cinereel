@@ -1,16 +1,18 @@
+using Ardalis.Result;
+
 namespace Cinereel.Features.Drive;
 
 public interface IPublishService
 {
-    Task<Publication?> GetAsync(
+    Task<Result<PublicationResponse>> GetAsync(
         string driveId,
         CancellationToken cancellationToken);
 
-    Task<PublicationCommandResult> PublishAsync(
+    Task<Result<PublicationResponse>> PublishAsync(
         string driveId,
         CancellationToken cancellationToken);
 
-    Task<PublicationCommandResult> UnpublishAsync(
+    Task<Result<PublicationResponse>> UnpublishAsync(
         string driveId,
         CancellationToken cancellationToken);
 }

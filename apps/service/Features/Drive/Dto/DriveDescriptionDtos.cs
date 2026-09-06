@@ -16,17 +16,3 @@ public sealed record DriveDescriptionResponse(
     long SyncedRevision,
     string SyncStatus,
     string? ErrorCode);
-
-public sealed record UpdateDriveDescriptionResult(
-    UpdateDriveDescriptionResultCode ResultCode,
-    DriveDescriptionResponse? Description = null);
-
-public enum UpdateDriveDescriptionResultCode
-{
-    Accepted,
-    Unchanged,
-    NotFound,
-    WriteNotAllowed,
-    Invalid,
-    RevisionConflict
-}

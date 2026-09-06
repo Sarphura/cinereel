@@ -1,4 +1,5 @@
 using System.Text;
+using Ardalis.Result;
 using Cinereel.Features.Drive;
 using Cinereel.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -31,7 +32,7 @@ public sealed class DriveManifestSyncTests
         Assert.Equal("电影收藏", manifest.Name);
         Assert.Equal(drive.ManifestCreatedAt, manifest.CreatedAt);
         Assert.DoesNotContain("driveId", Encoding.UTF8.GetString(stored.Content!));
-        Assert.Equal("synced", (await fixture.Description.GetAsync(id, CancellationToken.None))!.SyncStatus);
+        Assert.Equal("synced", (await fixture.Description.GetAsync(id, CancellationToken.None)).Value!.SyncStatus);
     }
 
     [Fact]
@@ -43,18 +44,18 @@ public sealed class DriveManifestSyncTests
         var writes = fixture.Hyper.WriteProtocolFileCalls.Count;
         var result = await fixture.Description.UpdateAsync(id,
             new(" 更新的名称 ", "公开说明", 1), CancellationToken.None);
-        Assert.Equal(UpdateDriveDescriptionResultCode.Accepted, result.ResultCode);
-        Assert.Equal(2, result.Description!.Revision);
-        Assert.Equal(1, result.Description.SyncedRevision);
+        Assert.Equal(ResultStatus.Ok, result.Status);
+        Assert.Equal(2, result.Value!.Revision);
+        Assert.Equal(1, result.Value.SyncedRevision);
         Assert.Equal(writes, fixture.Hyper.WriteProtocolFileCalls.Count);
-        Assert.Equal("pending", result.Description.SyncStatus);
+        Assert.Equal("pending", result.Value.SyncStatus);
 
         var stale = await fixture.Description.UpdateAsync(id,
             new("旧修改", "", 1), CancellationToken.None);
-        Assert.Equal(UpdateDriveDescriptionResultCode.RevisionConflict, stale.ResultCode);
+        Assert.Equal(ResultStatus.Conflict, stale.Status);
         var same = await fixture.Description.UpdateAsync(id,
             new("更新的名称", "公开说明", 2), CancellationToken.None);
-        Assert.Equal(UpdateDriveDescriptionResultCode.Unchanged, same.ResultCode);
+        Assert.Equal(ResultStatus.Ok, same.Status);
 
         await fixture.Sync.ProcessPendingAsync(CancellationToken.None);
         var drive = await fixture.Db.Drives.SingleAsync();
@@ -76,7 +77,7 @@ public sealed class DriveManifestSyncTests
         Assert.Equal("manifest_unavailable", failed.ManifestErrorCode);
         Assert.Equal(1, failed.ManifestAttempts);
         Assert.NotNull(failed.ManifestNextAttemptAt);
-        Assert.Equal("failed", (await fixture.Description.GetAsync(id, CancellationToken.None))!.SyncStatus);
+        Assert.Equal("failed", (await fixture.Description.GetAsync(id, CancellationToken.None)).Value!.SyncStatus);
 
         var calls = fixture.Hyper.WriteProtocolFileCalls.Count;
         await fixture.Sync.ProcessPendingAsync(CancellationToken.None);
@@ -175,7 +176,7 @@ public sealed class DriveManifestSyncTests
 
         var update = await fixture.Description.UpdateAsync(id,
             new("新版本", "新描述", 1), CancellationToken.None);
-        Assert.Equal(UpdateDriveDescriptionResultCode.Accepted, update.ResultCode);
+        Assert.Equal(ResultStatus.Ok, update.Status);
         fixture.Hyper.WriteProtocolFileResult = null;
         await fixture.Sync.ProcessPendingAsync(CancellationToken.None);
         var saved = await fixture.Db.Drives.SingleAsync();
@@ -265,7 +266,7 @@ public sealed class DriveManifestSyncTests
             IdempotencyKey.TryCreate("manifest:test", out var key);
             var result = await Drives.CreateAsync(key, new("电影收藏", "cinereel.movie"), CancellationToken.None);
             await Drives.ProcessPendingCreationsAsync(CancellationToken.None);
-            return new(result.Drive!.DriveId);
+            return new(result.Value!.DriveId);
         }
 
         public async ValueTask DisposeAsync()

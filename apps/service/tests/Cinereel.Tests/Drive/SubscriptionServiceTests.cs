@@ -1,5 +1,6 @@
 using Cinereel.Features.Drive;
 using Cinereel.Infrastructure.Persistence;
+using Ardalis.Result;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -23,8 +24,8 @@ public sealed class SubscriptionServiceTests
 
         var result = await fixture.Service.CreateAsync(fixture.DriveKey, CancellationToken.None);
 
-        Assert.Equal(CreateSubscriptionResultCode.Created, result.ResultCode);
-        var response = Assert.IsType<DriveDescriptionResponse>(result.Description);
+        Assert.Equal(ResultStatus.Created, result.Status);
+        var response = Assert.IsType<DriveDescriptionResponse>(result.Value);
         var saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
         Assert.NotEqual(Guid.Empty, saved.Id);
         Assert.Equal(saved.Id, response.DriveId);
@@ -43,17 +44,17 @@ public sealed class SubscriptionServiceTests
     }
 
     [Theory]
-    [InlineData("NotFound", CreateSubscriptionResultCode.ManifestMissing, RefreshSubscriptionResultCode.ManifestMissing)]
-    [InlineData("Invalid", CreateSubscriptionResultCode.InvalidManifest, RefreshSubscriptionResultCode.InvalidManifest)]
-    [InlineData("TooLarge", CreateSubscriptionResultCode.ManifestTooLarge, RefreshSubscriptionResultCode.ManifestTooLarge)]
-    [InlineData("UnsupportedSchema", CreateSubscriptionResultCode.UnsupportedSchema, RefreshSubscriptionResultCode.UnsupportedSchema)]
-    [InlineData("UnsupportedContentType", CreateSubscriptionResultCode.UnsupportedContentType, RefreshSubscriptionResultCode.UnsupportedContentType)]
-    [InlineData("Unavailable", CreateSubscriptionResultCode.ContentUnavailable, RefreshSubscriptionResultCode.ContentUnavailable)]
-    [InlineData("Timeout", CreateSubscriptionResultCode.Timeout, RefreshSubscriptionResultCode.Timeout)]
+    [InlineData("NotFound", ResultStatus.Invalid, ResultStatus.Invalid)]
+    [InlineData("Invalid", ResultStatus.Invalid, ResultStatus.Invalid)]
+    [InlineData("TooLarge", ResultStatus.Invalid, ResultStatus.Invalid)]
+    [InlineData("UnsupportedSchema", ResultStatus.Invalid, ResultStatus.Invalid)]
+    [InlineData("UnsupportedContentType", ResultStatus.Invalid, ResultStatus.Invalid)]
+    [InlineData("Unavailable", ResultStatus.CriticalError, ResultStatus.CriticalError)]
+    [InlineData("Timeout", ResultStatus.CriticalError, ResultStatus.CriticalError)]
     public async Task FailedReadNeverCreatesRelationshipOrReplacesExistingCacheAndRemark(
         string readResultName,
-        CreateSubscriptionResultCode expectedCreate,
-        RefreshSubscriptionResultCode expectedRefresh)
+        ResultStatus expectedCreate,
+        ResultStatus expectedRefresh)
     {
         await using var fixture = await SubscriptionFixture.CreateAsync();
         var failure = new ReadDriveManifestResult(Enum.Parse<ReadDriveManifestResultCode>(readResultName));
@@ -61,8 +62,8 @@ public sealed class SubscriptionServiceTests
 
         var rejected = await fixture.Service.CreateAsync(fixture.DriveKey, CancellationToken.None);
 
-        Assert.Equal(expectedCreate, rejected.ResultCode);
-        Assert.Null(rejected.Description);
+        Assert.Equal(expectedCreate, rejected.Status);
+        Assert.Null(rejected.Value);
         Assert.Empty(await fixture.DbContext.Drives.ToListAsync());
 
         fixture.ManifestService.Result = new(ReadDriveManifestResultCode.Success, Manifest);
@@ -73,10 +74,10 @@ public sealed class SubscriptionServiceTests
         fixture.ManifestService.Result = failure;
 
         var refreshed = await fixture.Service.RefreshAsync(
-            new DriveId(created.Description!.DriveId), CancellationToken.None);
+            new DriveId(created.Value!.DriveId), CancellationToken.None);
 
-        Assert.Equal(expectedRefresh, refreshed.ResultCode);
-        Assert.Null(refreshed.Description);
+        Assert.Equal(expectedRefresh, refreshed.Status);
+        Assert.Null(refreshed.Value);
         saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
         Assert.Equal(Manifest.Name, saved.Name);
         Assert.Equal(Manifest.Description, saved.Description);
@@ -93,7 +94,7 @@ public sealed class SubscriptionServiceTests
     {
         await using var fixture = await SubscriptionFixture.CreateAsync();
         var created = await fixture.Service.CreateAsync(fixture.DriveKey, CancellationToken.None);
-        var driveId = new DriveId(created.Description!.DriveId);
+        var driveId = new DriveId(created.Value!.DriveId);
         var saved = await fixture.DbContext.Drives.SingleAsync();
         saved.Remark = "我的备注";
         await fixture.DbContext.SaveChangesAsync();
@@ -108,12 +109,12 @@ public sealed class SubscriptionServiceTests
 
         var refreshed = await fixture.Service.RefreshAsync(driveId, CancellationToken.None);
 
-        Assert.Equal(RefreshSubscriptionResultCode.Refreshed, refreshed.ResultCode);
-        Assert.Equal(driveId.Value, refreshed.Description!.DriveId);
-        Assert.Equal(changed.Name, refreshed.Description.Name);
-        Assert.Equal(changed.ContentTypeId, refreshed.Description.ContentTypeId);
-        Assert.Equal(changed.Description, refreshed.Description.Description);
-        Assert.Equal(changed.UpdatedAt, refreshed.Description.UpdatedAt);
+        Assert.Equal(ResultStatus.Ok, refreshed.Status);
+        Assert.Equal(driveId.Value, refreshed.Value!.DriveId);
+        Assert.Equal(changed.Name, refreshed.Value.Name);
+        Assert.Equal(changed.ContentTypeId, refreshed.Value.ContentTypeId);
+        Assert.Equal(changed.Description, refreshed.Value.Description);
+        Assert.Equal(changed.UpdatedAt, refreshed.Value.UpdatedAt);
         saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
         Assert.Equal(LocalNow, saved.CreatedAt);
         Assert.Equal("我的备注", saved.Remark);
@@ -128,8 +129,8 @@ public sealed class SubscriptionServiceTests
 
         var repeated = await fixture.Service.CreateAsync(fixture.DriveKey, CancellationToken.None);
 
-        Assert.Equal(CreateSubscriptionResultCode.Replayed, repeated.ResultCode);
-        Assert.Equal(created.Description, repeated.Description);
+        Assert.Equal(ResultStatus.Ok, repeated.Status);
+        Assert.Equal(created.Value, repeated.Value);
         Assert.Single(fixture.ManifestService.ReadKeys);
         Assert.Equal(1, await fixture.DbContext.Drives.CountAsync());
     }
@@ -149,13 +150,13 @@ public sealed class SubscriptionServiceTests
 
         var result = await fixture.Service.CreateAsync(fixture.DriveKey, CancellationToken.None);
         var refreshed = await fixture.Service.RefreshAsync(
-            new DriveId(created.Description!.DriveId), CancellationToken.None);
+            new DriveId(created.Value!.DriveId), CancellationToken.None);
         var removed = await fixture.Service.DeleteAsync(
-            new DriveId(created.Description.DriveId), CancellationToken.None);
+            new DriveId(created.Value.DriveId), CancellationToken.None);
 
-        Assert.Equal(CreateSubscriptionResultCode.RelationshipConflict, result.ResultCode);
-        Assert.Equal(RefreshSubscriptionResultCode.NotFound, refreshed.ResultCode);
-        Assert.Equal(DeleteSubscriptionResultCode.NotFound, removed);
+        Assert.Equal(ResultStatus.Conflict, result.Status);
+        Assert.Equal(ResultStatus.NotFound, refreshed.Status);
+        Assert.Equal(ResultStatus.NotFound, removed.Status);
         Assert.Empty(fixture.ManifestService.ReadKeys);
         saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
         Assert.Equal(deleted ? DriveStatus.Deleted : DriveStatus.Ready, saved.Status);
@@ -167,7 +168,7 @@ public sealed class SubscriptionServiceTests
     {
         await using var fixture = await SubscriptionFixture.CreateAsync();
         var created = await fixture.Service.CreateAsync(fixture.DriveKey, CancellationToken.None);
-        var driveId = new DriveId(created.Description!.DriveId);
+        var driveId = new DriveId(created.Value!.DriveId);
         var saved = await fixture.DbContext.Drives.SingleAsync();
         saved.Remark = "本地备注";
         await fixture.DbContext.SaveChangesAsync();
@@ -175,19 +176,19 @@ public sealed class SubscriptionServiceTests
 
         var deleted = await fixture.Service.DeleteAsync(driveId, CancellationToken.None);
 
-        Assert.Equal(DeleteSubscriptionResultCode.Deleted, deleted);
+        Assert.Equal(ResultStatus.NoContent, deleted.Status);
         saved = await fixture.DbContext.Drives.AsNoTracking().SingleAsync();
         Assert.Equal(DriveRelationType.None, saved.RelationType);
         Assert.Equal(DriveStatus.Ready, saved.Status);
         Assert.Null(saved.Remark);
         Assert.Empty(fixture.ManifestService.ReadKeys);
-        Assert.Equal(RefreshSubscriptionResultCode.NotFound,
-            (await fixture.Service.RefreshAsync(driveId, CancellationToken.None)).ResultCode);
+        Assert.Equal(ResultStatus.NotFound,
+            (await fixture.Service.RefreshAsync(driveId, CancellationToken.None)).Status);
 
         var restored = await fixture.Service.CreateAsync(fixture.DriveKey, CancellationToken.None);
 
-        Assert.Equal(CreateSubscriptionResultCode.Created, restored.ResultCode);
-        Assert.Equal(driveId.Value, restored.Description!.DriveId);
+        Assert.Equal(ResultStatus.Created, restored.Status);
+        Assert.Equal(driveId.Value, restored.Value!.DriveId);
         Assert.Equal(1, await fixture.DbContext.Drives.CountAsync());
         Assert.Single(fixture.ManifestService.ReadKeys);
     }
@@ -211,9 +212,9 @@ public sealed class SubscriptionServiceTests
         release.SetResult();
         var results = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
 
-        Assert.Equal(CreateSubscriptionResultCode.Created, results[0].ResultCode);
-        Assert.Equal(CreateSubscriptionResultCode.Replayed, results[1].ResultCode);
-        Assert.Equal(results[0].Description, results[1].Description);
+        Assert.Equal(ResultStatus.Created, results[0].Status);
+        Assert.Equal(ResultStatus.Ok, results[1].Status);
+        Assert.Equal(results[0].Value, results[1].Value);
         Assert.Single(fixture.ManifestService.ReadKeys);
         Assert.Equal(1, await fixture.DbContext.Drives.CountAsync());
     }

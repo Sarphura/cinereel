@@ -1,3 +1,5 @@
+using Ardalis.Result;
+
 namespace Cinereel.Features.Drive;
 
 internal sealed class DriveFileService(
@@ -18,7 +20,7 @@ internal sealed class DriveFileService(
         this.maxFileSize = maxFileSize;
     }
 
-    public async Task<ListDriveDirectoryResult> ListDirectoryAsync(
+    public async Task<Result<DriveDirectoryResponse>> ListDirectoryAsync(
         DriveId driveId,
         DriveDirectoryPath path,
         DriveDirectoryCursor? cursor,
@@ -44,23 +46,17 @@ internal sealed class DriveFileService(
 
         if (drive is null)
         {
-            return new ListDriveDirectoryResult(
-                ListDriveDirectoryResultCode.DriveNotFound,
-                null);
+            return Result<DriveDirectoryResponse>.NotFound("Drive 不存在。其关系可能已被移除。");
         }
 
         if (!TryGetReadyDriveKey(drive, out var driveKey))
         {
-            return new ListDriveDirectoryResult(
-                ListDriveDirectoryResultCode.DriveNotReady,
-                null);
+            return Result<DriveDirectoryResponse>.Conflict("Drive 尚未就绪。");
         }
 
         if (IsReservedPath(path.Value))
         {
-            return new ListDriveDirectoryResult(
-                ListDriveDirectoryResultCode.ReservedPath,
-                null);
+            return Result<DriveDirectoryResponse>.Forbidden("目标位于 /.cinereel 协议保留目录。");
         }
 
         try
@@ -80,9 +76,8 @@ internal sealed class DriveFileService(
             if (cursor is { } versionedCursor &&
                 versionedCursor.DriveVersion != page.DriveVersion)
             {
-                return new ListDriveDirectoryResult(
-                    ListDriveDirectoryResultCode.VersionConflict,
-                    null);
+                return Result<DriveDirectoryResponse>.Conflict(
+                    "Drive 内容版本已变化，请从第一页重新列举目录。");
             }
 
             var nextCursor = page.NextCursor is null
@@ -99,9 +94,7 @@ internal sealed class DriveFileService(
                         entry.Size))
                     .ToArray(),
                 nextCursor);
-            return new ListDriveDirectoryResult(
-                ListDriveDirectoryResultCode.Listed,
-                response);
+            return Result<DriveDirectoryResponse>.Success(response);
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
@@ -115,13 +108,12 @@ internal sealed class DriveFileService(
                 "列举 Drive {DriveId} 的目录 {Path} 失败，内容暂不可用。",
                 driveId,
                 path.Value);
-            return new ListDriveDirectoryResult(
-                ListDriveDirectoryResultCode.ContentUnavailable,
-                null);
+            return Result<DriveDirectoryResponse>.CriticalError(
+                "Drive 内容暂不可用。请稍后重试。");
         }
     }
 
-    public async Task<AddDriveFileResultCode> AddFileAsync(
+    public async Task<Result<object>> AddFileAsync(
         DriveId driveId,
         DriveFilePath path,
         Stream content,
@@ -139,22 +131,22 @@ internal sealed class DriveFileService(
 
         if (drive is null)
         {
-            return AddDriveFileResultCode.DriveNotFound;
+            return Result<object>.NotFound("Drive 不存在。其关系可能已被移除。");
         }
 
         if (!TryGetReadyDriveKey(drive, out var driveKey))
         {
-            return AddDriveFileResultCode.DriveNotReady;
+            return Result<object>.Conflict("Drive 尚未就绪。");
         }
 
         if (drive.RelationType != DriveRelationType.Ownership)
         {
-            return AddDriveFileResultCode.WriteNotAllowed;
+            return Result<object>.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。");
         }
 
         if (IsReservedPath(path.Value))
         {
-            return AddDriveFileResultCode.ReservedPath;
+            return Result<object>.Forbidden("目标位于 /.cinereel 协议保留目录。");
         }
 
         try
@@ -168,11 +160,12 @@ internal sealed class DriveFileService(
 
             return resultCode switch
             {
-                HyperAddFileResultCode.Created => AddDriveFileResultCode.Created,
-                HyperAddFileResultCode.AlreadyExists => AddDriveFileResultCode.AlreadyExists,
+                HyperAddFileResultCode.Created => Result<object>.Created(null!),
+                HyperAddFileResultCode.AlreadyExists => Result<object>.Conflict("目标路径已经存在。"),
                 HyperAddFileResultCode.DriveNotWritable =>
-                    AddDriveFileResultCode.WriteNotAllowed,
-                HyperAddFileResultCode.FileTooLarge => AddDriveFileResultCode.FileTooLarge,
+                    Result<object>.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。"),
+                HyperAddFileResultCode.FileTooLarge => Result<object>.Invalid(
+                    new ValidationError("文件不能超过 500 MiB。")),
                 _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
             };
         }
@@ -183,7 +176,7 @@ internal sealed class DriveFileService(
         catch (Exception exception) when (ContainsFileSizeLimitExceeded(exception))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            return AddDriveFileResultCode.FileTooLarge;
+            return Result<object>.Invalid(new ValidationError("文件不能超过 500 MiB。"));
         }
         catch (Exception exception)
         {
@@ -193,11 +186,11 @@ internal sealed class DriveFileService(
                 "向 Drive {DriveId} 增加文件 {Path} 失败，内容服务暂不可用。",
                 driveId,
                 path.Value);
-            return AddDriveFileResultCode.ContentUnavailable;
+            return Result<object>.CriticalError("Drive 内容暂不可用。请稍后重试。");
         }
     }
 
-    public async Task<DeleteDriveFileResultCode> DeleteFileAsync(
+    public async Task<Result> DeleteFileAsync(
         DriveId driveId,
         DriveFilePath path,
         CancellationToken cancellationToken)
@@ -207,22 +200,22 @@ internal sealed class DriveFileService(
 
         if (drive is null)
         {
-            return DeleteDriveFileResultCode.DriveNotFound;
+            return Result.NotFound("Drive 不存在。其关系可能已被移除。");
         }
 
         if (!TryGetReadyDriveKey(drive, out var driveKey))
         {
-            return DeleteDriveFileResultCode.DriveNotReady;
+            return Result.Conflict("Drive 尚未就绪。");
         }
 
         if (drive.RelationType != DriveRelationType.Ownership)
         {
-            return DeleteDriveFileResultCode.WriteNotAllowed;
+            return Result.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。");
         }
 
         if (IsReservedPath(path.Value))
         {
-            return DeleteDriveFileResultCode.ReservedPath;
+            return Result.Forbidden("目标位于 /.cinereel 协议保留目录。");
         }
 
         try
@@ -234,10 +227,10 @@ internal sealed class DriveFileService(
 
             return resultCode switch
             {
-                HyperDeleteFileResultCode.Deleted => DeleteDriveFileResultCode.Deleted,
-                HyperDeleteFileResultCode.NotFound => DeleteDriveFileResultCode.FileNotFound,
+                HyperDeleteFileResultCode.Deleted => Result.NoContent(),
+                HyperDeleteFileResultCode.NotFound => Result.NotFound("目标文件不存在。"),
                 HyperDeleteFileResultCode.DriveNotWritable =>
-                    DeleteDriveFileResultCode.WriteNotAllowed,
+                    Result.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。"),
                 _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
             };
         }
@@ -253,11 +246,11 @@ internal sealed class DriveFileService(
                 "从 Drive {DriveId} 删除文件 {Path} 失败，内容服务暂不可用。",
                 driveId,
                 path.Value);
-            return DeleteDriveFileResultCode.ContentUnavailable;
+            return Result.CriticalError("Drive 内容暂不可用。请稍后重试。");
         }
     }
 
-    public async Task<DeleteDriveDirectoryResultCode> DeleteDirectoryAsync(
+    public async Task<Result> DeleteDirectoryAsync(
         DriveId driveId,
         DriveDirectoryPath path,
         CancellationToken cancellationToken)
@@ -267,22 +260,22 @@ internal sealed class DriveFileService(
 
         if (drive is null)
         {
-            return DeleteDriveDirectoryResultCode.DriveNotFound;
+            return Result.NotFound("Drive 不存在。其关系可能已被移除。");
         }
 
         if (!TryGetReadyDriveKey(drive, out var driveKey))
         {
-            return DeleteDriveDirectoryResultCode.DriveNotReady;
+            return Result.Conflict("Drive 尚未就绪。");
         }
 
         if (drive.RelationType != DriveRelationType.Ownership)
         {
-            return DeleteDriveDirectoryResultCode.WriteNotAllowed;
+            return Result.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。");
         }
 
         if (IsReservedPath(path.Value))
         {
-            return DeleteDriveDirectoryResultCode.ReservedPath;
+            return Result.Forbidden("目标位于 /.cinereel 协议保留目录。");
         }
 
         try
@@ -294,10 +287,9 @@ internal sealed class DriveFileService(
 
             return resultCode switch
             {
-                HyperDeleteDirectoryResultCode.Deleted =>
-                    DeleteDriveDirectoryResultCode.Deleted,
+                HyperDeleteDirectoryResultCode.Deleted => Result.NoContent(),
                 HyperDeleteDirectoryResultCode.DriveNotWritable =>
-                    DeleteDriveDirectoryResultCode.WriteNotAllowed,
+                    Result.Forbidden("当前 Cinereel 不持有该 Drive 的写权限。"),
                 _ => throw new ArgumentOutOfRangeException(nameof(resultCode))
             };
         }
@@ -313,7 +305,7 @@ internal sealed class DriveFileService(
                 "递归删除 Drive {DriveId} 的目录 {Path} 失败，内容服务暂不可用。",
                 driveId,
                 path.Value);
-            return DeleteDriveDirectoryResultCode.ContentUnavailable;
+            return Result.CriticalError("Drive 内容暂不可用。请稍后重试。");
         }
     }
 

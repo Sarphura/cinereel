@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text.Json;
+using Ardalis.Result;
 using Cinereel.Infrastructure.Persistence;
 
 namespace Cinereel.Features.Drive;
@@ -12,7 +13,7 @@ internal sealed class DriveService(
     TimeProvider timeProvider,
     ILogger<DriveService> logger) : IDriveService
 {
-    public async Task<CreateDriveResult> CreateAsync(
+    public async Task<Result<DriveResponse>> CreateAsync(
         IdempotencyKey idempotencyKey,
         CreateDriveRequest request,
         CancellationToken cancellationToken)
@@ -36,17 +37,19 @@ internal sealed class DriveService(
                 requestHash,
                 StringComparison.Ordinal))
         {
-            return new CreateDriveResult(CreateDriveResultCode.IdempotencyConflict, null);
+            return Result<DriveResponse>.Conflict(
+                "Idempotency-Key 已用于不同的创建请求。");
         }
 
         if (existing?.Status == DriveStatus.Deleted)
         {
-            return new CreateDriveResult(CreateDriveResultCode.Gone, null);
+            return Result<DriveResponse>.NotFound(
+                "该创建请求对应的 Drive 已被删除。");
         }
 
         if (existing?.Status == DriveStatus.Ready)
         {
-            return new CreateDriveResult(CreateDriveResultCode.Replayed, ToResponse(existing));
+            return Result<DriveResponse>.Success(ToResponse(existing));
         }
 
         if (existing is not null)
@@ -59,7 +62,7 @@ internal sealed class DriveService(
                 await unitOfWork.SaveChangesAsync(cancellationToken);
             }
 
-            return new CreateDriveResult(CreateDriveResultCode.Accepted, ToResponse(existing));
+            return Result<DriveResponse>.Created(ToResponse(existing));
         }
 
         var now = GetUtcNow();
@@ -80,10 +83,10 @@ internal sealed class DriveService(
         };
         driveRepository.Add(drive);
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return new CreateDriveResult(CreateDriveResultCode.Accepted, ToResponse(drive));
+        return Result<DriveResponse>.Created(ToResponse(drive));
     }
 
-    public async Task<DriveResponse?> GetAsync(
+    public async Task<Result<DriveResponse>> GetAsync(
         DriveId driveId,
         CancellationToken cancellationToken)
     {
@@ -93,26 +96,28 @@ internal sealed class DriveService(
 
         if (entity is null || entity.RelationType == DriveRelationType.None)
         {
-            return null;
+            return Result<DriveResponse>.NotFound("Drive 不存在。");
         }
 
-        return ToResponse(entity);
+        return Result<DriveResponse>.Success(ToResponse(entity));
     }
 
-    public async Task<IReadOnlyList<DriveResponse>> ListAsync(
+    public async Task<Result<IReadOnlyList<DriveResponse>>> ListAsync(
         CancellationToken cancellationToken)
     {
         var drives = await driveRepository.FindAllAsync(cancellationToken);
 
-        return drives
+        var response = drives
             .Where(drive => drive.RelationType != DriveRelationType.None)
             .OrderBy(drive => drive.CreatedAt)
             .ThenBy(drive => drive.Id)
             .Select(ToResponse)
             .ToArray();
+
+        return Result<IReadOnlyList<DriveResponse>>.Success(response);
     }
 
-    public async Task<RetryDriveCreationResultCode> RetryCreationAsync(
+    public async Task<Result> RetryCreationAsync(
         DriveId driveId,
         CancellationToken cancellationToken)
     {
@@ -121,17 +126,17 @@ internal sealed class DriveService(
         if (drive is null || drive.RelationType != DriveRelationType.Ownership ||
             drive.Status == DriveStatus.Deleted)
         {
-            return RetryDriveCreationResultCode.NotFound;
+            return Result.NotFound("Drive 不存在。");
         }
 
         if (drive.Status == DriveStatus.Pending)
         {
-            return RetryDriveCreationResultCode.Accepted;
+            return Result.Success();
         }
 
         if (drive.Status != DriveStatus.Failed)
         {
-            return RetryDriveCreationResultCode.NotFailed;
+            return Result.Conflict("只有创建失败的 Drive 可以重试。");
         }
 
         var idempotencyKey = drive.IdempotencyKey ?? throw new InvalidOperationException(
@@ -142,22 +147,22 @@ internal sealed class DriveService(
 
         if (drive is null || drive.Status == DriveStatus.Deleted)
         {
-            return RetryDriveCreationResultCode.NotFound;
+            return Result.NotFound("Drive 不存在。");
         }
 
         if (drive.Status == DriveStatus.Ready)
         {
-            return RetryDriveCreationResultCode.NotFailed;
+            return Result.Conflict("只有创建失败的 Drive 可以重试。");
         }
 
         drive.Status = DriveStatus.Pending;
         drive.Key = null;
         drive.UpdatedAt = GetUtcNow();
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return RetryDriveCreationResultCode.Accepted;
+        return Result.Success();
     }
 
-    public async Task<UpdateDriveRemarkResultCode> UpdateRemarkAsync(
+    public async Task<Result> UpdateRemarkAsync(
         DriveId driveId,
         DriveRemark remark,
         CancellationToken cancellationToken)
@@ -168,7 +173,7 @@ internal sealed class DriveService(
 
         if (!DriveDescriptionService.IsVisible(drive))
         {
-            return UpdateDriveRemarkResultCode.NotFound;
+            return Result.NotFound("Drive 不存在或当前 Cinereel 没有访问关系。");
         }
 
         var lockKey = drive!.RelationType == DriveRelationType.Ownership
@@ -179,15 +184,15 @@ internal sealed class DriveService(
         drive = await driveRepository.FindByIdAsync(driveId.Value, cancellationToken);
         if (!DriveDescriptionService.IsVisible(drive))
         {
-            return UpdateDriveRemarkResultCode.NotFound;
+            return Result.NotFound("Drive 不存在或当前 Cinereel 没有访问关系。");
         }
 
         drive!.Remark = remark.Value;
         await unitOfWork.SaveChangesAsync(cancellationToken);
-        return UpdateDriveRemarkResultCode.Updated;
+        return Result.NoContent();
     }
 
-    public async Task<DeleteDriveResultCode> DeleteAsync(
+    public async Task<Result> DeleteAsync(
         DriveId driveId,
         CancellationToken cancellationToken)
     {
@@ -197,7 +202,8 @@ internal sealed class DriveService(
         if (drive is null || drive.RelationType != DriveRelationType.Ownership ||
             drive.Status == DriveStatus.Deleted)
         {
-            return DeleteDriveResultCode.NotFound;
+            return Result.NotFound(
+                "Drive 不存在或当前 Cinereel 不持有 DriveOwnership。");
         }
 
         var idempotencyKey = drive.IdempotencyKey ?? throw new InvalidOperationException(
@@ -209,7 +215,8 @@ internal sealed class DriveService(
         if (drive is null || drive.RelationType != DriveRelationType.Ownership ||
             drive.Status == DriveStatus.Deleted)
         {
-            return DeleteDriveResultCode.NotFound;
+            return Result.NotFound(
+                "Drive 不存在或当前 Cinereel 不持有 DriveOwnership。");
         }
 
         drive.Status = DriveStatus.Deleted;
@@ -218,7 +225,7 @@ internal sealed class DriveService(
         drive.UpdatedAt = GetUtcNow();
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
-        return DeleteDriveResultCode.Deleted;
+        return Result.NoContent();
     }
 
     internal async Task ProcessPendingCreationsAsync(CancellationToken cancellationToken)

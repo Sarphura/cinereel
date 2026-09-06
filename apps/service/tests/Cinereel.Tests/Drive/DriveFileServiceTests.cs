@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Ardalis.Result;
 using Cinereel.Features.Drive;
 using Cinereel.Infrastructure.Persistence;
 using Microsoft.Data.Sqlite;
@@ -156,8 +157,8 @@ public sealed class DriveFileServiceTests
             25,
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.Listed, result.ResultCode);
-        var directory = Assert.IsType<DriveDirectoryResponse>(result.Directory);
+        Assert.Equal(ResultStatus.Ok, result.Status);
+        var directory = Assert.IsType<DriveDirectoryResponse>(result.Value);
         Assert.Equal(path.Value, directory.Path);
         Assert.Equal(12, directory.DriveVersion);
         Assert.Collection(
@@ -206,8 +207,8 @@ public sealed class DriveFileServiceTests
             100,
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.VersionConflict, result.ResultCode);
-        Assert.Null(result.Directory);
+        Assert.Equal(ResultStatus.Conflict, result.Status);
+        Assert.Null(result.Value);
         Assert.Equal(
             "before.mkv",
             Assert.Single(fixture.HyperClient.ListDirectoryCalls).Cursor);
@@ -243,10 +244,10 @@ public sealed class DriveFileServiceTests
             directoryPath,
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.Listed, listed.ResultCode);
-        Assert.Equal(AddDriveFileResultCode.WriteNotAllowed, added);
-        Assert.Equal(DeleteDriveFileResultCode.WriteNotAllowed, deletedFile);
-        Assert.Equal(DeleteDriveDirectoryResultCode.WriteNotAllowed, deletedDirectory);
+        Assert.Equal(ResultStatus.Ok, listed.Status);
+        Assert.Equal(ResultStatus.Forbidden, added.Status);
+        Assert.Equal(ResultStatus.Forbidden, deletedFile.Status);
+        Assert.Equal(ResultStatus.Forbidden, deletedDirectory.Status);
         Assert.Single(fixture.HyperClient.ListDirectoryCalls);
         Assert.Empty(fixture.HyperClient.AddFileCalls);
         Assert.Empty(fixture.HyperClient.DeleteFileCalls);
@@ -287,10 +288,10 @@ public sealed class DriveFileServiceTests
             directoryPath,
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.DriveNotReady, listed.ResultCode);
-        Assert.Equal(AddDriveFileResultCode.DriveNotReady, added);
-        Assert.Equal(DeleteDriveFileResultCode.DriveNotReady, deletedFile);
-        Assert.Equal(DeleteDriveDirectoryResultCode.DriveNotReady, deletedDirectory);
+        Assert.Equal(ResultStatus.Conflict, listed.Status);
+        Assert.Equal(ResultStatus.Conflict, added.Status);
+        Assert.Equal(ResultStatus.Conflict, deletedFile.Status);
+        Assert.Equal(ResultStatus.Conflict, deletedDirectory.Status);
         AssertNoFileCalls(fixture.HyperClient);
     }
 
@@ -318,9 +319,9 @@ public sealed class DriveFileServiceTests
             directoryPath,
             CancellationToken.None);
 
-        Assert.Equal(AddDriveFileResultCode.DriveNotReady, added);
-        Assert.Equal(DeleteDriveFileResultCode.DriveNotReady, deletedFile);
-        Assert.Equal(DeleteDriveDirectoryResultCode.DriveNotReady, deletedDirectory);
+        Assert.Equal(ResultStatus.Conflict, added.Status);
+        Assert.Equal(ResultStatus.Conflict, deletedFile.Status);
+        Assert.Equal(ResultStatus.Conflict, deletedDirectory.Status);
         AssertNoFileCalls(fixture.HyperClient);
     }
 
@@ -357,10 +358,10 @@ public sealed class DriveFileServiceTests
             directoryPath,
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.DriveNotFound, listed.ResultCode);
-        Assert.Equal(AddDriveFileResultCode.DriveNotFound, added);
-        Assert.Equal(DeleteDriveFileResultCode.DriveNotFound, deletedFile);
-        Assert.Equal(DeleteDriveDirectoryResultCode.DriveNotFound, deletedDirectory);
+        Assert.Equal(ResultStatus.NotFound, listed.Status);
+        Assert.Equal(ResultStatus.NotFound, added.Status);
+        Assert.Equal(ResultStatus.NotFound, deletedFile.Status);
+        Assert.Equal(ResultStatus.NotFound, deletedDirectory.Status);
         AssertNoFileCalls(fixture.HyperClient);
     }
 
@@ -394,11 +395,11 @@ public sealed class DriveFileServiceTests
             DirectoryPath(pathValue),
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.ReservedPath, listed.ResultCode);
-        Assert.Null(listed.Directory);
-        Assert.Equal(AddDriveFileResultCode.ReservedPath, added);
-        Assert.Equal(DeleteDriveFileResultCode.ReservedPath, deletedFile);
-        Assert.Equal(DeleteDriveDirectoryResultCode.ReservedPath, deletedDirectory);
+        Assert.Equal(ResultStatus.Forbidden, listed.Status);
+        Assert.Null(listed.Value);
+        Assert.Equal(ResultStatus.Forbidden, added.Status);
+        Assert.Equal(ResultStatus.Forbidden, deletedFile.Status);
+        Assert.Equal(ResultStatus.Forbidden, deletedDirectory.Status);
         Assert.Equal(0, content.Position);
         AssertNoFileCalls(fixture.HyperClient);
     }
@@ -432,10 +433,10 @@ public sealed class DriveFileServiceTests
             DirectoryPath(pathValue),
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.Listed, listed.ResultCode);
-        Assert.Equal(AddDriveFileResultCode.Created, added);
-        Assert.Equal(DeleteDriveFileResultCode.Deleted, deletedFile);
-        Assert.Equal(DeleteDriveDirectoryResultCode.Deleted, deletedDirectory);
+        Assert.Equal(ResultStatus.Ok, listed.Status);
+        Assert.Equal(ResultStatus.Created, added.Status);
+        Assert.Equal(ResultStatus.NoContent, deletedFile.Status);
+        Assert.Equal(ResultStatus.NoContent, deletedDirectory.Status);
         Assert.Single(fixture.HyperClient.ListDirectoryCalls);
         Assert.Single(fixture.HyperClient.AddFileCalls);
         Assert.Single(fixture.HyperClient.DeleteFileCalls);
@@ -458,8 +459,8 @@ public sealed class DriveFileServiceTests
             DirectoryPath("/"),
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.Listed, listed.ResultCode);
-        Assert.Equal(DeleteDriveDirectoryResultCode.Deleted, deleted);
+        Assert.Equal(ResultStatus.Ok, listed.Status);
+        Assert.Equal(ResultStatus.NoContent, deleted.Status);
         Assert.Equal("/", Assert.Single(fixture.HyperClient.ListDirectoryCalls).Path.Value);
         Assert.Equal("/", Assert.Single(fixture.HyperClient.DeleteDirectoryCalls).Path.Value);
     }
@@ -485,19 +486,19 @@ public sealed class DriveFileServiceTests
     }
 
     [Theory]
-    [InlineData(nameof(HyperAddFileResultCode.Created), AddDriveFileResultCode.Created)]
+    [InlineData(nameof(HyperAddFileResultCode.Created), ResultStatus.Created)]
     [InlineData(
         nameof(HyperAddFileResultCode.AlreadyExists),
-        AddDriveFileResultCode.AlreadyExists)]
+        ResultStatus.Conflict)]
     [InlineData(
         nameof(HyperAddFileResultCode.DriveNotWritable),
-        AddDriveFileResultCode.WriteNotAllowed)]
+        ResultStatus.Forbidden)]
     [InlineData(
         nameof(HyperAddFileResultCode.FileTooLarge),
-        AddDriveFileResultCode.FileTooLarge)]
+        ResultStatus.Invalid)]
     public async Task AddFileMapsHyperResultAndStreamsContentUnchanged(
         string hyperResultName,
-        AddDriveFileResultCode expectedResult)
+        ResultStatus expectedResult)
     {
         await using var fixture = await DriveFileServiceFixture.CreateAsync();
         fixture.HyperClient.AddFileResult = Enum.Parse<HyperAddFileResultCode>(
@@ -512,7 +513,7 @@ public sealed class DriveFileServiceTests
             stream,
             CancellationToken.None);
 
-        Assert.Equal(expectedResult, result);
+        Assert.Equal(expectedResult, result.Status);
         var call = Assert.Single(fixture.HyperClient.AddFileCalls);
         Assert.Equal(fixture.DriveKey, call.DriveKey);
         Assert.Equal(path, call.Path);
@@ -533,7 +534,7 @@ public sealed class DriveFileServiceTests
             content,
             CancellationToken.None);
 
-        Assert.Equal(AddDriveFileResultCode.Created, result);
+        Assert.Equal(ResultStatus.Created, result.Status);
         Assert.Equal([1, 2, 3], Assert.Single(fixture.HyperClient.AddFileCalls).Content);
         Assert.Equal(maxFileSize, content.BytesRead);
         Assert.True(content.CanRead);
@@ -553,7 +554,7 @@ public sealed class DriveFileServiceTests
             content,
             CancellationToken.None);
 
-        Assert.Equal(AddDriveFileResultCode.FileTooLarge, result);
+        Assert.Equal(ResultStatus.Invalid, result.Status);
         Assert.Equal(maxFileSize + 1, content.BytesRead);
         Assert.True(content.CanRead);
         Assert.Equal(5, content.ReadByte());
@@ -562,16 +563,16 @@ public sealed class DriveFileServiceTests
     [Theory]
     [InlineData(
         nameof(HyperDeleteFileResultCode.Deleted),
-        DeleteDriveFileResultCode.Deleted)]
+        ResultStatus.NoContent)]
     [InlineData(
         nameof(HyperDeleteFileResultCode.NotFound),
-        DeleteDriveFileResultCode.FileNotFound)]
+        ResultStatus.NotFound)]
     [InlineData(
         nameof(HyperDeleteFileResultCode.DriveNotWritable),
-        DeleteDriveFileResultCode.WriteNotAllowed)]
+        ResultStatus.Forbidden)]
     public async Task DeleteFileMapsHyperResult(
         string hyperResultName,
-        DeleteDriveFileResultCode expectedResult)
+        ResultStatus expectedResult)
     {
         await using var fixture = await DriveFileServiceFixture.CreateAsync();
         fixture.HyperClient.DeleteFileResult = Enum.Parse<HyperDeleteFileResultCode>(
@@ -583,7 +584,7 @@ public sealed class DriveFileServiceTests
             path,
             CancellationToken.None);
 
-        Assert.Equal(expectedResult, result);
+        Assert.Equal(expectedResult, result.Status);
         var call = Assert.Single(fixture.HyperClient.DeleteFileCalls);
         Assert.Equal(fixture.DriveKey, call.DriveKey);
         Assert.Equal(path, call.Path);
@@ -592,13 +593,13 @@ public sealed class DriveFileServiceTests
     [Theory]
     [InlineData(
         nameof(HyperDeleteDirectoryResultCode.Deleted),
-        DeleteDriveDirectoryResultCode.Deleted)]
+        ResultStatus.NoContent)]
     [InlineData(
         nameof(HyperDeleteDirectoryResultCode.DriveNotWritable),
-        DeleteDriveDirectoryResultCode.WriteNotAllowed)]
+        ResultStatus.Forbidden)]
     public async Task DeleteDirectoryMapsHyperResult(
         string hyperResultName,
-        DeleteDriveDirectoryResultCode expectedResult)
+        ResultStatus expectedResult)
     {
         await using var fixture = await DriveFileServiceFixture.CreateAsync();
         fixture.HyperClient.DeleteDirectoryResult =
@@ -610,7 +611,7 @@ public sealed class DriveFileServiceTests
             path,
             CancellationToken.None);
 
-        Assert.Equal(expectedResult, result);
+        Assert.Equal(expectedResult, result.Status);
         var call = Assert.Single(fixture.HyperClient.DeleteDirectoryCalls);
         Assert.Equal(fixture.DriveKey, call.DriveKey);
         Assert.Equal(path, call.Path);
@@ -648,11 +649,11 @@ public sealed class DriveFileServiceTests
             directoryPath,
             CancellationToken.None);
 
-        Assert.Equal(ListDriveDirectoryResultCode.ContentUnavailable, listed.ResultCode);
-        Assert.Null(listed.Directory);
-        Assert.Equal(AddDriveFileResultCode.ContentUnavailable, added);
-        Assert.Equal(DeleteDriveFileResultCode.ContentUnavailable, deletedFile);
-        Assert.Equal(DeleteDriveDirectoryResultCode.ContentUnavailable, deletedDirectory);
+        Assert.Equal(ResultStatus.CriticalError, listed.Status);
+        Assert.Null(listed.Value);
+        Assert.Equal(ResultStatus.CriticalError, added.Status);
+        Assert.Equal(ResultStatus.CriticalError, deletedFile.Status);
+        Assert.Equal(ResultStatus.CriticalError, deletedDirectory.Status);
     }
 
     [Fact]

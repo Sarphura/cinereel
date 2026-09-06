@@ -1,29 +1,31 @@
+using Ardalis.Result;
+
 namespace Cinereel.Features.Drive;
 
 public interface IDriveService
 {
-    Task<CreateDriveResult> CreateAsync(
+    Task<Result<DriveResponse>> CreateAsync(
         IdempotencyKey idempotencyKey,
         CreateDriveRequest request,
         CancellationToken cancellationToken);
 
-    Task<DriveResponse?> GetAsync(
+    Task<Result<DriveResponse>> GetAsync(
         DriveId driveId,
         CancellationToken cancellationToken);
 
-    Task<IReadOnlyList<DriveResponse>> ListAsync(
+    Task<Result<IReadOnlyList<DriveResponse>>> ListAsync(
         CancellationToken cancellationToken);
 
-    Task<RetryDriveCreationResultCode> RetryCreationAsync(
+    Task<Result> RetryCreationAsync(
         DriveId driveId,
         CancellationToken cancellationToken);
 
-    Task<UpdateDriveRemarkResultCode> UpdateRemarkAsync(
+    Task<Result> UpdateRemarkAsync(
         DriveId driveId,
         DriveRemark remark,
         CancellationToken cancellationToken);
 
-    Task<DeleteDriveResultCode> DeleteAsync(
+    Task<Result> DeleteAsync(
         DriveId driveId,
         CancellationToken cancellationToken);
 }

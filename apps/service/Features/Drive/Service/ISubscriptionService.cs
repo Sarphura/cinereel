@@ -1,16 +1,18 @@
+using Ardalis.Result;
+
 namespace Cinereel.Features.Drive;
 
 public interface ISubscriptionService
 {
-    Task<CreateSubscriptionResult> CreateAsync(
+    Task<Result<DriveDescriptionResponse>> CreateAsync(
         DriveKey driveKey,
         CancellationToken cancellationToken);
 
-    Task<RefreshSubscriptionResult> RefreshAsync(
+    Task<Result<DriveDescriptionResponse>> RefreshAsync(
         DriveId driveId,
         CancellationToken cancellationToken);
 
-    Task<DeleteSubscriptionResultCode> DeleteAsync(
+    Task<Result> DeleteAsync(
         DriveId driveId,
         CancellationToken cancellationToken);
 }
