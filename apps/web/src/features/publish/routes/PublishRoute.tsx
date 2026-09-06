@@ -11,7 +11,7 @@ import { useDrivePreview } from '../../drive/hooks/useDrivePreview';
 import { getDriveSelectionKey, getPreviewKind, requiresStreamingVideoPreview } from '../../drive/utils';
 import type { DriveRecord, ResourceTreeNode } from '../../drive/types';
 import { usePublishDriveActions } from '../hooks/usePublishDriveActions';
-import { copyDriveFile, createDriveFolder, deleteDriveFile, moveDriveFile } from '../api/api';
+import { copyDriveFile, createDriveFolder, deleteDriveFile, downloadDriveFile, moveDriveFile } from '../api/api';
 import { CreatePublishDriveDialog } from '../components/CreatePublishDriveDialog';
 import { PublishDriveContextMenu, type DriveContextMenuState } from '../components/PublishDriveContextMenu';
 import { PublishDetailHeader } from '../components/PublishDetailHeader';
@@ -167,6 +167,20 @@ export function PublishRouteView() {
     actions.setError(null);
   };
 
+  const handleDownloadNode = (node: ResourceTreeNode) => {
+    if (node.type !== 'file') {
+      return;
+    }
+
+    if (!selectedDrive?.driveId) {
+      actions.setError('当前 Drive 缺少 driveId，无法下载文件。');
+      return;
+    }
+
+    downloadDriveFile(selectedDrive.driveId, node.path);
+    actions.setError(null);
+  };
+
   const handleRenameNode = async (node: ResourceTreeNode, newPath: string) => {
     if (!selectedDriveKey) return;
     await moveDriveFile(selectedDriveKey, node.path, newPath);
@@ -275,6 +289,8 @@ export function PublishRouteView() {
                   resourceTree={resourceTree}
                   refreshing={actions.refreshing}
                   onRefresh={() => void actions.handleRefresh(selectedDriveKey)}
+                  isDownloadable={(node) => node.type === 'file'}
+                  onDownloadNode={handleDownloadNode}
                   onPreviewNode={handlePreviewNode}
                   isPreviewableNode={(node) => getPreviewKind(node) !== null}
                   preview={preview.preview}

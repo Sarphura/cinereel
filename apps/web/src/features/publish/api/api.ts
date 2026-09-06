@@ -1,5 +1,5 @@
 import { queryOptions } from '@tanstack/react-query';
-import { requestJson } from '../../../lib/api';
+import { API_BASE_URL, requestJson } from '../../../lib/api';
 import { queryClient } from '../../../lib/queryClient';
 import { toDriveContentType } from '../../drive/contentTypes';
 import type { DriveContentTypeId, DriveExplorerLoaderData, DriveRecord, DriveStatus, ResourceTreeNode } from '../../drive/types';
@@ -252,6 +252,26 @@ export async function deleteDriveFile(driveId: string, path: string) {
   await requestJson(`/api/drives/${driveId}/files?${search.toString()}`, {
     method: 'DELETE',
   });
+}
+
+export function buildDriveFileDownloadUrl(driveId: string, path: string) {
+  const search = new URLSearchParams({ path });
+  return `${API_BASE_URL}/api/drives/${encodeURIComponent(driveId)}/files?${search.toString()}`;
+}
+
+export function downloadDriveFile(driveId: string, path: string) {
+  if (typeof document === 'undefined') {
+    return;
+  }
+
+  const link = document.createElement('a');
+  link.href = buildDriveFileDownloadUrl(driveId, path);
+  link.download = '';
+  link.rel = 'noopener';
+  link.style.display = 'none';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 export async function uploadDriveFile(driveId: string, path: string, file: Blob) {

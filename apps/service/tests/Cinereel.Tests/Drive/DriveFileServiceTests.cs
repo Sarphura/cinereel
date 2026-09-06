@@ -540,6 +540,48 @@ public sealed class DriveFileServiceTests
         Assert.True(content.CanRead);
     }
 
+    [Theory]
+    [InlineData(nameof(HyperReadFileResultCode.Success), ResultStatus.Ok)]
+    [InlineData(nameof(HyperReadFileResultCode.NotFound), ResultStatus.NotFound)]
+    [InlineData(nameof(HyperReadFileResultCode.InvalidTarget), ResultStatus.Conflict)]
+    [InlineData(nameof(HyperReadFileResultCode.Unavailable), ResultStatus.CriticalError)]
+    [InlineData(nameof(HyperReadFileResultCode.Timeout), ResultStatus.CriticalError)]
+    public async Task DownloadFileMapsHyperResultAndPreservesMetadata(
+        string hyperResultName,
+        ResultStatus expectedResult)
+    {
+        await using var fixture = await DriveFileServiceFixture.CreateAsync();
+        var path = FilePath("/video/电影.mkv");
+        var content = new MemoryStream([1, 2, 3], writable: false);
+        fixture.HyperClient.ReadFileResult =
+            Enum.Parse<HyperReadFileResultCode>(hyperResultName) == HyperReadFileResultCode.Success
+                ? new(
+                    HyperReadFileResultCode.Success,
+                    content,
+                    "video/x-matroska",
+                    3)
+                : new(Enum.Parse<HyperReadFileResultCode>(hyperResultName));
+
+        var result = await fixture.Service.DownloadFileAsync(
+            fixture.DriveId,
+            path,
+            CancellationToken.None);
+
+        Assert.Equal(expectedResult, result.Status);
+        var call = Assert.Single(fixture.HyperClient.ReadFileCalls);
+        Assert.Equal(fixture.DriveKey, call.DriveKey);
+        Assert.Equal(path, call.Path);
+
+        if (expectedResult == ResultStatus.Ok)
+        {
+            using var download = result.Value;
+            Assert.Equal("电影.mkv", download.FileName);
+            Assert.Equal("video/x-matroska", download.ContentType);
+            Assert.Equal(3, download.ContentLength);
+            Assert.Equal([1, 2, 3], await ReadAllAsync(download.Content));
+        }
+    }
+
     [Fact]
     public async Task AddFileRejectsUnknownLengthContentBeyondLimitWithoutClosingSource()
     {
@@ -749,8 +791,16 @@ public sealed class DriveFileServiceTests
     {
         Assert.Empty(hyperClient.ListDirectoryCalls);
         Assert.Empty(hyperClient.AddFileCalls);
+        Assert.Empty(hyperClient.ReadFileCalls);
         Assert.Empty(hyperClient.DeleteFileCalls);
         Assert.Empty(hyperClient.DeleteDirectoryCalls);
+    }
+
+    private static async Task<byte[]> ReadAllAsync(Stream content)
+    {
+        await using var buffer = new MemoryStream();
+        await content.CopyToAsync(buffer);
+        return buffer.ToArray();
     }
 
     private sealed class DriveFileServiceFixture : IAsyncDisposable

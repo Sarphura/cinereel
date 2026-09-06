@@ -11,6 +11,8 @@ export function PublishDriveExplorer({
   resourceTree,
   refreshing,
   onRefresh,
+  isDownloadable,
+  onDownloadNode,
   onPreviewNode,
   isPreviewableNode,
   preview,
@@ -31,6 +33,8 @@ export function PublishDriveExplorer({
   resourceTree: ResourceTreeNode | null;
   refreshing: boolean;
   onRefresh: () => void | Promise<void>;
+  isDownloadable?: (node: ResourceTreeNode) => boolean;
+  onDownloadNode?: (node: ResourceTreeNode) => void;
   onPreviewNode: (node: ResourceTreeNode) => void;
   isPreviewableNode: (node: ResourceTreeNode) => boolean;
   preview: ExplorerPreviewState | null;
@@ -63,6 +67,8 @@ export function PublishDriveExplorer({
       refreshing={refreshing}
       onRefresh={onRefresh}
       showTreeControls
+      isDownloadable={isDownloadable}
+      onDownloadNode={onDownloadNode}
       onPreviewNode={onPreviewNode}
       isPreviewableNode={isPreviewableNode}
       renderNodeBadge={renderDriveScanStatusBadge}

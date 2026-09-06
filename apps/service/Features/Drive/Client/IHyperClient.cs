@@ -24,6 +24,11 @@ internal interface IHyperClient
         Stream content,
         CancellationToken cancellationToken);
 
+    Task<HyperReadFileResult> ReadFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        CancellationToken cancellationToken);
+
     Task<HyperDeleteFileResultCode> DeleteFileAsync(
         DriveKey driveKey,
         DriveFilePath path,

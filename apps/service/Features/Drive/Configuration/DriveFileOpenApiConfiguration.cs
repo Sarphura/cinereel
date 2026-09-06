@@ -21,6 +21,10 @@ internal sealed class DriveFileOpenApiConfiguration :
             string.Equals(
                 context.MethodInfo.Name,
                 nameof(DriveFileController.AddFile),
+                StringComparison.Ordinal),
+            string.Equals(
+                context.MethodInfo.Name,
+                nameof(DriveFileController.DownloadFile),
                 StringComparison.Ordinal));
     }
 
@@ -40,11 +44,18 @@ internal sealed class DriveFileOpenApiConfiguration :
             string.Equals(
                 action.MethodInfo.Name,
                 nameof(DriveFileController.AddFile),
+                StringComparison.Ordinal),
+            string.Equals(
+                action.MethodInfo.Name,
+                nameof(DriveFileController.DownloadFile),
                 StringComparison.Ordinal));
         return Task.CompletedTask;
     }
 
-    private static void ConfigureOperation(OpenApiOperation operation, bool isAddFile)
+    private static void ConfigureOperation(
+        OpenApiOperation operation,
+        bool isAddFile,
+        bool isDownloadFile)
     {
         foreach (var parameter in operation.Parameters?.OfType<OpenApiParameter>() ?? [])
         {
@@ -71,6 +82,22 @@ internal sealed class DriveFileOpenApiConfiguration :
                             Format = "binary"
                         }
                     }
+                }
+            };
+        }
+
+        if (isDownloadFile &&
+            operation.Responses is not null &&
+            operation.Responses.TryGetValue("200", out var downloadResponse) &&
+            downloadResponse.Content is { } downloadContent)
+        {
+            downloadContent.Clear();
+            downloadContent["application/octet-stream"] = new()
+            {
+                Schema = new OpenApiSchema
+                {
+                    Type = JsonSchemaType.String,
+                    Format = "binary"
                 }
             };
         }

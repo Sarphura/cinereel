@@ -20,6 +20,21 @@ internal enum HyperAddFileResultCode
     FileTooLarge
 }
 
+internal sealed record HyperReadFileResult(
+    HyperReadFileResultCode ResultCode,
+    Stream? Content = null,
+    string? ContentType = null,
+    long? ContentLength = null);
+
+internal enum HyperReadFileResultCode
+{
+    Success,
+    NotFound,
+    InvalidTarget,
+    Unavailable,
+    Timeout
+}
+
 internal enum HyperDeleteFileResultCode
 {
     Deleted,

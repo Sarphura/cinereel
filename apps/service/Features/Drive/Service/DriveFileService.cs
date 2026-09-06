@@ -193,6 +193,76 @@ internal sealed class DriveFileService(
         }
     }
 
+    public async Task<Result<DriveFileDownloadResponse>> DownloadFileAsync(
+        DriveId driveId,
+        DriveFilePath path,
+        CancellationToken cancellationToken)
+    {
+        ValidateFilePath(path);
+        var drive = await FindVisibleDriveAsync(driveId, cancellationToken);
+
+        if (drive is null)
+        {
+            return Result<DriveFileDownloadResponse>.NotFound(
+                "Drive 不存在。其关系可能已被移除。");
+        }
+
+        if (!TryGetReadyDriveKey(drive, out var driveKey))
+        {
+            return Result<DriveFileDownloadResponse>.Conflict("Drive 尚未就绪。");
+        }
+
+        if (IsReservedPath(path.Value))
+        {
+            return Result<DriveFileDownloadResponse>.Forbidden(
+                "目标位于 /.cinereel 协议保留目录。");
+        }
+
+        try
+        {
+            var result = await hyperClient.ReadFileAsync(
+                driveKey,
+                path,
+                cancellationToken);
+
+            return result.ResultCode switch
+            {
+                HyperReadFileResultCode.Success when result.Content is not null =>
+                    Result<DriveFileDownloadResponse>.Success(
+                        new DriveFileDownloadResponse(
+                            result.Content,
+                            GetFileName(path),
+                            result.ContentType ?? "application/octet-stream",
+                            result.ContentLength)),
+                HyperReadFileResultCode.NotFound =>
+                    Result<DriveFileDownloadResponse>.NotFound("目标文件不存在。"),
+                HyperReadFileResultCode.InvalidTarget =>
+                    Result<DriveFileDownloadResponse>.Conflict("目标不是可下载的文件。"),
+                HyperReadFileResultCode.Unavailable or HyperReadFileResultCode.Timeout =>
+                    Result<DriveFileDownloadResponse>.CriticalError(
+                        "Drive 内容暂不可用。请稍后重试。"),
+                HyperReadFileResultCode.Success => throw new InvalidOperationException(
+                    "Hyper Client 返回了没有正文的成功文件响应。"),
+                _ => throw new ArgumentOutOfRangeException(nameof(result.ResultCode))
+            };
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            logger.LogWarning(
+                exception,
+                "读取 Drive {DriveId} 的文件 {Path} 失败，内容服务暂不可用。",
+                driveId,
+                path.Value);
+            return Result<DriveFileDownloadResponse>.CriticalError(
+                "Drive 内容暂不可用。请稍后重试。");
+        }
+    }
+
     public async Task<Result> DeleteFileAsync(
         DriveId driveId,
         DriveFilePath path,
@@ -348,6 +418,12 @@ internal sealed class DriveFileService(
     private static bool IsReservedPath(string path) =>
         string.Equals(path, "/.cinereel", StringComparison.Ordinal) ||
         path.StartsWith("/.cinereel/", StringComparison.Ordinal);
+
+    private static string GetFileName(DriveFilePath path)
+    {
+        var separator = path.Value.LastIndexOf('/');
+        return path.Value[(separator + 1)..];
+    }
 
     private static void ValidateFilePath(DriveFilePath path)
     {

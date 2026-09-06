@@ -25,7 +25,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
     }
 
     [Fact]
-    public async Task FourFileEndpointsCompleteNormalWorkflow()
+    public async Task FiveFileEndpointsCompleteNormalWorkflow()
     {
         ResetHyperClient();
         var drive = await SeedDriveAsync(
@@ -65,6 +65,27 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
         Assert.Equal("/video", listCall.Path.Value);
         Assert.Null(listCall.Cursor);
         Assert.Equal(20, listCall.Limit);
+
+        var downloadBytes = new byte[] { 7, 8, 9 };
+        _factory.HyperClient.ReadFileResult = new(
+            HyperReadFileResultCode.Success,
+            new MemoryStream(downloadBytes, writable: false),
+            "video/x-matroska",
+            downloadBytes.Length);
+        using var downloadResponse = await _client.GetAsync(
+            $"/api/drives/{drive.DriveId}/files?path=%2Fvideo%2Fmovie.mkv");
+
+        Assert.Equal(HttpStatusCode.OK, downloadResponse.StatusCode);
+        Assert.Equal("video/x-matroska", downloadResponse.Content.Headers.ContentType?.MediaType);
+        Assert.Equal(downloadBytes.Length, downloadResponse.Content.Headers.ContentLength);
+        Assert.Contains(
+            "movie.mkv",
+            downloadResponse.Content.Headers.ContentDisposition?.FileNameStar ??
+            downloadResponse.Content.Headers.ContentDisposition?.FileName);
+        Assert.Equal(downloadBytes, await downloadResponse.Content.ReadAsByteArrayAsync());
+        var readCall = Assert.Single(_factory.HyperClient.ReadFileCalls);
+        Assert.Equal(drive.DriveKey, readCall.DriveKey);
+        Assert.Equal("/video/movie.mkv", readCall.Path.Value);
 
         var bytes = Enumerable.Range(0, 256).Select(value => (byte)value).ToArray();
         using var addRequest = CreateBinaryRequest(
@@ -120,10 +141,16 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             $"/api/drives/{drive.DriveId}/files?path={query}");
         using var deleteDirectoryResponse = await _client.DeleteAsync(
             $"/api/drives/{drive.DriveId}/files/entries?path={query}");
+        using var downloadResponse = await _client.GetAsync(
+            $"/api/drives/{drive.DriveId}/files?path={query}");
 
         foreach (var response in new[]
         {
-            listResponse, addResponse, deleteFileResponse, deleteDirectoryResponse
+            listResponse,
+            addResponse,
+            deleteFileResponse,
+            deleteDirectoryResponse,
+            downloadResponse
         })
         {
             await AssertProblemAsync(response, HttpStatusCode.Forbidden);
@@ -156,6 +183,8 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
     [InlineData("GET", "/api/drives/{driveId}/files/entries?path=%2F&cursor=invalid")]
     [InlineData("GET", "/api/drives/{driveId}/files/entries?path=%2F&limit=0")]
     [InlineData("GET", "/api/drives/{driveId}/files/entries?path=%2F&limit=501")]
+    [InlineData("GET", "/api/drives/{driveId}/files?path=%2F")]
+    [InlineData("GET", "/api/drives/not-a-guid/files?path=%2Fmovie.mkv")]
     [InlineData("PUT", "/api/drives/{driveId}/files?path=%2F")]
     [InlineData("DELETE", "/api/drives/{driveId}/files?path=relative")]
     [InlineData("DELETE", "/api/drives/{driveId}/files/entries?path=relative")]
@@ -274,6 +303,22 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
         }
         _factory.HyperClient.AddFileException = null;
 
+        _factory.HyperClient.ReadFileResult = new(HyperReadFileResultCode.NotFound);
+        var missingDownloadResponse = await _client.GetAsync(
+            $"/api/drives/{drive.DriveId}/files?path=%2Fmissing.mkv");
+        await AssertProblemAsync(missingDownloadResponse, HttpStatusCode.NotFound);
+
+        _factory.HyperClient.ReadFileResult = new(HyperReadFileResultCode.InvalidTarget);
+        var invalidDownloadResponse = await _client.GetAsync(
+            $"/api/drives/{drive.DriveId}/files?path=%2Fdirectory");
+        await AssertProblemAsync(invalidDownloadResponse, HttpStatusCode.Conflict);
+
+        _factory.HyperClient.ReadFileResult = new(HyperReadFileResultCode.Unavailable);
+        var unavailableDownloadResponse = await _client.GetAsync(
+            $"/api/drives/{drive.DriveId}/files?path=%2Funavailable.mkv");
+        await AssertProblemAsync(unavailableDownloadResponse, HttpStatusCode.InternalServerError);
+        _factory.HyperClient.ReadFileResult = null;
+
         _factory.HyperClient.DeleteFileResult = HyperDeleteFileResultCode.NotFound;
         var missingFileResponse = await _client.DeleteAsync(
             $"/api/drives/{drive.DriveId}/files?path=%2Fmissing.mkv");
@@ -328,7 +373,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
     [Theory]
     [InlineData("/swagger/v1/swagger.json")]
     [InlineData("/openapi/v1.json")]
-    public async Task OpenApiDescribesFourFileOperationsAndBinaryUpload(
+    public async Task OpenApiDescribesFiveFileOperationsAndBinaryUpload(
         string documentPath)
     {
         var response = await _client.GetAsync(documentPath);
@@ -341,6 +386,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
         var directoryPath = paths.GetProperty("/api/drives/{driveId}/files/entries");
 
         var put = filePath.GetProperty("put");
+        var download = filePath.GetProperty("get");
         var deleteFile = filePath.GetProperty("delete");
         Assert.True(directoryPath.TryGetProperty("get", out var get));
         var deleteDirectory = directoryPath.GetProperty("delete");
@@ -353,10 +399,12 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
         Assert.Equal("string", uploadSchema.GetProperty("type").GetString());
         Assert.Equal("binary", uploadSchema.GetProperty("format").GetString());
         AssertRequiredQueryParameter(get, "path");
+        AssertRequiredQueryParameter(download, "path");
         AssertRequiredQueryParameter(put, "path");
         AssertRequiredQueryParameter(deleteFile, "path");
         AssertRequiredQueryParameter(deleteDirectory, "path");
         AssertProblemContent(get, "400", "403", "404", "409", "500");
+        AssertProblemContent(download, "400", "403", "404", "409", "500");
         AssertProblemContent(put, "400", "403", "404", "409", "500");
         AssertProblemContent(deleteFile, "400", "403", "404", "409", "500");
         AssertProblemContent(deleteDirectory, "400", "403", "404", "409", "500");
@@ -369,6 +417,22 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
             "404",
             "409",
             "500");
+        AssertResponseCodes(
+            download,
+            "200",
+            "400",
+            "403",
+            "404",
+            "409",
+            "500");
+        var downloadSchema = download
+            .GetProperty("responses")
+            .GetProperty("200")
+            .GetProperty("content")
+            .GetProperty("application/octet-stream")
+            .GetProperty("schema");
+        Assert.Equal("string", downloadSchema.GetProperty("type").GetString());
+        Assert.Equal("binary", downloadSchema.GetProperty("format").GetString());
         AssertResponseCodes(
             put,
             "201",
@@ -388,6 +452,7 @@ public sealed class DriveFileEndpointTests : IClassFixture<CinereelWebApplicatio
     {
         Assert.Empty(_factory.HyperClient.ListDirectoryCalls);
         Assert.Empty(_factory.HyperClient.AddFileCalls);
+        Assert.Empty(_factory.HyperClient.ReadFileCalls);
         Assert.Empty(_factory.HyperClient.DeleteFileCalls);
         Assert.Empty(_factory.HyperClient.DeleteDirectoryCalls);
     }

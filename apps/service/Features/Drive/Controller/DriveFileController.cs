@@ -10,6 +10,54 @@ namespace Cinereel.Features.Drive;
 [Route("api/drives/{driveId}/files")]
 public sealed class DriveFileController(IDriveFileService driveFileService) : ControllerBase
 {
+    [HttpGet]
+    [Produces("application/octet-stream")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status403Forbidden,
+        Description = "目标位于 /.cinereel 协议保留目录，错误码为 reserved_path。")]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
+    [ProducesResponseType<ProblemDetails>(StatusCodes.Status500InternalServerError)]
+    public async Task<ActionResult<DriveFileDownloadResponse>> DownloadFile(
+        string driveId,
+        [FromQuery, BindRequired] string path,
+        CancellationToken cancellationToken)
+    {
+        if (!DriveId.TryParse(driveId, out var parsedDriveId))
+        {
+            return Result<DriveFileDownloadResponse>.Invalid(
+                    new ValidationError("driveId", "driveId 必须是非空 Guid。"))
+                .ToActionResult(this);
+        }
+
+        if (!DriveFilePath.TryCreate(path, out var parsedPath))
+        {
+            return Result<DriveFileDownloadResponse>.Invalid(
+                    new ValidationError("path", "path 必须是规范的 Drive 绝对文件路径。"))
+                .ToActionResult(this);
+        }
+
+        var result = await driveFileService.DownloadFileAsync(
+            parsedDriveId,
+            parsedPath,
+            cancellationToken);
+
+        if (!result.IsSuccess)
+        {
+            return result.ToActionResult(this);
+        }
+
+        var download = result.Value;
+        Response.RegisterForDispose(download);
+        if (download.ContentLength is { } contentLength)
+        {
+            Response.ContentLength = contentLength;
+        }
+
+        return File(download.Content, download.ContentType, download.FileName);
+    }
+
     [HttpGet("entries")]
     [TranslateResultToActionResult]
     [ExpectedFailures(

@@ -159,6 +159,54 @@ internal sealed class HyperClient : IHyperClient
         }
     }
 
+    public async Task<HyperReadFileResult> ReadFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        CancellationToken cancellationToken)
+    {
+        using var timeout = CreateRegularRequestTimeout(cancellationToken);
+        HttpResponseMessage? response = null;
+
+        try
+        {
+            response = await httpClient.GetAsync(
+                BuildReadFileUri(driveKey, path.Value),
+                HttpCompletionOption.ResponseHeadersRead,
+                timeout.Token);
+
+            switch (response.StatusCode)
+            {
+                case HttpStatusCode.NotFound:
+                    return new(HyperReadFileResultCode.NotFound);
+                case HttpStatusCode.Conflict:
+                    return new(HyperReadFileResultCode.InvalidTarget);
+                case HttpStatusCode.ServiceUnavailable:
+                    return new(HyperReadFileResultCode.Unavailable);
+                case HttpStatusCode.GatewayTimeout:
+                    return new(HyperReadFileResultCode.Timeout);
+                case HttpStatusCode.OK:
+                case HttpStatusCode.PartialContent:
+                    break;
+                default:
+                    response.EnsureSuccessStatusCode();
+                    throw UnexpectedSuccessStatus(response.StatusCode, "读取文件");
+            }
+
+            var content = await response.Content.ReadAsStreamAsync(timeout.Token);
+            var result = new HyperReadFileResult(
+                HyperReadFileResultCode.Success,
+                new HttpResponseStream(content, response),
+                response.Content.Headers.ContentType?.MediaType,
+                response.Content.Headers.ContentLength);
+            response = null;
+            return result;
+        }
+        finally
+        {
+            response?.Dispose();
+        }
+    }
+
     public async Task<HyperDeleteFileResultCode> DeleteFileAsync(
         DriveKey driveKey,
         DriveFilePath path,
@@ -385,6 +433,9 @@ internal sealed class HyperClient : IHyperClient
     private static string BuildFileUri(DriveKey driveKey, string path) =>
         $"v1/files/{driveKey.Value}?path={Uri.EscapeDataString(path)}";
 
+    private static string BuildReadFileUri(DriveKey driveKey, string path) =>
+        $"{BuildFileUri(driveKey, path)}&disposition=attachment";
+
     private static string BuildProtocolFileUri(DriveKey driveKey, string path) =>
         $"v1/protocol-files/{driveKey.Value}?path={Uri.EscapeDataString(path)}";
 
@@ -558,6 +609,105 @@ internal sealed class HyperClient : IHyperClient
         string Type);
 
     private sealed record CreateHyperDriveResponse(string DriveKey);
+
+    private sealed class HttpResponseStream(
+        Stream inner,
+        HttpResponseMessage response) : Stream
+    {
+        private int disposed;
+
+        public override bool CanRead => inner.CanRead;
+
+        public override bool CanSeek => inner.CanSeek;
+
+        public override bool CanWrite => inner.CanWrite;
+
+        public override long Length => inner.Length;
+
+        public override long Position
+        {
+            get => inner.Position;
+            set => inner.Position = value;
+        }
+
+        public override void Flush() => inner.Flush();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) =>
+            inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) =>
+            inner.Read(buffer, offset, count);
+
+        public override int Read(Span<byte> buffer) => inner.Read(buffer);
+
+        public override Task<int> ReadAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken) =>
+            inner.ReadAsync(buffer, offset, count, cancellationToken);
+
+        public override ValueTask<int> ReadAsync(
+            Memory<byte> buffer,
+            CancellationToken cancellationToken = default) =>
+            inner.ReadAsync(buffer, cancellationToken);
+
+        public override long Seek(long offset, SeekOrigin origin) =>
+            inner.Seek(offset, origin);
+
+        public override void SetLength(long value) => inner.SetLength(value);
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            inner.Write(buffer, offset, count);
+
+        public override void Write(ReadOnlySpan<byte> buffer) => inner.Write(buffer);
+
+        public override Task WriteAsync(
+            byte[] buffer,
+            int offset,
+            int count,
+            CancellationToken cancellationToken) =>
+            inner.WriteAsync(buffer, offset, count, cancellationToken);
+
+        public override ValueTask WriteAsync(
+            ReadOnlyMemory<byte> buffer,
+            CancellationToken cancellationToken = default) =>
+            inner.WriteAsync(buffer, cancellationToken);
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing && Interlocked.Exchange(ref disposed, 1) == 0)
+            {
+                try
+                {
+                    inner.Dispose();
+                }
+                finally
+                {
+                    response.Dispose();
+                }
+            }
+
+            base.Dispose(disposing);
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            if (Interlocked.Exchange(ref disposed, 1) == 0)
+            {
+                try
+                {
+                    await inner.DisposeAsync();
+                }
+                finally
+                {
+                    response.Dispose();
+                }
+            }
+
+            GC.SuppressFinalize(this);
+        }
+    }
 
     private sealed class EofNotifyingStream(Stream inner, Action notifyEof) : Stream
     {

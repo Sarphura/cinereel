@@ -45,6 +45,8 @@ internal sealed class TestHyperClient : IHyperClient
         byte[] Content)> AddFileCalls
     { get; } = [];
 
+    internal List<(DriveKey DriveKey, DriveFilePath Path)> ReadFileCalls { get; } = [];
+
     internal List<(DriveKey DriveKey, DriveFilePath Path)> DeleteFileCalls { get; } = [];
 
     internal List<(
@@ -61,6 +63,8 @@ internal sealed class TestHyperClient : IHyperClient
     internal HyperAddFileResultCode AddFileResult { get; set; } =
         HyperAddFileResultCode.Created;
 
+    internal HyperReadFileResult? ReadFileResult { get; set; }
+
     internal HyperDeleteFileResultCode DeleteFileResult { get; set; } =
         HyperDeleteFileResultCode.Deleted;
 
@@ -70,6 +74,8 @@ internal sealed class TestHyperClient : IHyperClient
     internal Exception? ListDirectoryException { get; set; }
 
     internal Exception? AddFileException { get; set; }
+
+    internal Exception? ReadFileException { get; set; }
 
     internal Exception? DeleteFileException { get; set; }
 
@@ -261,6 +267,27 @@ internal sealed class TestHyperClient : IHyperClient
         return AddFileResult;
     }
 
+    public Task<HyperReadFileResult> ReadFileAsync(
+        DriveKey driveKey,
+        DriveFilePath path,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        ReadFileCalls.Add((driveKey, path));
+        BeforeFileOperation?.Invoke();
+
+        if (ReadFileException is not null)
+        {
+            return Task.FromException<HyperReadFileResult>(ReadFileException);
+        }
+
+        return Task.FromResult(ReadFileResult ?? new(
+            HyperReadFileResultCode.Success,
+            new MemoryStream([], writable: false),
+            "application/octet-stream",
+            0));
+    }
+
     public Task<HyperDeleteFileResultCode> DeleteFileAsync(
         DriveKey driveKey,
         DriveFilePath path,
@@ -291,14 +318,17 @@ internal sealed class TestHyperClient : IHyperClient
     {
         ListDirectoryCalls.Clear();
         AddFileCalls.Clear();
+        ReadFileCalls.Clear();
         DeleteFileCalls.Clear();
         DeleteDirectoryCalls.Clear();
         ListDirectoryResult = null;
         AddFileResult = HyperAddFileResultCode.Created;
+        ReadFileResult = null;
         DeleteFileResult = HyperDeleteFileResultCode.Deleted;
         DeleteDirectoryResult = HyperDeleteDirectoryResultCode.Deleted;
         ListDirectoryException = null;
         AddFileException = null;
+        ReadFileException = null;
         DeleteFileException = null;
         DeleteDirectoryException = null;
         BeforeFileOperation = null;

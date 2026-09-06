@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Cinereel.Features.Drive;
@@ -179,6 +180,69 @@ public sealed class HyperClientTests
         Assert.Equal("application/octet-stream", request.MediaType);
         Assert.Equal(body, request.BodyBytes);
         Assert.True(content.CanRead);
+    }
+
+    [Fact]
+    public async Task ReadFileUsesAttachmentAndReturnsResponseStream()
+    {
+        var driveKey = CreateDriveKey('e');
+        var path = CreateFilePath("/电影/正片 &=.mkv");
+        var body = new byte[] { 0, 1, 2, 255 };
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new ByteArrayContent(body)
+            {
+                Headers =
+                {
+                    ContentType = new MediaTypeHeaderValue("video/x-matroska")
+                }
+            }
+        });
+        var client = CreateClient(handler);
+
+        var result = await client.ReadFileAsync(
+            driveKey,
+            path,
+            CancellationToken.None);
+
+        Assert.Equal(HyperReadFileResultCode.Success, result.ResultCode);
+        Assert.Equal("video/x-matroska", result.ContentType);
+        Assert.Equal(body.Length, result.ContentLength);
+        Assert.NotNull(result.Content);
+        await using (result.Content)
+        {
+            await using var copy = new MemoryStream();
+            await result.Content.CopyToAsync(copy);
+            Assert.Equal(body, copy.ToArray());
+        }
+
+        var request = Assert.Single(handler.Requests);
+        Assert.Equal(HttpMethod.Get, request.Method);
+        Assert.Equal(
+            $"http://hyper-client/v1/files/{driveKey.Value}" +
+            "?path=%2F%E7%94%B5%E5%BD%B1%2F%E6%AD%A3%E7%89%87%20%26%3D.mkv&disposition=attachment",
+            request.RequestUri?.AbsoluteUri);
+    }
+
+    [Theory]
+    [InlineData(404, "NotFound")]
+    [InlineData(409, "InvalidTarget")]
+    [InlineData(503, "Unavailable")]
+    [InlineData(504, "Timeout")]
+    public async Task ReadFileMapsContractStatusCodes(int statusCode, string expectedName)
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage((HttpStatusCode)statusCode));
+        var client = CreateClient(handler);
+
+        var result = await client.ReadFileAsync(
+            CreateDriveKey('f'),
+            CreateFilePath("/movie.mkv"),
+            CancellationToken.None);
+
+        Assert.Equal(
+            Enum.Parse<HyperReadFileResultCode>(expectedName),
+            result.ResultCode);
+        Assert.Null(result.Content);
     }
 
     [Fact]

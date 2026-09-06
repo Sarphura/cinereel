@@ -21,6 +21,11 @@ public interface IDriveFileService
         Stream content,
         CancellationToken cancellationToken);
 
+    Task<Result<DriveFileDownloadResponse>> DownloadFileAsync(
+        DriveId driveId,
+        DriveFilePath path,
+        CancellationToken cancellationToken);
+
     Task<Result> DeleteFileAsync(
         DriveId driveId,
         DriveFilePath path,
