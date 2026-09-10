@@ -1,11 +1,11 @@
-import { Injectable, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
+import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common'
 import { randomUUID } from 'node:crypto'
 import { resolve } from 'node:path'
 import { Writable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { FileService } from './file.service.js'
-import { DriveActivity } from '../hyper.infrastructure/sdk/drive-activity.js'
-import { GetConfigPath } from '../hyper.infrastructure/sdk/hyper-sdk.module.js'
+import { DriveActivity } from '../repository/sdk/drive-activity.js'
+import { GetConfigPath } from '../repository/sdk/hyper-sdk.module.js'
 import { DownloadTaskStore } from './download-task.store.js'
 import {
   DownloadRequestSchema,
@@ -72,6 +72,8 @@ function failure(error: unknown): { code: string; message: string; retryable: bo
 
 @Injectable()
 export class DownloadTaskService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(DownloadTaskService.name)
+
   private readonly store: DownloadTaskStore
   private readonly concurrency: number
   private readonly timeoutMs: number
@@ -155,7 +157,7 @@ export class DownloadTaskService implements OnModuleInit, OnModuleDestroy {
       this.started = false
     }
     if (this.storageFailure) {
-      console.error('[DownloadTaskService] 关闭时无法保存任务，将从最后持久化状态恢复：', this.storageFailure)
+      this.logger.error('关闭时无法保存任务，将从最后持久化状态恢复：', this.storageFailure)
     }
   }
 
@@ -336,7 +338,7 @@ export class DownloadTaskService implements OnModuleInit, OnModuleDestroy {
       worker.promise = this.run(task.id, worker).catch((error) => {
         this.storageFailure = error
         for (const running of this.workers.values()) running.controller.abort()
-        console.error('[DownloadTaskService] 任务状态无法持久化，已停止调度：', error)
+        this.logger.error('任务状态无法持久化，已停止调度：', error)
       }).finally(() => {
         this.workers.delete(task.id)
         this.schedule()

@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { Logger } from '@nestjs/common'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Readable } from 'node:stream'
-import { DownloadTaskService } from '../src/hyper.implementation/download-task.service.js'
-import { DownloadTaskStore } from '../src/hyper.implementation/download-task.store.js'
-import { DownloadTaskError } from '../src/hyper.implementation/download-task.types.js'
-import type { FileService } from '../src/hyper.implementation/file.service.js'
-import { DriveActivity } from '../src/hyper.infrastructure/sdk/drive-activity.js'
+import { DownloadTaskService } from '../src/service/download-task.service.js'
+import { DownloadTaskStore } from '../src/service/download-task.store.js'
+import { DownloadTaskError } from '../src/service/download-task.types.js'
+import type { FileService } from '../src/service/file.service.js'
+import { DriveActivity } from '../src/repository/sdk/drive-activity.js'
 
 const driveKey = 'a'.repeat(64)
 const input = { driveKey, path: '/', targetType: 'directory' as const }
@@ -381,7 +382,7 @@ describe('DownloadTaskService', () => {
     await expect(service.createTask(input, 'disk-failure')).rejects.toThrow('磁盘写入失败')
     expect(service.listTasks().tasks).toEqual([])
     await expect(activity.withExclusive(driveKey, async () => undefined)).resolves.toBeUndefined()
-    const log = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+    const log = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => undefined)
     await expect(service.onModuleDestroy()).resolves.toBeUndefined()
     expect(log).toHaveBeenCalled()
     log.mockRestore()

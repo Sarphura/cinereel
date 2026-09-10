@@ -1,8 +1,8 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
-import type { INestApplication } from '@nestjs/common'
+import { ValidationPipe, type INestApplication } from '@nestjs/common'
 import { APP_PIPE } from '@nestjs/core'
-import { ZodValidationPipe } from 'nestjs-zod'
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
 import { create, type SDK } from 'hyper-sdk'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -11,10 +11,11 @@ import { PassThrough, Readable, type Duplex } from 'node:stream'
 import { request as httpRequest } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import request from 'supertest'
-import { FileService } from '../src/hyper.implementation/file.service.js'
-import { FileController } from '../src/hyper.api/controller/files/file.controller.js'
-import { ProtocolFileController } from '../src/hyper.api/controller/files/protocol-file.controller.js'
-import { MAX_PROTOCOL_FILE_SIZE } from '../src/hyper.implementation/protocol-file.js'
+import { FileService } from '../src/service/file.service.js'
+import { FileController } from '../src/controller/files/file.controller.js'
+import { FastifyFileResponseWriter, FileResponseWriter } from '../src/controller/files/file-response.writer.js'
+import { ProtocolFileController } from '../src/controller/files/protocol-file.controller.js'
+import { MAX_RESERVED_FILE_SIZE } from '../src/service/protocol.js'
 
 const path = '/.cinereel/drive.json'
 
@@ -24,7 +25,7 @@ describe('真实 Hyperdrive 协议文件 HTTP 接口', () => {
   let drive: Awaited<ReturnType<SDK['getDrive']>>
   let key: string
   let service: FileService
-  let app: INestApplication
+  let app: NestFastifyApplication
   const otherSdks: SDK[] = []
   const connections: Duplex[] = []
   const url = () => `/v1/protocol-files/${key}`
@@ -40,11 +41,13 @@ describe('真实 Hyperdrive 协议文件 HTTP 接口', () => {
     service = new FileService(sdk)
     const moduleRef = await Test.createTestingModule({
       controllers: [FileController, ProtocolFileController],
-      providers: [{ provide: FileService, useValue: service }, { provide: APP_PIPE, useClass: ZodValidationPipe }],
+      providers: [{ provide: FileService, useValue: service }, { provide: FileResponseWriter, useClass: FastifyFileResponseWriter }, { provide: APP_PIPE, useValue: new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }) }],
     }).compile()
-    app = moduleRef.createNestApplication()
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
     app.useLogger(false)
+    ;(app.getHttpAdapter() as FastifyAdapter).getInstance().addContentTypeParser('application/octet-stream', (_req: any, body: any, done: any) => done(null, body))
     await app.init()
+    await (app.getHttpAdapter() as FastifyAdapter).getInstance().ready()
   })
 
   afterEach(async () => {
@@ -98,7 +101,7 @@ describe('真实 Hyperdrive 协议文件 HTTP 接口', () => {
     const upload = new PassThrough()
     const writing = service.addFile(key, '/movie', upload)
     let replaced = false
-    const replacing = service.writeProtocolFile(key, path, Buffer.from('after'), { ifMatch: created.headers.etag as string })
+    const replacing = service.writeReservedFile(key, path, Buffer.from('after'), { ifMatch: created.headers.etag as string })
       .then(() => { replaced = true })
     const deleting = service.deleteDirectory(key, '/')
     await new Promise((resolve) => setImmediate(resolve))
@@ -121,22 +124,22 @@ describe('真实 Hyperdrive 协议文件 HTTP 接口', () => {
   })
 
   it('完整验证正文上限和请求条件后才改变文件', async () => {
-    const created = await put(Buffer.alloc(MAX_PROTOCOL_FILE_SIZE, 1)).expect(201)
-    await put(Buffer.alloc(MAX_PROTOCOL_FILE_SIZE + 1), created.headers.etag).expect(413)
+    const created = await put(Buffer.alloc(MAX_RESERVED_FILE_SIZE, 1)).expect(201)
+    await put(Buffer.alloc(MAX_RESERVED_FILE_SIZE + 1), created.headers.etag).expect(413)
     await request(app.getHttpServer()).put(url()).query({ path }).set('Content-Type', 'application/octet-stream').send('missing').expect(428)
     for (const condition of ['*', 'W/"weak"', '"a", "b"']) {
       await put('invalid', condition).expect(400)
     }
     await request(app.getHttpServer()).put(url()).query({ path }).set('If-None-Match', '*').set('If-Match', '"a"').set('Content-Type', 'application/octet-stream').send('invalid').expect(400)
     await request(app.getHttpServer()).put(url()).query({ path }).set('If-Match', created.headers.etag).send({ json: true }).expect(415)
-    expect(await drive.get(path)).toEqual(Buffer.alloc(MAX_PROTOCOL_FILE_SIZE, 1))
+    expect(await drive.get(path)).toEqual(Buffer.alloc(MAX_RESERVED_FILE_SIZE, 1))
     await put(Buffer.alloc(0), created.headers.etag).expect(200)
     const empty = await request(app.getHttpServer()).get(url()).query({ path }).expect(200)
     expect(empty.headers['content-length']).toBe('0')
   })
 
   it('拒绝过大远端文件、目录及符号链接，并检查保留目录根节点冲突', async () => {
-    await drive.put(path, Buffer.alloc(MAX_PROTOCOL_FILE_SIZE + 1))
+    await drive.put(path, Buffer.alloc(MAX_RESERVED_FILE_SIZE + 1))
     await request(app.getHttpServer()).get(url()).query({ path }).expect(413)
     await drive.del(path)
     await drive.put(`${path}/child`, Buffer.from('child'))
@@ -211,7 +214,7 @@ describe('真实 Hyperdrive 协议文件 HTTP 接口', () => {
     const status = await new Promise<number | undefined>((resolve, reject) => {
       const outgoing = httpRequest(options, (response) => { response.resume(); response.on('end', () => resolve(response.statusCode)) })
       outgoing.on('error', reject)
-      outgoing.write(Buffer.alloc(MAX_PROTOCOL_FILE_SIZE))
+      outgoing.write(Buffer.alloc(MAX_RESERVED_FILE_SIZE))
       outgoing.end(Buffer.alloc(1))
     })
     expect(status).toBe(413)
@@ -237,9 +240,9 @@ describe('真实 Hyperdrive 协议文件 HTTP 接口', () => {
     outgoing.pipe(incoming).pipe(outgoing)
     connections.push(outgoing, incoming)
     const remote = new FileService(reader)
-    const file = await remote.readProtocolFile(key, path, { timeoutMs: 1500 })
+    const file = await remote.readReservedFile(key, path, { timeoutMs: 1500 })
     expect(file.content.toString()).toBe('replicated')
-    await expect(remote.writeProtocolFile(key, path, Buffer.from('forbidden'), { ifMatch: file.etag })).rejects.toMatchObject({ status: 403 })
-    await expect(remote.readProtocolFile('ab'.repeat(32), path, { timeoutMs: 80 })).rejects.toMatchObject({ status: 504 })
+    await expect(remote.writeReservedFile(key, path, Buffer.from('forbidden'), { ifMatch: file.etag })).rejects.toMatchObject({ status: 403 })
+    await expect(remote.readReservedFile('ab'.repeat(32), path, { timeoutMs: 80 })).rejects.toMatchObject({ status: 504 })
   })
 })

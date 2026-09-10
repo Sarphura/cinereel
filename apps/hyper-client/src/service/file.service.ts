@@ -2,32 +2,32 @@ import { ConflictException, ForbiddenException, Injectable } from '@nestjs/commo
 import { SDK } from 'hyper-sdk'
 import { pipeline } from 'node:stream/promises'
 import { Transform, type Readable } from 'node:stream'
-import { DriveActivity } from '../hyper.infrastructure/sdk/drive-activity.js'
+import { DriveActivity } from '../repository/sdk/drive-activity.js'
 import { FileReadError, normalizeFileReadError, openFileReadSession, type FileReadOptions, type FileReadSession } from './file-read.js'
+import { createLengthCheckingStream, resolveByteRange, type FileReadRequest, type FileReadResponse } from './file-read-response.js'
 import {
   createFileEtag,
+  DEFAULT_DIRECTORY_PAGE_SIZE,
+  DRIVE_KEY_PATTERN,
   isReservedDrivePath,
-  MAX_PROTOCOL_FILE_SIZE,
-  PROTOCOL_DIRECTORY_PATH,
-  type ProtocolFile,
-  type ProtocolWriteCondition,
-  type ProtocolWriteResult,
-} from './protocol-file.js'
+  MAX_DIRECTORY_PAGE_SIZE,
+  MAX_DRIVE_FILE_PATH_LENGTH,
+  MAX_DRIVE_FILE_SIZE,
+  MAX_RESERVED_FILE_SIZE,
+  RESERVED_DIRECTORY_PATH,
+  type ReservedFile,
+  type ReservedFileWriteCondition,
+  type ReservedFileWriteResult,
+} from './protocol.js'
 
 export { FileReadError, normalizeFileReadError } from './file-read.js'
 export type { FileReadOptions, FileReadSession, ReadFileDescriptor } from './file-read.js'
-
-const DRIVE_KEY_PATTERN = /^[0-9a-f]{64}$/iu
-
-export const MAX_DRIVE_FILE_PATH_LENGTH = 1024
-
-export const DEFAULT_DIRECTORY_PAGE_SIZE = 100
-export const MAX_DIRECTORY_PAGE_SIZE = 500
-export const MAX_DRIVE_FILE_SIZE = 500 * 1024 * 1024
+export { DEFAULT_DIRECTORY_PAGE_SIZE, MAX_DIRECTORY_PAGE_SIZE, MAX_DRIVE_FILE_PATH_LENGTH } from './protocol.js'
 
 const HYPERDRIVE_WRITE_CHUNK_SIZE = 1024 * 1024
 
 class FileTooLargeError extends Error {}
+
 
 function createHyperdriveWriteChunker(): Transform {
   let totalSize = 0
@@ -132,10 +132,14 @@ export class FileService {
   ) {}
 
   async openReadSession(driveKey: string, options: FileReadOptions = {}): Promise<FileReadSession> {
-    return this.openSession(driveKey, options, false)
+    return this.openSession(driveKey, options, 'ordinary')
   }
 
-  private async openSession(driveKey: string, options: FileReadOptions, protocol: boolean): Promise<FileReadSession> {
+  private async openReservedSession(driveKey: string, options: FileReadOptions = {}): Promise<FileReadSession> {
+    return this.openSession(driveKey, options, 'reserved')
+  }
+
+  private async openSession(driveKey: string, options: FileReadOptions, mode: 'ordinary' | 'reserved'): Promise<FileReadSession> {
     if (!DRIVE_KEY_PATTERN.test(driveKey)) {
       throw new TypeError('driveKey 必须是 64 位十六进制字符串。')
     }
@@ -159,37 +163,63 @@ export class FileService {
       const discovery = this.sdk.join(core.discoveryKey)
       core.discovery = discovery
       core.once('close', () => { void discovery.destroy() })
-    }, { ...options, excludePath: protocol ? undefined : isReservedDrivePath }, release)
+    }, { ...options, excludePath: mode === 'reserved' ? undefined : isReservedDrivePath }, release)
     return {
       ...session,
       get contentFork() { return session.contentFork },
       async getFile(path) {
         if (!isDriveDirectoryPath(path)) throw new TypeError('path 必须是规范的 Drive 绝对路径。')
-        if (!protocol && isReservedDrivePath(path)) throw new FileReadError('reserved-path', 403, '协议目录不能通过普通文件接口访问。')
+        if (mode === 'ordinary' && isReservedDrivePath(path)) throw new FileReadError('reserved-path', 403, '保留目录不能通过普通文件接口访问。')
         return session.getFile(path)
       },
       entries(path) {
         if (!isDriveDirectoryPath(path)) throw new TypeError('path 必须是规范的 Drive 绝对目录路径。')
-        if (!protocol && isReservedDrivePath(path)) throw new FileReadError('reserved-path', 403, '协议目录不能通过普通文件接口访问。')
+        if (mode === 'ordinary' && isReservedDrivePath(path)) throw new FileReadError('reserved-path', 403, '保留目录不能通过普通文件接口访问。')
         return session.entries(path)
       },
     }
   }
 
-  async readProtocolFile(driveKey: string, path: string, options: FileReadOptions = {}): Promise<ProtocolFile> {
-    this.assertProtocolPath(path)
-    const session = await this.openSession(driveKey, options, true)
+  async readFile(driveKey: string, path: string, options: FileReadRequest = {}): Promise<FileReadResponse> {
+    const session = await this.openReadSession(driveKey, {
+      driveVersion: options.driveVersion,
+      signal: options.signal,
+    })
     try {
       const file = await session.getFile(path)
-      if (file.size > MAX_PROTOCOL_FILE_SIZE) throw new FileReadError('file-too-large', 413, '协议文件不能超过 64 KiB。')
+      options.signal?.throwIfAborted()
+      const resolved = resolveByteRange(options.rawRange, options.ifRange, file.etag, file.size)
+      const range = resolved.range
+      const expectedBytes = range ? range.end - range.start + 1 : file.size
+      return {
+        file,
+        driveVersion: session.driveVersion,
+        status: resolved.unsatisfiable ? 416 : range ? 206 : 200,
+        range,
+        expectedBytes,
+        openStream: () => createLengthCheckingStream(session.createReadStream(file, range), expectedBytes),
+        close: () => session.close(),
+      }
+    } catch (error) {
+      await session.close()
+      throw error
+    }
+  }
+
+  async readReservedFile(driveKey: string, path: string, options: FileReadOptions = {}): Promise<ReservedFile> {
+    this.assertReservedPath(path)
+    const session = await this.openReservedSession(driveKey, options)
+    try {
+      const file = await session.getFile(path)
+      if (file.size > MAX_RESERVED_FILE_SIZE) throw new FileReadError('file-too-large', 413, '保留文件不能超过 64 KiB。')
       const chunks: Buffer[] = []
       let size = 0
       for await (const chunk of session.createReadStream(file)) {
         size += Buffer.byteLength(chunk)
-        if (size > MAX_PROTOCOL_FILE_SIZE) throw new FileReadError('file-too-large', 413, '协议文件不能超过 64 KiB。')
+        if (size > MAX_RESERVED_FILE_SIZE) throw new FileReadError('file-too-large', 413, '保留文件不能超过 64 KiB。')
         chunks.push(Buffer.from(chunk))
       }
-      if (size !== file.size) throw new FileReadError('content-unavailable', 503, '协议文件内容长度不符。')
+      if (size !== file.size) throw new FileReadError('content-unavailable', 503, '保留文件内容长度不符。')
       return { content: Buffer.concat(chunks), etag: file.etag, driveVersion: session.driveVersion }
     } catch (error) {
       throw normalizeFileReadError(error)
@@ -198,16 +228,16 @@ export class FileService {
     }
   }
 
-  async writeProtocolFile(
+  async writeReservedFile(
     driveKey: string,
     path: string,
     content: Buffer,
-    condition: ProtocolWriteCondition,
+    condition: ReservedFileWriteCondition,
     signal?: AbortSignal,
-  ): Promise<ProtocolWriteResult> {
+  ): Promise<ReservedFileWriteResult> {
     if (!DRIVE_KEY_PATTERN.test(driveKey)) throw new TypeError('driveKey 必须是 64 位十六进制字符串。')
-    this.assertProtocolPath(path)
-    if (content.byteLength > MAX_PROTOCOL_FILE_SIZE) throw new FileReadError('file-too-large', 413, '协议文件不能超过 64 KiB。')
+    this.assertReservedPath(path)
+    if (content.byteLength > MAX_RESERVED_FILE_SIZE) throw new FileReadError('file-too-large', 413, '保留文件不能超过 64 KiB。')
     const key = driveKey.toLowerCase()
     return this.activity.withUse(key, () => this.withWriteLock(key, async () => {
       signal?.throwIfAborted()
@@ -216,21 +246,21 @@ export class FileService {
       await this.assertDirectoryAncestors(drive, path)
       const entry = await drive.entry(path, { wait: false, follow: false })
       if (entry && (typeof entry.value.linkname === 'string' || !entry.value.blob)) {
-        throw new FileReadError('path-conflict', 409, '协议文件路径被非文件 entry 占用。')
+        throw new FileReadError('path-conflict', 409, '保留文件路径被非文件 entry 占用。')
       }
       for await (const _ of drive.list(path, { wait: false })) {
-        throw new FileReadError('path-conflict', 409, '协议文件路径被目录占用。')
+        throw new FileReadError('path-conflict', 409, '保留文件路径被目录占用。')
       }
       const blobs = await drive.getBlobs()
       const currentEtag = entry ? createFileEtag(key, drive.core.fork, entry.seq, path, entry.value.blob.byteLength > 0 ? blobs.core.fork : null) : undefined
       if ('ifNoneMatch' in condition ? entry !== null : condition.ifMatch !== currentEtag) {
-        throw new FileReadError('precondition-failed', 412, '协议文件已被其他写入修改。')
+        throw new FileReadError('precondition-failed', 412, '保留文件已被其他写入修改。')
       }
       signal?.throwIfAborted()
       // put 先完成 blob 写入，再以一次元数据提交替换 entry；失败时旧正文仍可读取。
       await drive.put(path, content)
       const updated = await drive.entry(path, { wait: false, follow: false })
-      if (!updated) throw new FileReadError('content-unavailable', 503, '协议文件写入后的元数据不可用。')
+      if (!updated) throw new FileReadError('content-unavailable', 503, '保留文件写入后的元数据不可用。')
       return {
         created: entry === null,
         etag: createFileEtag(key, drive.core.fork, updated.seq, path, content.byteLength > 0 ? blobs.core.fork : null),
@@ -239,23 +269,9 @@ export class FileService {
     }))
   }
 
-  private assertProtocolPath(path: string): void {
-    if (!isDriveFilePath(path) || !path.startsWith(`${PROTOCOL_DIRECTORY_PATH}/`)) {
-      throw new FileReadError('invalid-path', 400, '协议文件必须位于 /.cinereel/ 目录内。')
-    }
-  }
-
-  private assertOrdinaryPath(path: string): void {
-    if (isReservedDrivePath(path)) throw new ForbiddenException('协议目录不能通过普通文件接口访问。')
-  }
-
-  private async assertDirectoryAncestors(drive: Awaited<ReturnType<SDK['getDrive']>>, path: string): Promise<void> {
-    let end = path.indexOf('/', 1)
-    while (end !== -1) {
-      if (await drive.entry(path.slice(0, end), { wait: false, follow: false })) {
-        throw new ConflictException('父路径被文件或符号链接占用。')
-      }
-      end = path.indexOf('/', end + 1)
+  private assertReservedPath(path: string): void {
+    if (!isDriveFilePath(path) || !path.startsWith(`${RESERVED_DIRECTORY_PATH}/`)) {
+      throw new FileReadError('invalid-path', 400, '保留文件必须位于 /.cinereel/ 目录内。')
     }
   }
 
@@ -270,6 +286,16 @@ export class FileService {
     })
     this.pendingReadDrives.set(key, opening)
     return opening
+  }
+
+  private async assertDirectoryAncestors(drive: Awaited<ReturnType<SDK['getDrive']>>, path: string): Promise<void> {
+    let end = path.indexOf('/', 1)
+    while (end !== -1) {
+      if (await drive.entry(path.slice(0, end), { wait: false, follow: false })) {
+        throw new ConflictException('父路径被文件或符号链接占用。')
+      }
+      end = path.indexOf('/', end + 1)
+    }
   }
 
   async listDirectory(
@@ -490,5 +516,9 @@ export class FileService {
         this.pendingWrites.delete(key)
       }
     }
+  }
+
+  private assertOrdinaryPath(path: string): void {
+    if (isReservedDrivePath(path)) throw new ForbiddenException('保留目录不能通过普通文件接口访问。')
   }
 }

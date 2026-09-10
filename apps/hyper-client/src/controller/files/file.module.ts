@@ -1,10 +1,11 @@
 import { Module, type Provider } from '@nestjs/common'
 import { SDK } from 'hyper-sdk'
-import { FileService } from '../../../hyper.implementation/file.service.js'
-import { HyperSdkModule } from '../../../hyper.infrastructure/sdk/hyper-sdk.module.js'
+import { FileService } from '../../service/file.service.js'
+import { HyperSdkModule } from '../../repository/sdk/hyper-sdk.module.js'
 import { FileController } from './file.controller.js'
 import { ProtocolFileController } from './protocol-file.controller.js'
-import { DriveActivity } from '../../../hyper.infrastructure/sdk/drive-activity.js'
+import { DriveActivity } from '../../repository/sdk/drive-activity.js'
+import { FastifyFileResponseWriter, FileResponseWriter } from './file-response.writer.js'
 
 const fileServiceProvider: Provider<FileService> = {
   provide: FileService,
@@ -15,7 +16,10 @@ const fileServiceProvider: Provider<FileService> = {
 @Module({
   imports: [HyperSdkModule],
   controllers: [FileController, ProtocolFileController],
-  providers: [fileServiceProvider],
+  providers: [
+    fileServiceProvider,
+    { provide: FileResponseWriter, useClass: FastifyFileResponseWriter },
+  ],
   exports: [FileService],
 })
 export class FileModule {}

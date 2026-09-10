@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Readable, Writable } from 'node:stream'
-import { FileService } from '../src/hyper.implementation/file.service.js'
+import { FileService } from '../src/service/file.service.js'
 import type { SDK } from 'hyper-sdk'
 
 class FakeDrive {
@@ -40,6 +40,21 @@ class FakeDrive {
 
     for (const childName of [...childNames].sort()) {
       yield childName
+    }
+  }
+
+  async del(path: string): Promise<void> {
+    this.files.delete(path)
+  }
+
+  async *list(path: string): AsyncGenerator<{ key: string }> {
+    const prefix = path === '/' ? '/' : `${path}/`
+    const keys = [...this.files.keys()]
+      .filter((filePath) => filePath.startsWith(prefix))
+      .sort()
+
+    for (const key of keys) {
+      yield { key }
     }
   }
 
@@ -180,5 +195,109 @@ describe('FileService', () => {
 
     expect(result).toBe('drive-not-writable')
     expect(drive.files.size).toBe(0)
+  })
+
+  it('删除已存在的文件', async () => {
+    const drive = new FakeDrive()
+    drive.files.set('/movies/a.mp4', Buffer.from('content'))
+    const service = createService(drive)
+
+    const result = await service.deleteFile('a'.repeat(64), '/movies/a.mp4')
+
+    expect(result).toBe('deleted')
+    expect(drive.files.has('/movies/a.mp4')).toBe(false)
+  })
+
+  it('删除不存在的文件返回 not-found', async () => {
+    const drive = new FakeDrive()
+    const service = createService(drive)
+
+    const result = await service.deleteFile('a'.repeat(64), '/missing.txt')
+
+    expect(result).toBe('not-found')
+    expect(drive.files.size).toBe(0)
+  })
+
+  it('拒绝删除只读 Drive 的文件', async () => {
+    const drive = new FakeDrive()
+    drive.writable = false
+    drive.files.set('/readonly.txt', Buffer.from('content'))
+    const service = createService(drive)
+
+    const result = await service.deleteFile('c'.repeat(64), '/readonly.txt')
+
+    expect(result).toBe('drive-not-writable')
+    expect(drive.files.has('/readonly.txt')).toBe(true)
+  })
+
+  it('递归删除目录及其全部后代，但不影响目录外文件', async () => {
+    const drive = new FakeDrive()
+    drive.files.set('/movies/action/a.mp4', Buffer.from('a'))
+    drive.files.set('/movies/drama/b.mp4', Buffer.from('b'))
+    drive.files.set('/movies/poster.jpg', Buffer.from('p'))
+    drive.files.set('/other.txt', Buffer.from('keep'))
+    const service = createService(drive)
+
+    const result = await service.deleteDirectory('a'.repeat(64), '/movies')
+
+    expect(result).toBe('deleted')
+    expect(drive.files.has('/movies/action/a.mp4')).toBe(false)
+    expect(drive.files.has('/movies/drama/b.mp4')).toBe(false)
+    expect(drive.files.has('/movies/poster.jpg')).toBe(false)
+    expect(drive.files.has('/other.txt')).toBe(true)
+  })
+
+  it('目录路径自身为叶文件时连同删除', async () => {
+    const drive = new FakeDrive()
+    drive.files.set('/movies', Buffer.from('leaf'))
+    const service = createService(drive)
+
+    const result = await service.deleteDirectory('a'.repeat(64), '/movies')
+
+    expect(result).toBe('deleted')
+    expect(drive.files.has('/movies')).toBe(false)
+  })
+
+  it('无后代的目录删除是幂等的，返回 deleted', async () => {
+    const drive = new FakeDrive()
+    const service = createService(drive)
+
+    const result = await service.deleteDirectory('a'.repeat(64), '/movies')
+
+    expect(result).toBe('deleted')
+    expect(drive.files.size).toBe(0)
+  })
+
+  it('删除根目录清空全部用户文件', async () => {
+    const drive = new FakeDrive()
+    drive.files.set('/a.mp4', Buffer.from('a'))
+    drive.files.set('/b/c.mp4', Buffer.from('c'))
+    const service = createService(drive)
+
+    const result = await service.deleteDirectory('a'.repeat(64), '/')
+
+    expect(result).toBe('deleted')
+    expect(drive.files.size).toBe(0)
+  })
+
+  it('拒绝删除只读 Drive 的目录', async () => {
+    const drive = new FakeDrive()
+    drive.writable = false
+    drive.files.set('/movies/a.mp4', Buffer.from('a'))
+    const service = createService(drive)
+
+    const result = await service.deleteDirectory('c'.repeat(64), '/movies')
+
+    expect(result).toBe('drive-not-writable')
+    expect(drive.files.has('/movies/a.mp4')).toBe(true)
+  })
+
+  it('拒绝非规范的目录路径', async () => {
+    const drive = new FakeDrive()
+    const service = createService(drive)
+
+    await expect(
+      service.deleteDirectory('a'.repeat(64), '/movies/../secret'),
+    ).rejects.toThrow(TypeError)
   })
 })

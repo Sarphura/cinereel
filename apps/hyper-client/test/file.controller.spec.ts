@@ -1,25 +1,22 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+﻿import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
-import type { INestApplication } from '@nestjs/common'
-import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core'
+import { ValidationPipe, type INestApplication } from '@nestjs/common'
+import { APP_PIPE } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
 import type { Readable } from 'node:stream'
 import request from 'supertest'
-import {
-  cleanupOpenApiDoc,
-  ZodSerializerInterceptor,
-  ZodValidationPipe,
-} from 'nestjs-zod'
-import { FileController } from '../src/hyper.api/controller/files/file.controller.js'
-import { FileService } from '../src/hyper.implementation/file.service.js'
+import { FileController } from '../src/controller/files/file.controller.js'
+import { FileResponseWriter } from '../src/controller/files/file-response.writer.js'
+import { FileService } from '../src/service/file.service.js'
 
 const zodProviders = [
-  { provide: APP_PIPE, useClass: ZodValidationPipe },
-  { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
+  { provide: APP_PIPE, useValue: new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }) },
+  { provide: FileResponseWriter, useValue: { write: vi.fn() } },
 ]
 
 describe('FileController', () => {
-  let app: INestApplication | undefined
+  let app: NestFastifyApplication | undefined
 
   afterEach(async () => {
     await app?.close()
@@ -49,8 +46,10 @@ describe('FileController', () => {
       ],
     }).compile()
 
-    app = moduleRef.createNestApplication()
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
+    ;(app.getHttpAdapter() as FastifyAdapter).getInstance().addContentTypeParser('application/octet-stream', (_req: any, body: any, done: any) => done(null, body))
     await app.init()
+    await (app.getHttpAdapter() as FastifyAdapter).getInstance().ready()
 
     await request(app.getHttpServer())
       .get(`/v1/files/${driveKey}/entries`)
@@ -66,32 +65,6 @@ describe('FileController', () => {
     )
   })
 
-  it('拒绝不符合响应 DTO 的目录结果', async () => {
-    const driveKey = 'a'.repeat(64)
-    const listDirectory = vi.fn(async () => ({
-      path: '/',
-      driveVersion: 'invalid',
-      entries: [],
-      nextCursor: null,
-    }))
-    const moduleRef = await Test.createTestingModule({
-      controllers: [FileController],
-      providers: [
-        { provide: FileService, useValue: { listDirectory } },
-        ...zodProviders,
-      ],
-    }).compile()
-
-    app = moduleRef.createNestApplication()
-    app.useLogger(false)
-    await app.init()
-
-    await request(app.getHttpServer())
-      .get(`/v1/files/${driveKey}/entries`)
-      .query({ path: '/' })
-      .expect(500)
-  })
-
   it('从 Zod 契约生成目录接口的 OpenAPI 参数和响应', async () => {
     const moduleRef = await Test.createTestingModule({
       controllers: [FileController],
@@ -101,12 +74,12 @@ describe('FileController', () => {
       ],
     }).compile()
 
-    app = moduleRef.createNestApplication()
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
+    ;(app.getHttpAdapter() as FastifyAdapter).getInstance().addContentTypeParser('application/octet-stream', (_req: any, body: any, done: any) => done(null, body))
     await app.init()
+    await (app.getHttpAdapter() as FastifyAdapter).getInstance().ready()
 
-    const document = cleanupOpenApiDoc(
-      SwaggerModule.createDocument(app, new DocumentBuilder().build()),
-    )
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build())
     const operation = document.paths['/v1/files/{driveKey}/entries']?.get
 
     expect(operation?.parameters).toEqual(
@@ -131,25 +104,29 @@ describe('FileController', () => {
         content: expect.objectContaining({
           'application/json': expect.objectContaining({
             schema: {
-              $ref: '#/components/schemas/ListDirectoryResponseDto_Output',
+              $ref: '#/components/schemas/ListDirectoryResponseDto',
             },
           }),
         }),
       }),
     )
+    expect(document.components?.schemas?.DirectoryEntryResponseDto).toEqual(
+      expect.objectContaining({
+        properties: expect.objectContaining({
+          size: { type: 'number', nullable: true },
+        }),
+      }),
+    )
     expect(
-      document.components?.schemas?.ListDirectoryResponseDto_Output,
+      document.components?.schemas?.ListDirectoryResponseDto,
     ).toEqual(
       expect.objectContaining({
         required: ['path', 'driveVersion', 'entries', 'nextCursor'],
         properties: expect.objectContaining({
           nextCursor: { type: 'string', nullable: true },
           entries: expect.objectContaining({
-            items: expect.objectContaining({
-              properties: expect.objectContaining({
-                size: { type: 'number', nullable: true },
-              }),
-            }),
+            type: 'array',
+            items: { $ref: '#/components/schemas/DirectoryEntryResponseDto' },
           }),
         }),
       }),
@@ -176,8 +153,10 @@ describe('FileController', () => {
       ],
     }).compile()
 
-    app = moduleRef.createNestApplication({ bodyParser: false })
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
+    ;(app.getHttpAdapter() as FastifyAdapter).getInstance().addContentTypeParser('application/octet-stream', (_req: any, body: any, done: any) => done(null, body))
     await app.init()
+    await (app.getHttpAdapter() as FastifyAdapter).getInstance().ready()
 
     await request(app.getHttpServer())
       .put(`/v1/files/${driveKey}`)
@@ -192,5 +171,52 @@ describe('FileController', () => {
       content.byteLength,
     )
     expect(receivedChunkSizes.length).toBeGreaterThan(1)
+  })
+
+  it('递归删除目录并把 deleted 映射为 ok', async () => {
+    const driveKey = 'a'.repeat(64)
+    const deleteDirectory = vi.fn(async () => 'deleted' as const)
+    const moduleRef = await Test.createTestingModule({
+      controllers: [FileController],
+      providers: [
+        { provide: FileService, useValue: { deleteDirectory } },
+        ...zodProviders,
+      ],
+    }).compile()
+
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
+    ;(app.getHttpAdapter() as FastifyAdapter).getInstance().addContentTypeParser('application/octet-stream', (_req: any, body: any, done: any) => done(null, body))
+    await app.init()
+    await (app.getHttpAdapter() as FastifyAdapter).getInstance().ready()
+
+    await request(app.getHttpServer())
+      .delete(`/v1/files/${driveKey}/entries`)
+      .query({ path: '/movies' })
+      .expect(200)
+      .expect({ ok: true })
+
+    expect(deleteDirectory).toHaveBeenCalledWith(driveKey, '/movies')
+  })
+
+  it('只读 Drive 的目录删除映射为 403', async () => {
+    const driveKey = 'a'.repeat(64)
+    const deleteDirectory = vi.fn(async () => 'drive-not-writable' as const)
+    const moduleRef = await Test.createTestingModule({
+      controllers: [FileController],
+      providers: [
+        { provide: FileService, useValue: { deleteDirectory } },
+        ...zodProviders,
+      ],
+    }).compile()
+
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
+    ;(app.getHttpAdapter() as FastifyAdapter).getInstance().addContentTypeParser('application/octet-stream', (_req: any, body: any, done: any) => done(null, body))
+    await app.init()
+    await (app.getHttpAdapter() as FastifyAdapter).getInstance().ready()
+
+    await request(app.getHttpServer())
+      .delete(`/v1/files/${driveKey}/entries`)
+      .query({ path: '/movies' })
+      .expect(403)
   })
 })

@@ -6,9 +6,9 @@ import { join } from 'node:path'
 import { Readable, Writable, type Duplex } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { createHash } from 'node:crypto'
-import { FileService } from '../src/hyper.implementation/file.service.js'
-import { DownloadTaskService } from '../src/hyper.implementation/download-task.service.js'
-import { DriveActivity } from '../src/hyper.infrastructure/sdk/drive-activity.js'
+import { FileService } from '../src/service/file.service.js'
+import { DownloadTaskService } from '../src/service/download-task.service.js'
+import { DriveActivity } from '../src/repository/sdk/drive-activity.js'
 
 async function digest(stream: Readable): Promise<string> {
   const hash = createHash('sha256')

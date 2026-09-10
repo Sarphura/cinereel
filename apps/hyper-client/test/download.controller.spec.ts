@@ -1,24 +1,24 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
-import type { INestApplication } from '@nestjs/common'
-import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core'
+import { ValidationPipe, type INestApplication } from '@nestjs/common'
+import { APP_PIPE } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
-import { cleanupOpenApiDoc, ZodSerializerInterceptor, ZodValidationPipe } from 'nestjs-zod'
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
 import request from 'supertest'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Readable } from 'node:stream'
-import { DownloadTaskController } from '../src/hyper.api/controller/downloads/download.controller.js'
-import { DownloadTaskService } from '../src/hyper.implementation/download-task.service.js'
-import { DownloadTaskStore } from '../src/hyper.implementation/download-task.store.js'
-import type { FileService } from '../src/hyper.implementation/file.service.js'
-import { DriveActivity } from '../src/hyper.infrastructure/sdk/drive-activity.js'
+import { DownloadTaskController } from '../src/controller/downloads/download.controller.js'
+import { DownloadTaskService } from '../src/service/download-task.service.js'
+import { DownloadTaskStore } from '../src/service/download-task.store.js'
+import type { FileService } from '../src/service/file.service.js'
+import { DriveActivity } from '../src/repository/sdk/drive-activity.js'
 
 const input = { driveKey: 'a'.repeat(64), path: '/movie.mp4', targetType: 'file' }
 
 describe('DownloadTaskController', () => {
-  let app: INestApplication
+  let app: NestFastifyApplication
   let service: DownloadTaskService
   let directory: string
   let path: string
@@ -42,13 +42,14 @@ describe('DownloadTaskController', () => {
       controllers: [DownloadTaskController],
       providers: [
         { provide: DownloadTaskService, useValue: service },
-        { provide: APP_PIPE, useClass: ZodValidationPipe },
-        { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
+        { provide: APP_PIPE, useValue: new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }) },
       ],
     }).compile()
-    app = module.createNestApplication()
+    app = module.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
     app.useLogger(false)
+    ;(app.getHttpAdapter() as FastifyAdapter).getInstance().addContentTypeParser('application/octet-stream', (_req: any, body: any, done: any) => done(null, body))
     await app.init()
+    await (app.getHttpAdapter() as FastifyAdapter).getInstance().ready()
   })
 
   afterEach(async () => {
@@ -106,7 +107,7 @@ describe('DownloadTaskController', () => {
   })
 
   it('OpenAPI 声明创建 202、必填幂等请求头和全部控制端点', async () => {
-    const document = cleanupOpenApiDoc(SwaggerModule.createDocument(app, new DocumentBuilder().build()))
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build())
     const create = document.paths['/v1/downloads']?.post
     expect(create?.responses['202']).toBeDefined()
     for (const status of ['400', '409', '503']) expect(create?.responses[status]).toBeDefined()
@@ -118,6 +119,6 @@ describe('DownloadTaskController', () => {
         expect(document.paths[`/v1/downloads/{id}/${command}`]?.post?.responses[status]).toBeDefined()
       }
     }
-    expect(document.components?.schemas?.DownloadTaskResponseDto_Output).toBeDefined()
+    expect(document.components?.schemas?.DownloadTaskResponseDto).toBeDefined()
   })
 })

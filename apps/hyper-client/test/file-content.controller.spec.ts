@@ -1,6 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+﻿import { afterEach, describe, expect, it, vi } from 'vitest'
 import { Test } from '@nestjs/testing'
-import type { INestApplication } from '@nestjs/common'
+import { ValidationPipe, type INestApplication } from '@nestjs/common'
 import { APP_PIPE } from '@nestjs/core'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { Readable } from 'node:stream'
@@ -8,9 +8,12 @@ import { get, type IncomingMessage } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { once } from 'node:events'
 import request from 'supertest'
-import { cleanupOpenApiDoc, ZodValidationPipe } from 'nestjs-zod'
-import { FileController } from '../src/hyper.api/controller/files/file.controller.js'
-import { FileReadError, FileService } from '../src/hyper.implementation/file.service.js'
+import { FastifyAdapter, type NestFastifyApplication } from '@nestjs/platform-fastify'
+import { SDK } from 'hyper-sdk'
+import { FileController } from '../src/controller/files/file.controller.js'
+import { FastifyFileResponseWriter, FileResponseWriter } from '../src/controller/files/file-response.writer.js'
+import { DriveActivity } from '../src/repository/sdk/drive-activity.js'
+import { FileReadError, FileService, type FileReadSession } from '../src/service/file.service.js'
 
 const driveKey = 'a'.repeat(64)
 const fileUrl = `/v1/files/${driveKey}`
@@ -22,7 +25,7 @@ function readError(status: number, code: string): FileReadError {
 }
 
 describe('文件内容 HTTP 接口', () => {
-  let app: INestApplication | undefined
+  let app: NestFastifyApplication | undefined
 
   afterEach(async () => {
     app?.getHttpServer().closeAllConnections?.()
@@ -38,17 +41,21 @@ describe('文件内容 HTTP 接口', () => {
         Readable.from([range ? data.subarray(range.start, range.end + 1) : data])),
       close: vi.fn(async () => {}),
     }
-    const openReadSession = vi.fn(async (_key: string, _options: { driveVersion?: number; signal?: AbortSignal }) => session)
+    const files = new FileService({} as unknown as SDK, new DriveActivity())
+    const openReadSession = vi.spyOn(files, 'openReadSession').mockImplementation(async () => session as unknown as FileReadSession)
     const moduleRef = await Test.createTestingModule({
       controllers: [FileController],
       providers: [
-        { provide: FileService, useValue: { openReadSession } },
-        { provide: APP_PIPE, useClass: ZodValidationPipe },
+        { provide: FileService, useValue: files },
+        { provide: FileResponseWriter, useClass: FastifyFileResponseWriter },
+        { provide: APP_PIPE, useValue: new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }) },
       ],
     }).compile()
-    app = moduleRef.createNestApplication()
+    app = moduleRef.createNestApplication<NestFastifyApplication>(new FastifyAdapter())
     app.useLogger(false)
+    ;(app.getHttpAdapter() as FastifyAdapter).getInstance().addContentTypeParser('application/octet-stream', (_req: any, body: any, done: any) => done(null, body))
     await app.init()
+    await (app.getHttpAdapter() as FastifyAdapter).getInstance().ready()
     return { app, session, openReadSession }
   }
 
@@ -264,7 +271,7 @@ describe('文件内容 HTTP 接口', () => {
     client.destroy()
     await vi.waitFor(() => expect(session.close).toHaveBeenCalledOnce())
     expect(source.destroyed).toBe(true)
-    expect(openReadSession.mock.calls[0]?.[1].signal?.aborted).toBe(true)
+    expect(openReadSession.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
   })
 
   it('慢消费者保留背压，客户端断连后停止上游', async () => {
@@ -304,7 +311,7 @@ describe('文件内容 HTTP 接口', () => {
       createReadStream: vi.fn(() => pendingSource),
       close: vi.fn(async () => {}),
     }
-    openReadSession.mockResolvedValueOnce(pendingSession)
+    openReadSession.mockResolvedValueOnce(pendingSession as unknown as FileReadSession)
     await app.listen(0, '127.0.0.1')
     const address = app.getHttpServer().address() as AddressInfo
     const waitingClient = get(`http://127.0.0.1:${address.port}${fileUrl}?path=/waiting.txt`)
@@ -316,13 +323,13 @@ describe('文件内容 HTTP 接口', () => {
     expect(pendingSource.destroyed).toBe(false)
     waitingClient.destroy()
     await vi.waitFor(() => expect(pendingSession.close).toHaveBeenCalledOnce())
-    expect(openReadSession.mock.calls[0]?.[1].signal?.aborted).toBe(true)
-    expect(openReadSession.mock.calls[1]?.[1].signal?.aborted).toBe(false)
+    expect(openReadSession.mock.calls[0]?.[1]?.signal?.aborted).toBe(true)
+    expect(openReadSession.mock.calls[1]?.[1]?.signal?.aborted).toBe(false)
   })
 
   it('OpenAPI 包含二进制响应、Range、错误状态和固定版本参数', async () => {
     const { app } = await setup()
-    const document = cleanupOpenApiDoc(SwaggerModule.createDocument(app, new DocumentBuilder().build()))
+    const document = SwaggerModule.createDocument(app, new DocumentBuilder().build())
     const operations = document.paths['/v1/files/{driveKey}']!
     const getOperation = operations.get!
     expect(getOperation.parameters).toEqual(expect.arrayContaining([

@@ -12,6 +12,7 @@ import {
   HttpStatus,
   Param,
   Post,
+  Put,
 } from '@nestjs/common'
 import {
   ApiBearerAuth,
@@ -21,10 +22,11 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { DriveService } from '../../../hyper.implementation/drives.service.js'
+import { DriveService } from '../../service/drives.service.js'
 import {
   CreateDriveRequestDto,
   DriveResponseDto,
+  RenameDriveRequestDto,
 } from '../../dto/drives.dto.js'
 
 @ApiTags('drives')
@@ -48,13 +50,29 @@ export class DrivesController {
   @Post()
   @ApiOperation({
     operationId: 'createDrive',
-    summary: '新建一个Drive',
+    summary: '新建一个 Drive',
   })
   @ApiBody({ type: CreateDriveRequestDto })
   @ApiOkResponse({ type: DriveResponseDto })
   async create(@Body() body: CreateDriveRequestDto): Promise<DriveResponseDto> {
     return this.driveService.createDrive(body)
   }
+
+  @Put(':key')
+  @ApiOperation({
+    operationId: 'renameDrive',
+    summary: '重命名 Drive',
+  })
+  @ApiParam({ name: 'key', description: 'Hex64 drive key' })
+  @ApiBody({ type: RenameDriveRequestDto })
+  @ApiOkResponse({ type: DriveResponseDto })
+  async rename(
+    @Param('key') key: string,
+    @Body() body: RenameDriveRequestDto,
+  ): Promise<DriveResponseDto> {
+    return this.driveService.renameDrive(key, body.name)
+  }
+
 
   @Delete(':key')
   @ApiOperation({ 

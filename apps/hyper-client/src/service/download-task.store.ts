@@ -44,10 +44,17 @@ export class DownloadTaskStore {
       } finally {
         await file.close()
       }
+      // Windows 上 rename 到已存在文件可能因句柄未释放而 EPERM，先移除目标。
+      await unlink(this.path).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error
+      })
       await rename(temporary, this.path)
       const directory = await open(dirname(this.path), 'r')
       try {
-        await directory.sync()
+        // Windows 不支持对目录执行 fsync，忽略 EPERM/EINVAL。
+        await directory.sync().catch((error: NodeJS.ErrnoException) => {
+          if (error.code !== 'EPERM' && error.code !== 'EINVAL') throw error
+        })
       } finally {
         await directory.close()
       }

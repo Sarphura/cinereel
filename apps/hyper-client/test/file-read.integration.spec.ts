@@ -8,8 +8,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { Readable as NodeReadable, Writable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { Duplex, Readable } from 'node:stream'
-import { FileService, normalizeFileReadError, type FileReadSession } from '../src/hyper.implementation/file.service.js'
-import { DriveActivity } from '../src/hyper.infrastructure/sdk/drive-activity.js'
+import { FileService, normalizeFileReadError, type FileReadSession } from '../src/service/file.service.js'
+import { DriveActivity } from '../src/repository/sdk/drive-activity.js'
 
 const sdks: SDK[] = []
 const paths: string[] = []

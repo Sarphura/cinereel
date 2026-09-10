@@ -1,7 +1,7 @@
 import { Readable } from 'node:stream'
 import { finished } from 'node:stream/promises'
 import type { SDK } from 'hyper-sdk'
-import { createFileEtag } from './protocol-file.js'
+import { createFileEtag } from './protocol.js'
 
 export const DEFAULT_FILE_READ_TIMEOUT_MS = 30_000
 

@@ -1,14 +1,13 @@
-import {
-  Body, Controller, Get, Headers, HttpException, HttpStatus, Inject, Param, Post, Query,
+﻿import {
+  Body, Controller, Get, Headers, HttpCode, HttpException, HttpStatus, Inject, Param, Post, Query,
 } from '@nestjs/common'
 import {
-  ApiBadRequestResponse, ApiConflictResponse, ApiHeader, ApiNotFoundResponse,
-  ApiOperation, ApiServiceUnavailableResponse, ApiTags,
+  ApiAcceptedResponse, ApiBadRequestResponse, ApiConflictResponse, ApiHeader,
+  ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiServiceUnavailableResponse, ApiTags,
 } from '@nestjs/swagger'
-import { ZodResponse } from 'nestjs-zod'
 import {
   DownloadTaskError, DownloadTaskService,
-} from '../../../hyper.implementation/download-task.service.js'
+} from '../../service/download-task.service.js'
 import {
   CreateDownloadTaskDto, DownloadTaskParamsDto, DownloadTaskResponseDto,
   ListDownloadTasksQueryDto, ListDownloadTasksResponseDto,
@@ -25,14 +24,15 @@ export class DownloadTaskController {
   @ApiHeader({ name: 'Idempotency-Key', required: true, schema: { type: 'string', minLength: 1, maxLength: 200 } })
   @ApiConflictResponse({ description: '幂等键已用于不同参数，或 Drive 正在关闭。' })
   @ApiServiceUnavailableResponse({ description: '任务服务正在关闭或持久化存储不可用。' })
-  @ZodResponse({ status: HttpStatus.ACCEPTED, type: DownloadTaskResponseDto })
+  @ApiAcceptedResponse({ type: DownloadTaskResponseDto })
+  @HttpCode(HttpStatus.ACCEPTED)
   create(@Body() body: CreateDownloadTaskDto, @Headers('idempotency-key') key?: string) {
     return this.respond(() => this.downloads.createTask(body, key ?? ''))
   }
 
   @Get()
   @ApiOperation({ operationId: 'listDownloadTasks', summary: '分页列出离线缓存任务' })
-  @ZodResponse({ status: HttpStatus.OK, type: ListDownloadTasksResponseDto })
+  @ApiOkResponse({ type: ListDownloadTasksResponseDto })
   list(@Query() query: ListDownloadTasksQueryDto) {
     return this.respond(() => this.downloads.listTasks(query.cursor, query.limit))
   }
@@ -40,7 +40,7 @@ export class DownloadTaskController {
   @Get(':id')
   @ApiOperation({ operationId: 'getDownloadTask', summary: '查询离线缓存任务与内容处理进度' })
   @ApiNotFoundResponse({ description: '离线任务不存在。' })
-  @ZodResponse({ status: HttpStatus.OK, type: DownloadTaskResponseDto })
+  @ApiOkResponse({ type: DownloadTaskResponseDto })
   get(@Param() params: DownloadTaskParamsDto) {
     return this.respond(() => this.downloads.getTask(params.id))
   }
@@ -50,7 +50,8 @@ export class DownloadTaskController {
   @ApiNotFoundResponse({ description: '离线任务不存在。' })
   @ApiConflictResponse({ description: '当前任务状态不能暂停。' })
   @ApiServiceUnavailableResponse({ description: '任务服务正在关闭或持久化存储不可用。' })
-  @ZodResponse({ status: HttpStatus.OK, type: DownloadTaskResponseDto })
+  @ApiOkResponse({ type: DownloadTaskResponseDto })
+  @HttpCode(HttpStatus.OK)
   pause(@Param() params: DownloadTaskParamsDto) {
     return this.respond(() => this.downloads.pauseTask(params.id))
   }
@@ -60,7 +61,8 @@ export class DownloadTaskController {
   @ApiNotFoundResponse({ description: '离线任务不存在。' })
   @ApiConflictResponse({ description: '当前任务状态不能继续。' })
   @ApiServiceUnavailableResponse({ description: '任务服务正在关闭或持久化存储不可用。' })
-  @ZodResponse({ status: HttpStatus.OK, type: DownloadTaskResponseDto })
+  @ApiOkResponse({ type: DownloadTaskResponseDto })
+  @HttpCode(HttpStatus.OK)
   resume(@Param() params: DownloadTaskParamsDto) {
     return this.respond(() => this.downloads.resumeTask(params.id))
   }
@@ -70,7 +72,8 @@ export class DownloadTaskController {
   @ApiNotFoundResponse({ description: '离线任务不存在。' })
   @ApiConflictResponse({ description: '已经完成的任务不能取消。' })
   @ApiServiceUnavailableResponse({ description: '任务服务正在关闭或持久化存储不可用。' })
-  @ZodResponse({ status: HttpStatus.OK, type: DownloadTaskResponseDto })
+  @ApiOkResponse({ type: DownloadTaskResponseDto })
+  @HttpCode(HttpStatus.OK)
   cancel(@Param() params: DownloadTaskParamsDto) {
     return this.respond(() => this.downloads.cancelTask(params.id))
   }
@@ -80,7 +83,8 @@ export class DownloadTaskController {
   @ApiNotFoundResponse({ description: '离线任务不存在。' })
   @ApiConflictResponse({ description: '任务不是失败状态，或 Drive 正在关闭。' })
   @ApiServiceUnavailableResponse({ description: '任务服务正在关闭或持久化存储不可用。' })
-  @ZodResponse({ status: HttpStatus.OK, type: DownloadTaskResponseDto })
+  @ApiOkResponse({ type: DownloadTaskResponseDto })
+  @HttpCode(HttpStatus.OK)
   retry(@Param() params: DownloadTaskParamsDto) {
     return this.respond(() => this.downloads.retryTask(params.id))
   }

@@ -1,14 +1,10 @@
-import { Module, type DynamicModule } from '@nestjs/common'
-import { APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core'
-import {
-  ZodSerializerInterceptor,
-  ZodValidationPipe,
-} from 'nestjs-zod'
-import { HealthModule } from './hyper.api/controller/health/health.module.js'
-import { VersionModule } from './hyper.api/controller/version/version.module.js'
-import { DrivesModule } from './hyper.api/controller/drives/drives.module.js'
-import { FileModule } from './hyper.api/controller/files/file.module.js'
-import { DownloadModule } from './hyper.api/controller/downloads/download.module.js'
+﻿import { Module, ValidationPipe, type DynamicModule } from '@nestjs/common'
+import { APP_PIPE } from '@nestjs/core'
+import { HealthModule } from './controller/health/health.module.js'
+import { VersionModule } from './controller/version/version.module.js'
+import { DrivesModule } from './controller/drives/drives.module.js'
+import { FileModule } from './controller/files/file.module.js'
+import { DownloadModule } from './controller/downloads/download.module.js'
 // import { SwarmModule } from './hyper.api/controller/swarms/swarm.module.js'
 
 @Module({})
@@ -26,8 +22,10 @@ export class AppModule {
         // SwarmModule,
       ],
       providers: [
-        { provide: APP_PIPE, useClass: ZodValidationPipe },
-        { provide: APP_INTERCEPTOR, useClass: ZodSerializerInterceptor },
+        {
+          provide: APP_PIPE,
+          useValue: new ValidationPipe({ transform: true, whitelist: true, forbidNonWhitelisted: true }),
+        },
       ],
     }
   }

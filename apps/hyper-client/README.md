@@ -6,8 +6,8 @@ Cinereel 的 `hyper-sdk`（Corestore / Hyperdrive / Hyperswarm）HTTP Adapter。
 ## 技术栈
 
 - Node ≥ 20，TypeScript 严格模式
-- NestJS 11、Express Adapter、`@nestjs/swagger` 11
-- `zod` 请求与任务存储校验
+- NestJS 11、Fastify Adapter、`@nestjs/swagger` 11
+- class-validator 请求校验、`zod` 持久化存储校验
 - `hyper-sdk` 管理 Corestore / Hyperdrive / Hyperswarm
 
 ## 源码结构

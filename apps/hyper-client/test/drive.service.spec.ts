@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { SDK } from 'hyper-sdk'
-import { DriveService } from '../src/hyper.implementation/drives.service.js'
+import { DriveService } from '../src/service/drives.service.js'
 
 const DRIVE_KEYS_FILE = 'drive-keys.json'
 

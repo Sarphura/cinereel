@@ -1,19 +1,21 @@
-import { Injectable, type OnModuleInit } from '@nestjs/common'
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common'
 import type {
   CreateDriveRequestDto,
   DriveResponseDto,
-} from '../hyper.api/dto/drives.dto.js'
-import { GetConfigPath } from '../hyper.infrastructure/sdk/hyper-sdk.module.js'
+} from '../dto/drives.dto.js'
+import { GetConfigPath } from '../repository/sdk/hyper-sdk.module.js'
 import { SDK } from 'hyper-sdk'
 import { existsSync } from 'node:fs'
 import { readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { DriveActivity } from '../hyper.infrastructure/sdk/drive-activity.js'
+import { DriveActivity } from '../repository/sdk/drive-activity.js'
 
 const DRIVE_KEYS_FILE = 'drive-keys.json'
 
 @Injectable()
 export class DriveService implements OnModuleInit {
+  private readonly logger = new Logger(DriveService.name)
+
   private readonly driveKeysPath = resolve(
     GetConfigPath(),
     DRIVE_KEYS_FILE,
@@ -27,8 +29,8 @@ export class DriveService implements OnModuleInit {
   async onModuleInit(): Promise<void> {
     const keys = await this.readDriveKeys()
     await Promise.all(keys.map((key) => this.sdk.getDrive(key)))
-    console.log(
-      `[DriveService] 使用配置目录 ${GetConfigPath()} 恢复了 ${keys.length} 个 Drive`,
+    this.logger.log(
+      `使用配置目录 ${GetConfigPath()} 恢复了 ${keys.length} 个 Drive`,
     )
   }
 
@@ -40,6 +42,19 @@ export class DriveService implements OnModuleInit {
       driveKey: driveKeyHex,
       namespace: request.namespace,
       name: request.name,
+      isLocal: true,
+      createdAt: new Date().toISOString(),
+    }
+  }
+
+  async renameDrive(driveKey: string, newName: string): Promise<DriveResponseDto> {
+    const drive = await this.sdk.getDrive(driveKey)
+    const driveKeyHex = Buffer.from(drive.key).toString('hex')
+    
+    return {
+      driveKey: driveKeyHex,
+      namespace: drive.name || driveKeyHex,
+      name: newName,
       isLocal: true,
       createdAt: new Date().toISOString(),
     }
@@ -75,7 +90,7 @@ export class DriveService implements OnModuleInit {
           await drive.blobs.core.clear(0, drive.blobs.core.length)
         }
       } catch (err) {
-        console.warn('[DriveService] 清除本地数据时出错，但 drive 已取消订阅:', err)
+        this.logger.warn('清除本地数据时出错，但 drive 已取消订阅:', err)
       }
       await this.forgetDriveKey(driveKey)
       return true
