@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { SDK } from 'hyper-sdk'
 import { DriveActivity } from '../src/repository/sdk/drive-activity.js'
-import { DriveService } from '../src/service/drives.service.js'
+import { DriveService } from '../src/service/drive.service.js'
 
 const key = 'a'.repeat(64)
 

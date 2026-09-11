@@ -1,7 +1,7 @@
 /** 注册 DrivesController 和 DriveService。 */
 import { Module, type Provider } from '@nestjs/common'
 import { SDK } from 'hyper-sdk'
-import { DriveService } from '../../service/drives.service.js'
+import { DriveService } from '../../service/drive.service.js'
 import { HyperSdkModule } from '../../repository/sdk/hyper-sdk.module.js'
 import { DrivesController } from './drives.controller.js'
 import { DriveActivity } from '../../repository/sdk/drive-activity.js'

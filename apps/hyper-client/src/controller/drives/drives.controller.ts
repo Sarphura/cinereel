@@ -22,7 +22,7 @@ import {
   ApiParam,
   ApiTags,
 } from '@nestjs/swagger'
-import { DriveService } from '../../service/drives.service.js'
+import { DriveService } from '../../service/drive.service.js'
 import {
   CreateDriveRequestDto,
   DriveResponseDto,

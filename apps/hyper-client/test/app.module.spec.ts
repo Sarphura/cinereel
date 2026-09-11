@@ -6,7 +6,7 @@ import { Readable } from 'node:stream'
 import { Test, type TestingModule } from '@nestjs/testing'
 import { SDK } from 'hyper-sdk'
 import { AppModule } from '../src/app.module.js'
-import { DriveService } from '../src/service/drives.service.js'
+import { DriveService } from '../src/service/drive.service.js'
 import { FileService } from '../src/service/file.service.js'
 import { DownloadTaskService } from '../src/service/download-task.service.js'
 
