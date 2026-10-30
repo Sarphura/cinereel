@@ -1,5 +1,6 @@
 using Ardalis.Result.AspNetCore;
 using Ardalis.Result;
+using Cinereel.Features.Movie;
 using Cinereel.Infrastructure;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -26,10 +27,14 @@ builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
 builder.Services.AddDbContext<CinereelDbContext>(options =>
-    options.UseSqlite(builder.Configuration.GetConnectionString("Cinereel")
+    options.UseNpgsql(builder.Configuration.GetConnectionString("Cinereel")
         ?? throw new InvalidOperationException("缺少连接字符串 ConnectionStrings:Cinereel。")));
 builder.Services.AddMediatR(configuration =>
     configuration.RegisterServicesFromAssemblyContaining<Program>());
+builder.Services.AddScoped<IMovieRepository, MovieRepository>();
+
+builder.Services.AddSingleton<TorrentTracker>();
+builder.Services.AddHostedService(provider => provider.GetRequiredService<TorrentTracker>());
 
 var app = builder.Build();
 

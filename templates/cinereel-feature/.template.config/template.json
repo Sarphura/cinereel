@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json.schemastore.org/template",
+  "author": "Cinereel",
+  "classifications": [ "Cinereel", "垂直切片" ],
+  "identity": "Cinereel.Feature.Slice",
+  "name": "Cinereel 垂直切片",
+  "description": "生成一个垂直切片：实体、EF Core 映射、MediatR 命令/查询与处理器、控制器。",
+  "shortName": "cinereel-feature",
+  "defaultName": "Sample",
+  "sourceName": "Movie",
+  "preferNameDirectory": false,
+  "tags": {
+    "language": "C#",
+    "type": "item"
+  }
+}
